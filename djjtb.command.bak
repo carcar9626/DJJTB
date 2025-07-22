@@ -1,0 +1,371 @@
+#!/bin/bash
+# Media Processor: Run Video or Image Processor
+# Updated: July 11, 2025
+
+osascript -e 'tell application "Terminal" to set bounds of front window to {663, 200, 960, 800}' 2> /tmp/osascript_error.log
+osascript -e 'tell application "Terminal" to set current settings of front window to settings set "MediaProcess"'
+
+clear
+if [ -s /tmp/osascript_error.log ]; then
+    echo "Error setting menu window bounds or profile:"
+    cat /tmp/osascript_error.log
+fi
+skip_countdown=false
+function return_to_menu_delay() {
+    echo
+    echo "Returning to previous menu in 8 seconds... (press any key to skip)"
+    for i in {8..1}; do
+        read -t 1 -n 1 key && break
+        echo -ne "$i...\r"
+    done
+    clear
+}
+
+clear
+while true; do
+    clear
+    echo
+    echo -e "\033[92m==============================\033[0m"
+    printf "      \e[1;33m🧰 DJJ TOOLBOX 💻\n"
+    echo -e "\033[92m==============================\033[0m"
+    printf "\e[1;33mMAIN MENU\n"
+    echo -e "\033[92m------------------------------\033[0m"
+    echo "1.🎞️  MEDIA TOOLS 🎑"
+    echo "2.🤖 AI TOOLS 🦾"
+    echo
+    printf "\e[1;33mQUICK TOOLS\n"
+    echo -e "\033[92m------------------------------\033[0m"
+    echo "3.🌠 Reverse Image Search 🔎"
+    echo "4.🔗 Linkgrabber ✊🏼"
+    echo "5.📺 Media Info Viewer ℹ️"
+    echo -e "\033[92m------------------------------\033[0m"
+    echo -e "✈️ Press \033[91mX\033[0m to Exit"
+    echo -e "\033[92m==============================\033[0m"
+    read -p $'Choose a category: ' main_choice
+
+    case "$main_choice" in
+        1)  # Media Tools
+            while true; do
+                clear
+                echo
+                echo
+                echo "🎇 📀 MEDIA TOOLS 🎧 📽️"
+                echo -e "\033[92m-------------------------------\033[0m"
+                echo "1. 🎬 VIDEOS 🎬"
+                echo "2. 🖼️  IMAGES 🖼️"
+                echo "3. 🔠 Media Sorter 🔢"
+                echo "4. ⏮️  Main Menu ⏮️"
+                echo -e "\033[92m-------------------------------\033[0m"
+                read -p $'\e[92mChoose a Tool: \e[0m' media_choice
+
+                case "$media_choice" in
+                    1)  # Videos
+                        first_entry=true
+                        while true; do
+                            clear
+                            echo
+                            echo
+                            echo "🎬 VIDEO TOOLS 🎬"
+                            echo -e "\033[92m-------------------------------\033[0m"
+                            echo "1. 🎬 VIDEO PROCESSOR 📽️"
+                            echo "2. ↪️  Reverse Merge ↩️"
+                            echo "3. 🟪 Slideshow Watermark 🆔"
+                            echo "4. 👖 Cropper 🩳"
+                            echo "5. 🧲 Group Merger 🔁"
+                            echo "6. 🔙 MEDIA TOOLS"
+                            echo "7. ⏮️ MAIN MENU ⏮️"
+                            echo -e "\033[92m-------------------------------\033[0m"
+                            if [ "$first_entry" = true ]; then
+                                read -p $'\e[92mChoose a Tool: \e[0m' video_tool
+                                first_entry=false
+                            else
+                                read -t 8 -p $'\e[92mChoose another option, back to Media Tools in 8s: \e[0m' video_tool || {
+                                    skip_countdown=true
+                                    break
+                                }
+                            fi
+                            case "$video_tool" in
+                                1)
+                                    osascript <<EOF
+tell application "Terminal"
+    activate
+    set newWindow to (do script "")
+    set current settings of front window to settings set "VideoProcessor"
+    do script "source ~/prompt_randomizer_venv/bin/activate; cd /Users/home/Documents/Scripts; python3 video_processor.py" in front window
+    delay 0.3
+    set bounds of front window to {670, 50, 1220, 650}
+end tell
+EOF
+                                    ;;
+                                2)
+                                    osascript <<EOF
+tell application "Terminal"
+    tell application "System Events" to keystroke "t" using command down
+    delay 0.2
+    do script "source ~/gpt_media_process/bin/activate; cd /Users/home/Documents/Scripts/GPT; python3 VideoReverseMerge.py" in selected tab of the front window
+end tell
+EOF
+                                    ;;
+                                3)
+                                    osascript <<EOF
+tell application "Terminal"
+    tell application "System Events" to keystroke "t" using command down
+    delay 0.2
+    do script "source ~/gpt_media_process/bin/activate; cd /Users/home/Documents/Scripts/GPT; python3 slideshow_watermark.py" in selected tab of the front window
+end tell
+EOF
+                                    ;;
+                                4)
+                                    osascript <<EOF
+tell application "Terminal"
+    tell application "System Events" to keystroke "t" using command down
+    delay 0.2
+    do script "source ~/gpt_media_process/bin/activate; cd /Users/home/Documents/Scripts/GPT; python3 video_cropper.py" in selected tab of the front window
+end tell
+EOF
+                                    ;;
+                                5)
+                                    osascript <<EOF
+tell application "Terminal"
+    tell application "System Events" to keystroke "t" using command down
+    delay 0.2
+    do script "source ~/gpt_media_process/bin/activate; cd /Users/home/Documents/Scripts/GPT; python3 video_group_merger.py" in selected tab of the front window
+end tell
+EOF
+                                    ;;
+                                6)
+                                    skip_countdown=true
+                                    break ;;
+                                7)
+                                    osascript -e 'tell application "Terminal" to tell application "System Events" to keystroke "1" using command down' 2>> /tmp/osascript_error.log
+                                    skip_countdown=true
+                                    break 2 ;; # Break out of both Video Tools and Media Tools loops to return to Main Menu
+                                *)
+                                    echo "Invalid input"
+                                    first_entry=false
+                                    ;;
+                            esac
+                            if [ -n "$video_tool" ] && [ "$video_tool" != "6" ] && [ "$video_tool" != "7" ]; then
+                                echo
+                                echo "Press any key to choose another option, or wait to return to Media Tools..."
+                                for i in {8..1}; do
+                                    read -t 1 -n 1 key && break
+                                    echo -ne "$i...\r"
+                                done
+                                if [ -z "$key" ]; then
+                                    skip_countdown=true
+                                    break
+                                fi
+                            fi
+                        done
+                        ;;
+                    2)  # Images
+                        first_entry=true
+                        while true; do
+                            clear
+                            echo
+                            echo
+                            echo "🖼️ IMAGES TOOLS 🖼️"
+                            echo -e "\033[92m-------------------------------\033[0m"
+                            echo "1. 📷 IMAGE PROCESSOR 📸"
+                            echo "2. 🔲 Strip Padding ⬜️"
+                            echo "3. 🟪 Slideshow Watermark 🆔"
+                            echo "4. 🔙 MEDIA TOOLS"
+                            echo "5. ⏮️ MAIN MENU ⏮️"
+                            echo -e "\033[92m-------------------------------\033[0m"
+                            if [ "$first_entry" = true ]; then
+                                read -p $'\e[92mChoose a Tool: \e[0m' img_tool
+                                first_entry=false
+                            else
+                                read -t 8 -p $'\e[92mChoose another option, back to Media Tools in 8s: \e[0m' img_tool || {
+                                    skip_countdown=true
+                                    break
+                                }
+                            fi
+                            case "$img_tool" in
+                                1)
+                                    osascript <<EOF
+tell application "Terminal"
+    activate
+    set newWindow to (do script "")
+    set current settings of front window to settings set "VideoProcessor"
+    do script "source ~/prompt_randomizer_venv/bin/activate; cd /Users/home/Documents/Scripts/Image_Processor/Scripts; python3 image_processor.py" in front window
+    delay 0.3
+    set bounds of front window to {50, 50, 600, 650}
+end tell
+EOF
+                                    ;;
+                                2)
+                                    osascript <<EOF
+tell application "Terminal"
+    tell application "System Events" to keystroke "t" using command down
+    delay 0.2
+    do script "source ~/gpt_media_process/bin/activate; cd /Users/home/Documents/Scripts/GPT; python3 strip_padding_export.py" in selected tab of the front window
+end tell
+EOF
+                                    ;;
+                                3)
+                                    osascript <<EOF
+tell application "Terminal"
+    tell application "System Events" to keystroke "t" using command down
+    delay 0.2
+    do script "source ~/gpt_media_process/bin/activate; cd /Users/home/Documents/Scripts/GPT; python3 slideshow_watermark.py" in selected tab of the front window
+end tell
+EOF
+                                    ;;
+                                4)
+                                    skip_countdown=true
+                                    break ;;
+                                5)
+                                    osascript -e 'tell application "Terminal" to tell application "System Events" to keystroke "1" using command down' 2>> /tmp/osascript_error.log
+                                    skip_countdown=true
+                                    break 2 ;; # Break out of both Images Tools and Media Tools loops to return to Main Menu
+                                *)
+                                    echo "Invalid input"
+                                    first_entry=false
+                                    ;;
+                            esac
+                            if [ -n "$img_tool" ] && [ "$img_tool" != "4" ] && [ "$img_tool" != "5" ]; then
+                                echo
+                                echo "Press any key to choose another option, or wait to return to Media Tools..."
+                                for i in {8..1}; do
+                                    read -t 1 -n 1 key && break
+                                    echo -ne "$i...\r"
+                                done
+                                if [ -z "$key" ]; then
+                                    skip_countdown=true
+                                    break
+                                fi
+                            fi
+                        done
+                        ;;
+                    3)  # Media Sorter
+                        osascript <<EOF
+tell application "Terminal"
+    tell application "System Events" to keystroke "t" using command down
+    delay 0.2
+    do script "source ~/gpt_media_process/bin/activate; cd /Users/home/Documents/Scripts/GPT; python3 media_sorter.py" in selected tab of the front window
+end tell
+EOF
+                        ;;
+                    4) skip_countdown=true
+                       break ;;
+                    *) echo "Invalid input";;
+                esac
+                if [ "$choice_made" = true ]; then
+                    return_to_menu_delay
+                fi
+            done
+            ;;
+
+        2)  # AI Tools
+            while true; do
+                clear
+                echo
+                echo "🤖 AI TOOLS"
+                echo -e "\033[92m-------------------------------\033[0m"
+                echo "1. 📝 Prompt Randomizer 🔀"
+                echo "2. ☀️  ComfyUI 💻"
+                echo "3. 👫 Merge Loras 🧍🏼‍♂️"
+                echo "4. 😶‍🌫️ Codeformer 😝"
+                echo "5. ⏮️ MAIN MENU ⏮️"
+                echo -e "\033[92m-------------------------------\033[0m"
+                read -p $'\e[92mChoose an AI tool: \033[0m' ai_choice
+                case "$ai_choice" in
+                    1)
+                        osascript <<EOF
+tell application "Terminal"
+    tell application "System Events" to keystroke "t" using command down
+    delay 0.2
+    do script "source ~/prompt_randomizer_venv/bin/activate; cd /Users/home/Documents/AI/Prompts/Prompt_Randomizer/Scripts; python3 prompt_randomizer.py" in selected tab of the front window
+end tell
+EOF
+                        ;;
+                    2)
+                        osascript <<EOF
+tell application "Terminal"
+    activate
+    tell application "System Events" to keystroke "t" using command down
+    delay 0.2
+    do script "/Users/home/Documents/Scripts/Run_Commands/comfyui_media_processor.command" in selected tab of front window
+end tell
+EOF
+                        ;;
+                    3)
+                        source ~/gpt_media_process/bin/activate
+                        cd /Users/home/Documents/Scripts/
+                        python3 merge_loras.py
+                        deactivate
+                        ;;
+                    4)
+                        osascript <<EOF
+tell application "Terminal"
+    activate
+    tell application "System Events" to keystroke "t" using command down
+    delay 0.2
+    do script "/Volumes/Desmond_SSD_2TB/CodeFormer/run_codeformer.command" in selected tab of front window
+end tell
+EOF
+                        ;;
+                    5) skip_countdown=true
+                       break ;;
+                    *) echo "Invalid input";;
+                esac
+            done
+            ;;
+        3)
+            osascript <<EOF
+tell application "Terminal"
+    tell application "System Events" to keystroke "t" using command down
+    delay 0.2
+    do script "source ~/prompt_randomizer_venv/bin/activate; cd /Users/home/Documents/Scripts; python3 reverse_image_search.py" in selected tab of the front window
+end tell
+EOF
+            ;;
+        4)
+            osascript <<EOF
+tell application "Terminal"
+    activate
+    set newWindow to (do script "")
+    set current settings of front window to settings set "LinkGrabber"
+    do script "source ~/gpt_media_process/bin/activate; cd /Users/home/Documents/Scripts/GPT/Linkgrabber/Scripts; python3 link_grabber.py" in front window
+    delay 0.3
+    set bounds of front window to {50, 700, 600, 930}
+end tell
+EOF
+            ;;
+        5)
+            osascript <<EOF
+tell application "Terminal"
+    activate
+    tell application "System Events" to keystroke "t" using command down
+    delay 0.2
+    do script "/Users/home/Documents/Scripts/Run_Commands/GPT/run_media_info_viewer.command" in selected tab of front window
+end tell
+EOF
+            ;;
+        x)
+            echo "Exiting..."
+            break
+            ;;
+        *)
+            echo "Invalid choice. Try again."
+            ;;
+    esac
+
+    echo
+    if [ "$skip_countdown" = false ]; then
+        echo
+        echo "Returning to menu in 5 seconds... (press any key to skip)"
+    for i in {5..1}; do
+        read -t 1 -n 1 key && break
+        echo -ne "$i...\r"
+    done
+    echo
+    else
+    skip_countdown=false  # Reset it for next loop
+    fi
+    clear
+
+    echo
+done

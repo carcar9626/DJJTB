@@ -1,0 +1,9 @@
+~/Documents/Scripts/DJJTB/
+├── venv/                      ← Virtual environment
+├── djjtb.py                      ← Master launcher
+├── djjtb/
+      ├── utils.py
+│   ├── ai_tools/
+│   ├── media_tools/
+│   └── quick_tools/
+├── Assets/
