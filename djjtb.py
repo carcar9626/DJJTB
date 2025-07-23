@@ -246,7 +246,7 @@ class DJJTBLauncher:
                 djj.run_command_in_tab(f"{self.project_path}/djjtb/ai_tools/comfyui_media_processor.command")
             elif choice == "3":  # Merge Loras
                 # Run in current terminal
-                os.system(f"source {self.venv_path}; cd {self.project_path}/djjtb/ai_tools; python3 -m djjtb.media_tools.merge_loras.py")
+                os.system(f"source {self.venv_path}; cd {self.project_path}/; python3 -m djjtb.ai_tools.merge_loras.py")
             elif choice == "4":  # Codeformer
                 djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path}/; python3 -m djjtb.ai_tools.codeformer_runner")
             elif choice in ["0", "00"]:

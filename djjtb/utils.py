@@ -9,6 +9,18 @@ import json
 import tempfile
 # ADD THESE FUNCTIONS TO YOUR utils.py FILE
 
+#this one is for codeformer launcher
+def get_string_input(prompt, default=None):
+    """Get string input with optional default value."""
+    user_input = input(prompt).strip()
+    if user_input:
+        return user_input
+    if default is not None:
+        print(f"⚠️  \033[33mUsing default value: {default}\033[0m")
+        return default
+    print("❌ \033[33mInput cannot be empty.\033[0m")
+    return get_string_input(prompt, default)  # Retry if no default
+
 def launch_app(app_name):
     """Launch an application using macOS 'open' command"""
     try:
@@ -431,7 +443,7 @@ def cleanup_tabs():
     '''
     subprocess.run(["osascript", "-e", applescript], stderr=subprocess.DEVNULL)
 
-def run_script_in_tab(module_path, venv_path="~/Documents/Scripts/DJJTB/djjvenv/bin/activate", project_path="/Users/home/Documents/Scripts/DJJTB"):
+def run_script_in_tab(module_path, venv_path="~/Documents/Scripts/DJJTB/venv/bin/activate", project_path="/Users/home/Documents/Scripts/DJJTB"):
     """Run a Python script in a new terminal tab"""
     applescript = f'''
     tell application "Terminal"
