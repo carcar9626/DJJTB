@@ -16,7 +16,7 @@ def get_string_input(prompt, default=None):
     if user_input:
         return user_input
     if default is not None:
-        print(f"⚠️  \033[33mUsing default value: {default}\033[0m")
+        # Silently return default without warning message
         return default
     print("❌ \033[33mInput cannot be empty.\033[0m")
     return get_string_input(prompt, default)  # Retry if no default

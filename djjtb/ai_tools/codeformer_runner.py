@@ -17,6 +17,17 @@ def clean_path(path_str):
     """Clean path string by removing quotes and whitespace"""
     return path_str.strip().strip('\'"')
 
+def cleanup_cropped_faces(output_path):
+    """Remove the cropped_faces folder if it exists"""
+    cropped_faces_path = pathlib.Path(output_path) / "cropped_faces"
+    if cropped_faces_path.exists():
+        import shutil
+        try:
+            shutil.rmtree(cropped_faces_path)
+            print(f"🗑️  Removed cropped faces folder")
+        except Exception as e:
+            print(f"⚠️  Could not remove cropped faces folder: {e}")
+
 def collect_files_from_folder(input_path, subfolders=False):
     """Collect supported files from folder(s)"""
     input_path_obj = pathlib.Path(input_path)
@@ -99,8 +110,9 @@ def get_valid_inputs():
     
     return valid_paths, input_mode, src_path if input_mode == '1' else None
 
-def process_files(input_paths, input_mode, src_path, weight, suffix, upscale):
+def process_files(input_paths, input_mode, src_path, weight, suffix, upscale, save_faces):
     if input_mode == '1':
+        # Folder mode - process all files in one command
         output_path = pathlib.Path(src_path) / "Output" / "CF"
         output_path.mkdir(parents=True, exist_ok=True)
         
@@ -110,6 +122,7 @@ def process_files(input_paths, input_mode, src_path, weight, suffix, upscale):
         print(f"   \033[33m🧪 Weight:\033[0m {weight}")
         print(f"   \033[33m🔠 Suffix:\033[0m {suffix}")
         print(f"   \033[33m🔼 Upscale:\033[0m {upscale}")
+        print(f"   \033[33m👤 Save faces:\033[0m {'Yes' if save_faces else 'No'}")
         print()
         
         cmd = [
@@ -124,25 +137,34 @@ def process_files(input_paths, input_mode, src_path, weight, suffix, upscale):
         
         result = subprocess.run(cmd, cwd=CODEFORMER_DIR)
         
+        # Clean up cropped faces if user doesn't want them
         if result.returncode == 0:
+            if not save_faces:
+                cleanup_cropped_faces(output_path)
             print(f"✅ \033[33mCompleted:\033[0m {len(input_paths)} file(s)")
             subprocess.run(['open', str(output_path)])
         else:
             print(f"❌ \033[33mFailed:\033[0m Processing failed")
             print("Check terminal output for details from inference_codeformer.py")
     else:
+        # Multi-file mode - let inference_codeformer.py handle all output
+        # Just show basic setup info and stay quiet during processing
         print(f"\n🧠 Processing {len(input_paths)} file(s):")
         print(f"   \033[33m🧪 Weight:\033[0m {weight}")
         print(f"   \033[33m🔠 Suffix:\033[0m {suffix}")
         print(f"   \033[33m🔼 Upscale:\033[0m {upscale}")
+        print(f"   \033[33m👤 Save faces:\033[0m {'Yes' if save_faces else 'No'}")
         print()
         
-        last_output_path = None
-        for i, input_path in enumerate(input_paths, 1):
+        first_output_path = None
+        
+        for i, input_path in enumerate(input_paths):
             output_path = pathlib.Path(input_path).parent / "Output" / "CF"
             output_path.mkdir(parents=True, exist_ok=True)
-            print(f"Processing file {i}/{len(input_paths)}: {input_path}")
-            print(f"   \033[33m📤 Output:\033[0m {output_path}")
+            
+            # Store the first output path to open later
+            if first_output_path is None:
+                first_output_path = output_path
             
             cmd = [
                 CODEFORMER_VENV_PYTHON, CODEFORMER_SCRIPT_PATH,
@@ -154,19 +176,17 @@ def process_files(input_paths, input_mode, src_path, weight, suffix, upscale):
                 "--no-open"
             ]
             
+            # Let inference_codeformer.py handle all terminal output
             result = subprocess.run(cmd, cwd=CODEFORMER_DIR)
             
-            if result.returncode == 0:
-                print(f"✅ \033[33mCompleted:\033[0m {input_path}")
-            else:
-                print(f"❌ \033[33mFailed:\033[0m {input_path}")
-                print("Check terminal output for details from inference_codeformer.py")
-            
-            last_output_path = output_path
+            # Clean up cropped faces if user doesn't want them
+            if result.returncode == 0 and not save_faces:
+                cleanup_cropped_faces(output_path)
         
-        if last_output_path and all(subprocess.run([CODEFORMER_VENV_PYTHON, CODEFORMER_SCRIPT_PATH, "-i", str(p), "-o", str(pathlib.Path(p).parent / "Output" / "CF"), "-w", str(weight), "--suffix", suffix, "--upscale", str(upscale), "--no-open"], cwd=CODEFORMER_DIR).returncode == 0 for p in input_paths):
-            print(f"✅ \033[33mCompleted:\033[0m {len(input_paths)} file(s)")
-            subprocess.run(['open', str(last_output_path)])
+        # Open only the first output folder at the end
+        if first_output_path:
+            subprocess.run(['open', str(first_output_path)])
+
 def main():
     os.system('clear')
     
@@ -206,10 +226,17 @@ def main():
             print("⚠️  \033[33mUsing default upscale factor 2\033[0m")
             upscale = 2
         
+        # Ask about saving cropped faces
+        save_faces = djj.prompt_choice(
+            "\033[33mSave cropped faces?\033[0m\n1. Yes\n2. No",
+            ['1', '2'],
+            default='2'
+        ) == '1'
+        
         print()
         
         # Process all files in one call
-        process_files(input_files, input_mode, src_path, weight_val, suffix, upscale)
+        process_files(input_files, input_mode, src_path, weight_val, suffix, upscale, save_faces)
         
         print(f"\033[33m\n🏁 Done!\033[0m Processed {len(input_files)} file(s).")
         

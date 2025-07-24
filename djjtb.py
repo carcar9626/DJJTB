@@ -82,6 +82,7 @@ class DJJTBLauncher:
         print("6. Video Splitter 📹 ✂️  ⏱️")
         print("7. Speed Changer 🐇⬌🐢")
         print("8. Frame Extractor 📹➡︎🌃🌆🎆🎇")
+        print("9. GIFs Converter 📹⬌🌃🌆🎆🎇")
         print()
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 0. ⏪ Back to MEDIA TOOLS")
@@ -135,7 +136,7 @@ class DJJTBLauncher:
             self.show_video_tools_menu()
             
             choice = djj.prompt_choice("\033[33mChoose a Tool\033[0m" if first_entry else "\033[33mChoose another option\033[0m",
-                                     ['1', '2', '3', '4', '5', '6', '7', '8', '0', '00'])
+                                     ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '00'])
             first_entry = False
             
             if choice == "1":
@@ -154,6 +155,8 @@ class DJJTBLauncher:
                 djj.run_script_in_tab("djjtb.media_tools.video_tools.video_speed_changer", self.venv_path, self.project_path)
             elif choice == "8":
                 djj.run_script_in_tab("djjtb.media_tools.video_tools.video_frame_extractor", self.venv_path, self.project_path)
+            elif choice == "9":
+                djj.run_script_in_tab("djjtb.media_tools.video_tools.video_gif_converter", self.venv_path, self.project_path)
             elif choice == "0":
                 break
             elif choice == "00":
