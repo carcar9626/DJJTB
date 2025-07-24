@@ -167,7 +167,6 @@ def process_files(input_paths, input_mode, src_path, weight, suffix, upscale):
         if last_output_path and all(subprocess.run([CODEFORMER_VENV_PYTHON, CODEFORMER_SCRIPT_PATH, "-i", str(p), "-o", str(pathlib.Path(p).parent / "Output" / "CF"), "-w", str(weight), "--suffix", suffix, "--upscale", str(upscale), "--no-open"], cwd=CODEFORMER_DIR).returncode == 0 for p in input_paths):
             print(f"✅ \033[33mCompleted:\033[0m {len(input_paths)} file(s)")
             subprocess.run(['open', str(last_output_path)])
-
 def main():
     os.system('clear')
     
