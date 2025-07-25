@@ -23,36 +23,6 @@ def is_valid_gif(filename):
 def is_valid_video(filename):
     return filename.lower().endswith(('.mp4', '.mov', '.webm', '.mkv', '.avi'))
 
-def is_valid_media(filename):
-    return is_valid_gif(filename) or is_valid_video(filename)
-
-def get_gif_fps_info(gif_path):
-    """Extract GIF frame rate information using ffprobe"""
-    try:
-        cmd = [
-            "ffprobe", "-v", "quiet", "-select_streams", "v:0",
-            "-show_entries", "stream=r_frame_rate,duration",
-            "-show_entries", "format=duration",
-            "-of", "csv=p=0", gif_path
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        
-        # Parse frame rate
-        lines = result.stdout.strip().split('\n')
-        if lines and lines[0]:
-            frame_rate = lines[0].split(',')[0]
-            if '/' in frame_rate:
-                num, den = map(float, frame_rate.split('/'))
-                fps = num / den if den != 0 else 10.0
-            else:
-                fps = float(frame_rate) if frame_rate else 10.0
-        else:
-            fps = 10.0
-        
-        return min(max(fps, 1.0), 60.0)  # Clamp between 1-60 fps
-    except:
-        return 10.0  # Default fallback
-
 def get_conversion_mode():
     """Get conversion mode from user"""
     return djj.prompt_choice(
@@ -64,15 +34,15 @@ def get_conversion_mode():
 def get_gif_quality():
     """Get GIF quality settings"""
     quality = djj.prompt_choice(
-        "GIF Quality:\n1. High (larger file)\n2. Medium\n3. Low (smaller file)\n",
+        "GIF Quality:\n1. High (15fps, 720p)\n2. Medium (10fps, 480p)\n3. Low (8fps, 360p)\n",
         ['1', '2', '3'],
         default='2'
     )
     
     quality_settings = {
-        '1': {'fps': None, 'scale': 'scale=-1:-1', 'colors': 256},  # Original fps, full scale
-        '2': {'fps': 15, 'scale': 'scale=720:-1', 'colors': 128},   # 15fps, 720p width
-        '3': {'fps': 10, 'scale': 'scale=480:-1', 'colors': 64}     # 10fps, 480p width
+        '1': {'fps': 15, 'scale': '720:-1'},
+        '2': {'fps': 10, 'scale': '480:-1'},
+        '3': {'fps': 8, 'scale': '360:-1'}
     }
     
     return quality_settings[quality]
@@ -80,15 +50,14 @@ def get_gif_quality():
 def get_video_codec():
     """Get video codec preference"""
     codec = djj.prompt_choice(
-        "Video codec:\n1. H.264 (MP4) - Most compatible\n2. H.265 (MP4) - Smaller files\n3. WebM - Web optimized\n",
-        ['1', '2', '3'],
+        "Video codec:\n1. H.264 (MP4)\n2. WebM\n",
+        ['1', '2'],
         default='1'
     )
     
     codec_settings = {
-        '1': {'codec': 'libx264', 'ext': 'mp4', 'extra': ['-preset', 'medium', '-crf', '23']},
-        '2': {'codec': 'libx265', 'ext': 'mp4', 'extra': ['-preset', 'medium', '-crf', '28']},
-        '3': {'codec': 'libvpx-vp9', 'ext': 'webm', 'extra': ['-crf', '30', '-b:v', '0']}
+        '1': {'codec': 'libx264', 'ext': 'mp4'},
+        '2': {'codec': 'libvpx', 'ext': 'webm'}
     }
     
     return codec_settings[codec]
@@ -146,50 +115,34 @@ def get_output_directory(media_files, is_folder_mode=True, first_folder=None, co
         return os.path.join(os.getcwd(), "Output", subfolder_name)
 
 def convert_gif_to_video(gif_path, output_path, codec_settings):
-    """Convert GIF to video"""
+    """Convert GIF to video - simple method"""
     base_name = os.path.splitext(os.path.basename(gif_path))[0]
     output_file = os.path.join(output_path, f"{base_name}.{codec_settings['ext']}")
-    
-    # Auto-detect GIF frame rate
-    detected_fps = get_gif_fps_info(gif_path)
     
     cmd = [
         "ffmpeg", "-y",
         "-i", gif_path,
         "-c:v", codec_settings['codec'],
-        "-r", str(detected_fps),
-        "-pix_fmt", "yuv420p"
-    ] + codec_settings['extra'] + [output_file]
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        output_file
+    ]
     
     return cmd, output_file
 
 def convert_video_to_gif(video_path, output_path, gif_settings):
-    """Convert video to GIF"""
+    """Convert video to GIF - simple direct method"""
     base_name = os.path.splitext(os.path.basename(video_path))[0]
     output_file = os.path.join(output_path, f"{base_name}.gif")
     
-    # Create palette for better quality
-    palette_file = os.path.join(output_path, f"palette_{base_name}.png")
-    
-    # Generate palette command
-    palette_cmd = [
+    cmd = [
         "ffmpeg", "-y",
         "-i", video_path,
-        "-vf", f"{gif_settings['scale']},palettegen=max_colors={gif_settings['colors']}",
-        palette_file
-    ]
-    
-    # Convert to GIF command
-    fps_filter = f"fps={gif_settings['fps']}," if gif_settings['fps'] else ""
-    gif_cmd = [
-        "ffmpeg", "-y",
-        "-i", video_path,
-        "-i", palette_file,
-        "-lavfi", f"{fps_filter}{gif_settings['scale']} [x]; [x][1:v] paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle",
+        "-vf", f"fps={gif_settings['fps']},scale={gif_settings['scale']}",
         output_file
     ]
     
-    return palette_cmd, gif_cmd, output_file, palette_file
+    return cmd, output_file
 
 def process_conversions(media_files, output_dir, conversion_mode, settings):
     """Process all conversions"""
@@ -210,31 +163,24 @@ def process_conversions(media_files, output_dir, conversion_mode, settings):
         try:
             if conversion_mode == '1':  # GIF to Video
                 cmd, output_file = convert_gif_to_video(media_file, output_dir, settings)
-                
-                result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-                print(f"✅ Converted to: {os.path.basename(output_file)}")
-                logger.info(f"GIF to Video: {media_file} -> {output_file}")
-                success_count += 1
-                
             else:  # Video to GIF
-                palette_cmd, gif_cmd, output_file, palette_file = convert_video_to_gif(media_file, output_dir, settings)
-                
-                # Generate palette
-                subprocess.run(palette_cmd, check=True, capture_output=True, text=True)
-                
-                # Convert to GIF
-                result = subprocess.run(gif_cmd, check=True, capture_output=True, text=True)
-                
-                # Clean up palette file
-                if os.path.exists(palette_file):
-                    os.remove(palette_file)
-                
+                cmd, output_file = convert_video_to_gif(media_file, output_dir, settings)
+            
+            # Run conversion
+            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+            
+            # Check if output file was created and has content
+            if os.path.exists(output_file) and os.path.getsize(output_file) > 0:
                 print(f"✅ Converted to: {os.path.basename(output_file)}")
-                logger.info(f"Video to GIF: {media_file} -> {output_file}")
+                logger.info(f"{conversion_type}: {media_file} -> {output_file}")
                 success_count += 1
+            else:
+                print(f"❌ Output file is empty or missing: {os.path.basename(output_file)}")
+                logger.error(f"Empty output file: {output_file}")
+                error_count += 1
                 
         except subprocess.CalledProcessError as e:
-            error_msg = f"Conversion failed for {os.path.basename(media_file)}: {e.stderr}"
+            error_msg = f"FFmpeg error for {os.path.basename(media_file)}: {e.stderr if e.stderr else 'Unknown error'}"
             print(f"❌ {error_msg}")
             logger.error(error_msg)
             error_count += 1
@@ -294,7 +240,7 @@ def main():
         else:
             # File paths mode
             file_type = "GIF files" if conversion_mode == '1' else "Video files"
-            file_paths = input(f"📁 \033[33mEnter {file_type} paths: \n -> \033[0m").strip()
+            file_paths = input(f"📁 \033[33mEnter {file_type} paths (max ~10 files recommended): \n -> \033[0m").strip()
             
             if not file_paths:
                 print("❌ No file paths provided.")
