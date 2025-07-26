@@ -87,9 +87,10 @@ def main():
             clipboard = pyperclip.paste()
             if clipboard != last_clipboard:
                 last_clipboard = clipboard
-                url_match = url_pattern.search(clipboard)
-                if url_match:
-                    log_link(url_match.group(0))
+                # CHANGED: Use finditer() to get ALL full URL matches
+                url_matches = url_pattern.finditer(clipboard)
+                for match in url_matches:
+                    log_link(match.group(0))
             time.sleep(1)
         except KeyboardInterrupt:
             print("\n🛑 LinkGrabber stopped.")

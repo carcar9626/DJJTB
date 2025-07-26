@@ -34,6 +34,31 @@ def launch_app(app_name):
         print(f"\033[33m⚠️  Error launching\033[0m {app_name}: {e}")
         return False
 
+
+
+def make_even_dimensions(width: int, height: int) -> tuple[int, int, int, int]:
+    even_width = width + (width % 2)
+    even_height = height + (height % 2)
+    pad_x = (even_width - width) // 2
+    pad_y = (even_height - height) // 2
+    return even_width, even_height, pad_x, pad_y
+
+def get_pad_filter(width: int, height: int) -> str:
+    if width % 2 == 0 and height % 2 == 0:
+        return "null"
+    ew, eh, px, py = make_even_dimensions(width, height)
+    return f"pad={ew}:{eh}:{px}:{py}:color=black"
+
+def get_gif_dimensions(gif_path: str) -> tuple[int, int]:
+    cmd = [
+        "ffprobe", "-v", "error", "-select_streams", "v:0",
+        "-show_entries", "stream=width,height",
+        "-of", "csv=s=x:p=0", gif_path
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    width, height = map(int, result.stdout.strip().split('x'))
+    return width, height
+
 def show_app_menu(title, apps_dict, back_options=None):
     """
     Generic function to display an app menu
