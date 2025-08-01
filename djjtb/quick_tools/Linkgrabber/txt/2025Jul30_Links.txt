@@ -1,7 +1,0 @@
-https://gist.githubusercontent.com/carcar9626/aa4d48c97de6eb1577b3fc340a2f4b31/raw/c035be16810d6940ad7f06ceccfec6359f7443ab/djjtb.py
-https://gist.githubusercontent.com/carcar9626/12d82b896c5a1acd76baaef268b79ad5/raw/c537c16eac0a5437f61abff2959366b52fa27971/utils.py
-https://gist.githubusercontent.com/carcar9626/f4d6db722ea653cf3910bb6e7fe92c6a/raw/499e905718ae30ad6f456c7770ce853a35698618/video_group_merger.py
-https://gist.githubusercontent.com/carcar9626/b6a228daab7105f6881b1b2714d28557/raw/eb94e3ad5add1fb7e774081e36417bfb058f2591/metadata_injector.py
-https://gist.githubusercontent.com/carcar9626/8059f5b0cdfd2c8faa860c5c09e6ffd0/raw/46a11155f01af4909349c018558bdc00398dbec8/media_metadata_identifier.py
-https://filesmonster.com/folders.php?fid=_3QO74cskkzfARFLdnGkJ_s1hJgbfsSP7RR3mDfnyE0
-https://filesmonster.com/download.php?id=4kDm9JEiz2yEMx3THR0ZkeMa_8_H3ynE8N7c0rbx6KE

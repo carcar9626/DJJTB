@@ -45,8 +45,8 @@ def write_playlist(media_paths, destination_path):
 
 def get_unique_playlist_path():
     """Generate a unique playlist path with date and timestamp if needed"""
-    # Create the output directory
-    output_dir = Path("djjtb") / "media_tools" / "playlists"
+    # Create the output directory - FIXED: Convert string to Path object
+    output_dir = Path("/Users/home/Desktop/Playlists")
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Generate base filename with current date
@@ -99,10 +99,7 @@ def generate_playlist():
     write_playlist(media_files, playlist_path)
     print(f"\n✅ \033[32mPlaylist saved to:\033[0m {playlist_path}")
     
-    try:
-        subprocess.run(['open', str(playlist_path.parent)], check=True)
-    except subprocess.CalledProcessError:
-        print("\033[33mCould not open folder in Finder.\033[0m")
+    djj.prompt_open_folder(playlist_path.parent)
 
 def main():
     while True:

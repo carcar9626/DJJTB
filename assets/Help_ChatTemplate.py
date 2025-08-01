@@ -8,9 +8,9 @@ reference for input mode, input/output handling, prompt inputhandling, headers, 
 https://gist.githubusercontent.com/carcar9626/f4d6db722ea653cf3910bb6e7fe92c6a/raw/499e905718ae30ad6f456c7770ce853a35698618/video_group_merger.py
 
 script that need fix:
-https://gist.githubusercontent.com/carcar9626/b6a228daab7105f6881b1b2714d28557/raw/eb94e3ad5add1fb7e774081e36417bfb058f2591/metadata_injector.py
-https://gist.githubusercontent.com/carcar9626/8059f5b0cdfd2c8faa860c5c09e6ffd0/raw/46a11155f01af4909349c018558bdc00398dbec8/media_metadata_identifier.py
+https://gist.githubusercontent.com/carcar9626/48c3061f972d383178ffeee8117dc768/raw/86671a3bd2b1fc4f7b1d7f6b89b19cde71532ff9/playlist_generator.py
 
+i'm getting this error message suddenly, i don't know what's wrong, it's been working, same when i run codeformer using this main launcher, says missing module ffmpeg...that's crazy talk, but obviously something's wrong. if it's a one fix fix all, then please tell me, otherwise let's fix this playlist generator first
 so as you can see, i have two metadata tools that i want to combine and adapt it to the references mentioned above (this one has its own subfolder and tagging output so we of course keep those). there're a few problems, and fixes (this context assumes the "adaptation" is completed):
 1. prompt if i want to inject "fake" metadata when stripping is completed
 2. if possible, can try to be more creative with the "fake", i don't need a whole randomizer, but bunch of random choices would be nice or randomized from a bunch of generic words that makes sense or something better you might suggest, doesn't really matter, just to trick some online i2v generator that constantly interupt my workflow coz my image has "no valid metadata"

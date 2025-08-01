@@ -1,2 +1,0 @@
-https://github.com/pypa/pip/issues/5599
-https://www.google.com/?olud")

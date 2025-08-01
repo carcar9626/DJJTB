@@ -9,9 +9,9 @@ from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 
 # Define base paths
-base_path = "/Users/home/Documents/Scripts/DJJTB/djjtb/quick_tools/Linkgrabber"
-csv_path = os.path.join(base_path, "csv")
-txt_path = os.path.join(base_path, "txt")
+data_path = "/Users/home/Documents/Linkgrabber_Results"
+csv_path = os.path.join(data_path, "csv")
+txt_path = os.path.join(data_path, "txt")
 
 # Create folders if missing
 os.makedirs(csv_path, exist_ok=True)
