@@ -3,6 +3,7 @@ import sys
 import subprocess
 import pathlib
 import logging
+import shutil
 import djjtb.utils as djj
 
 # Supported extensions
@@ -24,9 +25,33 @@ def cleanup_cropped_faces(output_path):
         import shutil
         try:
             shutil.rmtree(cropped_faces_path)
-            print(f"🗑️  Removed cropped faces folder")
         except Exception as e:
             print(f"⚠️  Could not remove cropped faces folder: {e}")
+            
+def cleanup_restored_faces(output_path):
+    """Remove the restored_faces folder if it exists"""
+    restored_faces_path = pathlib.Path(output_path) / "restored_faces"
+    if restored_faces_path.exists():
+        import shutil
+        try:
+            shutil.rmtree(restored_faces_path)
+        except Exception as e:
+            print(f"⚠️  Could not remove restored faces folder: {e}")
+
+def tag_source_files(file_paths, tag_name="CF"):
+    """Add Finder tag to source files"""
+    TAG_PATH = "/opt/homebrew/bin/tag"
+    tagged_count = 0
+    
+    for file_path in file_paths:
+        try:
+            subprocess.run([TAG_PATH, "-a", tag_name, str(file_path)], check=True, capture_output=True)
+            tagged_count += 1
+        except subprocess.CalledProcessError as e:
+            print(f"⚠️  Failed to tag {os.path.basename(file_path)}: {e}")
+    
+    if tagged_count > 0:
+        print(f"\033[33m🏷️  Tagged\033[0m {tagged_count} \033[33mfile(s) with\033[0m '\033[92m{tag_name}\033[0m'")
 
 def collect_files_from_folder(input_path, subfolders=False):
     """Collect supported files from folder(s)"""
@@ -63,10 +88,10 @@ def collect_files_from_paths(file_paths):
 
 def get_valid_inputs():
     """Allow selecting multiple files and/or folders using prompt_choice"""
-    print("🔍 Select files or folders to process")
+    print("\033[1;33m🔍 Select files or folders to process\033[0m")
     
     input_mode = djj.prompt_choice(
-        "\033[33mInput mode:\033[0m\n1. Folder path\n2. Space-separated file paths",
+        "\033[33mInput mode:\033[0m\n1. Folder path\n2. Space-separated file paths\n",
         ['1', '2'],
         default='1'
     )
@@ -91,40 +116,44 @@ def get_valid_inputs():
         file_paths = input("📁 \033[33mEnter file paths (space-separated):\033[0m\n -> ").strip()
         
         if not file_paths:
-            print("❌ No file paths provided.")
+            print("\033[1;33m❌ No file paths provided.\033[0m")
             sys.exit(1)
         
         valid_paths = collect_files_from_paths(file_paths)
         print()
     
     if not valid_paths:
-        print("❌ \033[33mNo valid files found.\033[0m")
+        print("❌ \033[1;33mNo valid files found.\033[0m")
         sys.exit(1)
-    
-    print(f"✅ Found {len(valid_paths)} supported file(s)")
-    for i, file_path in enumerate(valid_paths[:5]):
-        print(f"  {i+1}. {os.path.basename(file_path)}")
-    if len(valid_paths) > 5:
-        print(f"  ... and {len(valid_paths) - 5} more")
+    os.system('clear')
+    print ("\n" * 2)
+    print ("🔍 Detecting files...")
     print()
+    print(f"\033[33m✅ Found\033[0m {len(valid_paths)} \033[33msupported file(s)\033[0m")
+    print()
+    print("Choose Your Options:")
     
     return valid_paths, input_mode, src_path if input_mode == '1' else None
 
-def process_files(input_paths, input_mode, src_path, weight, suffix, upscale, save_faces):
+def process_files(input_paths, input_mode, src_path, weight, suffix, upscale, save_faces, save_restored_faces, tag_source):
     if input_mode == '1':
         # Folder mode - process all files in one command
-        output_path = pathlib.Path(src_path) / "Output" / "CF"
+        output_path = pathlib.Path(src_path) / "CF"
         output_path.mkdir(parents=True, exist_ok=True)
-        
-        print(f"\n🧠 Processing {len(input_paths)} file(s):")
-        print(f"   \033[33m📥 Input:\033[0m folder: {src_path}")
-        print(f"   \033[33m📤 Output:\033[0m {output_path}")
-        print(f"   \033[33m🧪 Weight:\033[0m {weight}")
-        print(f"   \033[33m🔠 Suffix:\033[0m {suffix}")
-        print(f"   \033[33m🔼 Upscale:\033[0m {upscale}")
-        print(f"   \033[33m👤 Save faces:\033[0m {'Yes' if save_faces else 'No'}")
+        print("\n" * 2)
+        print(f"\n\033[1;33m🧠 Processing \033[0m{len(input_paths)} \033[1;33mfile(s):\033[0m")
+        print("---------------")
+        print(f"\033[33m📥 Input folder:\033[0m {src_path}")
+        print(f"\033[33m📤 Output:\033[0m {output_path}")
+        print(f"\033[33m🧪 Weight:\033[0m {weight}")
+        print(f"\033[33m🔠 Suffix:\033[0m {suffix}")
+        print(f"\033[33m🔼 Upscale:\033[0m {upscale}")
+        print(f"\033[33m👤 Save faces:\033[0m {'Yes' if save_faces else 'No'}")
+        print(f"\033[33m🫅🏼 Save Restored faces:\033[0m {'Yes' if save_restored_faces else 'No'}")
+        print("---------------")
         print()
-        
+        print("\033[1;33m🤖 CodeFormer 🤖 \033[0m\033[33mactivating...\033[0m")
+        print()
         cmd = [
             CODEFORMER_VENV_PYTHON, CODEFORMER_SCRIPT_PATH,
             "-i", str(src_path),
@@ -141,25 +170,35 @@ def process_files(input_paths, input_mode, src_path, weight, suffix, upscale, sa
         if result.returncode == 0:
             if not save_faces:
                 cleanup_cropped_faces(output_path)
-            print(f"✅ \033[33mCompleted:\033[0m {len(input_paths)} file(s)")
+            if not save_restored_faces:
+                cleanup_restored_faces(output_path)
+            print(f"🎉 \033[33mSuccessfully processed \033[0m {len(input_paths)} \033[33mfile(s)\033[0m")
             subprocess.run(['open', str(output_path)])
+            if tag_source:
+                tag_source_files(input_paths)
         else:
             print(f"❌ \033[33mFailed:\033[0m Processing failed")
             print("Check terminal output for details from inference_codeformer.py")
     else:
         # Multi-file mode - let inference_codeformer.py handle all output
         # Just show basic setup info and stay quiet during processing
-        print(f"\n🧠 Processing {len(input_paths)} file(s):")
-        print(f"   \033[33m🧪 Weight:\033[0m {weight}")
-        print(f"   \033[33m🔠 Suffix:\033[0m {suffix}")
-        print(f"   \033[33m🔼 Upscale:\033[0m {upscale}")
-        print(f"   \033[33m👤 Save faces:\033[0m {'Yes' if save_faces else 'No'}")
+        print("\n" * 2)
+        print(f"\n\033[1;33m🧠 Processing\033[0m {len(input_paths)} \033[1;33m file(s):\033[0m")
+        print("---------------")
+        print(f"\033[33m🧪 Weight:\033[0m {weight}")
+        print(f"\033[33m🔠 Suffix:\033[0m {suffix}")
+        print(f"\033[33m🔼 Upscale:\033[0m {upscale}")
+        print(f"\033[33m👤 Save Cropped faces:\033[0m {'Yes' if save_faces else 'No'}")
+        print(f"\033[33m🫅🏼 Save Restored faces:\033[0m {'Yes' if save_restored_faces else 'No'}")
+        print("---------------")
+        print()
+        print("\033[1;33m🤖 CodeFormer 🤖 \033[0m\033[33mactivating...\033[0m")
         print()
         
         first_output_path = None
         
         for i, input_path in enumerate(input_paths):
-            output_path = pathlib.Path(input_path).parent / "Output" / "CF"
+            output_path = pathlib.Path(input_path).parent / "CF"
             output_path.mkdir(parents=True, exist_ok=True)
             
             # Store the first output path to open later
@@ -180,8 +219,13 @@ def process_files(input_paths, input_mode, src_path, weight, suffix, upscale, sa
             result = subprocess.run(cmd, cwd=CODEFORMER_DIR)
             
             # Clean up cropped faces if user doesn't want them
-            if result.returncode == 0 and not save_faces:
-                cleanup_cropped_faces(output_path)
+            if result.returncode == 0:
+                if not save_faces:
+                    cleanup_cropped_faces(output_path)
+                if not save_restored_faces:
+                    cleanup_restored_faces(output_path)
+                if tag_source:
+                    tag_source_files(input_paths)
         
         # Open only the first output folder at the end
         if first_output_path:
@@ -213,7 +257,7 @@ def main():
         # Get suffix using get_string_input
         suffix = djj.get_string_input(
             "\033[33mEnter suffix (default '_CF'):\033[0m\n > ",
-            default="_CF"
+            default="CF"
         )
         
         # Get upscale with manual default handling
@@ -228,18 +272,27 @@ def main():
         
         # Ask about saving cropped faces
         save_faces = djj.prompt_choice(
-            "\033[33mSave cropped faces?\033[0m\n1. Yes\n2. No",
+            "\033[33mSave cropped faces? \033[0m\n1. Yes, 2. No",
             ['1', '2'],
             default='2'
         ) == '1'
         
-        print()
+        save_restored_faces = djj.prompt_choice(
+            "\033[33mSave restored faces? \033[0m\n1. Yes, 2. No",
+            ['1', '2'],
+            default='2'
+        ) == '1'
         
+        tag_source = djj.prompt_choice(
+            "\033[33mTag source files with 'CF'?\033[0m\n1. Yes\n2. No",
+            ['1', '2'],
+            default='1'
+            ) == '1'
+        os.system('clear')
+
         # Process all files in one call
-        process_files(input_files, input_mode, src_path, weight_val, suffix, upscale, save_faces)
-        
-        print(f"\033[33m\n🏁 Done!\033[0m Processed {len(input_files)} file(s).")
-        
+        process_files(input_files, input_mode, src_path, weight_val, suffix, upscale, save_faces, save_restored_faces, tag_source)
+        print()
         action = djj.what_next()
         if action == 'exit':
             break

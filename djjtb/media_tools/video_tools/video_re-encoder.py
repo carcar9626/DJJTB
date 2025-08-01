@@ -108,12 +108,8 @@ def reencode_videos(input_path, subfolders=False, audio_choice='1'):
     print(f"\033[33mOutput folder(s):\033[0m {', '.join(output_base_dirs)}")
     print()
 
-    if output_base_dirs:
-        try:
-            subprocess.run(['open', output_base_dirs[0]], check=True)
-        except subprocess.CalledProcessError as e:
-            logger.error(f"\033[33mError opening output folder: {e}\033[0m")
-
+    djj.prompt_open_folder(output_base_dirs[0])
+    
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 

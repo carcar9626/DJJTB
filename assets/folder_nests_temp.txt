@@ -1,0 +1,11 @@
+FOLDER_X
+├── folderA
+        ├── y.webp
+        ├──folder3
+              ├── x.jpg
+├── folderB
+        ├── y.webp
+        └── folderC
+                └──x.jpg
+                ├── folder2
+                        

@@ -198,10 +198,7 @@ def change_speed(input_paths, subfolders=False):
     print(f"Output folder(s): {', '.join(output_base_dirs)}")
     print()
     
-    try:
-        subprocess.run(['open', output_base_dirs[0]], check=True)
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Error opening output folder: {e}")
+    djj.prompt_open_folder(output_base_dirs[0])
     
     return output_base_dirs
 

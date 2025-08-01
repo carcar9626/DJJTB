@@ -135,10 +135,7 @@ def extract_frames(input_path, subfolders=False, frame_interval=None):
     print(f"\033[33mOutput folder(s):\033[0m {len(output_base_dirs)} \033[33mcreated.\033[0m")
     print()
     
-    try:
-        subprocess.run(['open', output_base_dirs[0]], check=True)
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Error opening output folder: {e}")
+    djj.prompt_open_folder(output_base_dir)
     
     return output_base_dirs
 

@@ -1,0 +1,32 @@
+######################################################################
+# 🔧 SPOTLIGHT RESET MANUAL FOR EXTERNAL SSD (/Volumes/Desmond_SSD_2TB)
+#
+# Use this if Spotlight is misbehaving (not indexing, stale results),
+# or to reset macOS metadata on the external SSD.
+#
+# This clears system-generated hidden folders and forces a fresh index.
+# Safe as long as you're not using the drive for Time Machine or booting macOS.
+######################################################################
+
+# 1️⃣ Turn off Spotlight indexing on the external SSD
+sudo mdutil -i off /Volumes/Desmond_SSD_2TB
+
+# 2️⃣ Delete hidden system metadata folders (safe to remove)
+sudo rm -rf /Volumes/Desmond_SSD_2TB/.Spotlight-V100           # Spotlight index
+sudo rm -rf /Volumes/Desmond_SSD_2TB/.fseventsd                # Filesystem events
+sudo rm -rf /Volumes/Desmond_SSD_2TB/.TemporaryItems           # App/temp data
+sudo rm -rf /Volumes/Desmond_SSD_2TB/.DocumentRevisions-V100* # Document versioning (optional)
+
+# 3️⃣ Turn Spotlight indexing back on to rebuild from scratch
+sudo mdutil -i on /Volumes/Desmond_SSD_2TB
+
+# 4️⃣ (Optional) Check current Spotlight indexing status
+sudo mdutil -s /Volumes/Desmond_SSD_2TB
+
+######################################################################
+# 💡 NOTE:
+# - Spotlight will re-index the drive in the background.
+# - You may see higher disk usage and CPU for a bit.
+# - You can also trigger reindexing by adding/removing the volume
+#   from: System Settings > Siri & Spotlight > Spotlight Privacy.
+######################################################################

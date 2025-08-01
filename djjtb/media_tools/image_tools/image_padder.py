@@ -2,7 +2,7 @@ import os
 import subprocess
 import sys
 import time
-from PIL import Image
+from PIL import Image, ImageFilter
 import pathlib
 import logging
 import djjtb.utils as djj
@@ -10,6 +10,10 @@ import djjtb.utils as djj
 def clear_screen():
     """Clear the terminal screen."""
     os.system('clear')
+
+def clean_path(path_str):
+    """Clean input path by removing quotes and extra spaces."""
+    return path_str.strip().strip('\'"')
 
 def setup_logging(output_path):
     """Set up logging to a file in the output folder."""
@@ -21,37 +25,107 @@ def setup_logging(output_path):
     )
     return logging.getLogger()
 
+def is_valid_image(filename):
+    """Check if filename has a valid image extension."""
+    return filename.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp', '.tiff'))
 
-def clean_path(path_str):
-    """Clean input path by removing quotes and extra spaces."""
-    return path_str.strip().strip('\'"')
+def collect_images_from_folder(input_path, subfolders=False):
+    """Collect images from folder(s) using the reference logic."""
+    input_path_obj = pathlib.Path(input_path)
+    image_extensions = ('.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp', '.tiff')
+    
+    images = []
+    if input_path_obj.is_dir():
+        if subfolders:
+            for root, _, files in os.walk(input_path):
+                images.extend(pathlib.Path(root) / f for f in files if pathlib.Path(f).suffix.lower() in image_extensions)
+        else:
+            images = [f for f in input_path_obj.glob('*') if f.suffix.lower() in image_extensions and f.is_file()]
+    
+    return sorted([str(v) for v in images], key=str.lower)
 
-def pad_images(input_path, output_format, shape, color, custom_width, custom_height, custom_color, include_subfolders):
-    """Pad images to the specified shape and color."""
-    output_dir = os.path.join(str(pathlib.Path(input_path).resolve()), "Output", "Padded")
+def collect_images_from_paths(file_paths):
+    """Collect images from space-separated file paths."""
+    images = []
+    paths = file_paths.strip().split()
+    
+    for path in paths:
+        path = clean_path(path)
+        path_obj = pathlib.Path(path)
+        
+        if path_obj.is_file() and is_valid_image(path_obj.name):
+            images.append(str(path_obj))
+        elif path_obj.is_dir():
+            print(f"⚠️ Skipping directory in file list: {path}")
+    
+    return sorted(images, key=str.lower)
+
+def get_output_directory(images, is_folder_mode=True, first_folder=None):
+    """Determine output directory based on input mode."""
+    if is_folder_mode and first_folder:
+        return os.path.join(first_folder, "Output", "Padded")
+    elif images:
+        # Use parent directory of first image
+        first_image_dir = os.path.dirname(images[0])
+        return os.path.join(first_image_dir, "Output", "Padded")
+    else:
+        return os.path.join(os.getcwd(), "Output", "Padded")
+
+def calculate_padding_offset(img_width, img_height, new_width, new_height, position):
+    """Calculate the offset for padding based on position."""
+    if position == 'center':  # Center (default)
+        offset_x = (new_width - img_width) // 2
+        offset_y = (new_height - img_height) // 2
+    elif position == 'left':  # Image on left, padding on right
+        offset_x = 0
+        offset_y = (new_height - img_height) // 2
+    elif position == 'right':  # Image on right, padding on left
+        offset_x = new_width - img_width
+        offset_y = (new_height - img_height) // 2
+    else:  # Default to center
+        offset_x = (new_width - img_width) // 2
+        offset_y = (new_height - img_height) // 2
+    
+    return (offset_x, offset_y)
+
+def create_image_background(img, new_width, new_height, bg_mode, blur_radius, opacity):
+    """Create an image-based background with blur and opacity."""
+    if bg_mode == 'stretched':
+        # Stretch the image to fill the canvas
+        bg_img = img.copy().resize((new_width, new_height), Image.Resampling.LANCZOS)
+    elif bg_mode == 'tiled':
+        # Tile the image to fill the canvas
+        bg_img = Image.new('RGBA', (new_width, new_height), (0, 0, 0, 0))
+        img_width, img_height = img.size
+        for y in range(0, new_height, img_height):
+            for x in range(0, new_width, img_width):
+                bg_img.paste(img, (x, y))
+    elif bg_mode == 'centered':
+        # Center the image in the canvas
+        bg_img = Image.new('RGBA', (new_width, new_height), (0, 0, 0, 0))
+        img_width, img_height = img.size
+        offset_x = (new_width - img_width) // 2
+        offset_y = (new_height - img_height) // 2
+        bg_img.paste(img, (offset_x, offset_y))
+    else:
+        # Default to stretched
+        bg_img = img.copy().resize((new_width, new_height), Image.Resampling.LANCZOS)
+    
+    # Apply blur
+    bg_img = bg_img.filter(ImageFilter.GaussianBlur(radius=blur_radius))
+    
+    # Apply opacity
+    alpha = Image.new('L', bg_img.size, int(255 * opacity))
+    bg_img.putalpha(alpha)
+    
+    return bg_img
+
+def pad_images(images, output_dir, output_format, shape, color, custom_width, custom_height, custom_color, padding_position, bg_type, bg_mode, bg_blur, bg_opacity):
+    """Pad images to the specified shape and color with positioning."""
     os.makedirs(output_dir, exist_ok=True)
     logger = setup_logging(output_dir)
     
-    input_path = pathlib.Path(input_path).resolve()
-    if not input_path.exists():
-        logger.error("Input path does not exist.")
-        print("\033[33mError: Input path does not exist.\033[0m", file=sys.stderr)
-        return [], [], output_dir
-
-    image_extensions = ('.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp', '.tiff')
-    images = []
-    if input_path.is_file() and input_path.suffix.lower() in image_extensions:
-        images = [input_path]
-    elif input_path.is_dir():
-        pattern = '**/*' if include_subfolders else '*'
-        images = [f for f in sorted(input_path.glob(pattern)) if f.suffix.lower() in image_extensions and f.is_file()]
-    else:
-        logger.error("Input must be a file or directory.")
-        print("\033[33mError: Input must be a file or directory.\033[0m", file=sys.stderr)
-        return [], [], output_dir
-    
     print()
-    print("\033[33mScanning for Images...\033[0m")
     print(f"{len(images)} \033[33mimages found\033[0m")
     print()
     print("\033[33mPadding Images...\033[0m")
@@ -83,206 +157,239 @@ def pad_images(input_path, output_format, shape, color, custom_width, custom_hei
                     new_width = custom_width
                     new_height = custom_height
                 
-                new_image = Image.new('RGBA', (new_width, new_height), padding_color)
-                offset = ((new_width - width) // 2, (new_height - height) // 2)
+                # Create the background
+                if bg_type == 'image':
+                    new_image = create_image_background(img, new_width, new_height, bg_mode, bg_blur, bg_opacity)
+                else:
+                    # Solid color background
+                    new_image = Image.new('RGBA', (new_width, new_height), padding_color)
+                
+                # Calculate position and paste the original image
+                offset = calculate_padding_offset(width, height, new_width, new_height, padding_position)
                 new_image.paste(img, offset, img)
                 
                 if pillow_format == 'JPEG':
                     new_image = new_image.convert('RGB')
                 
-                relative_path = os.path.relpath(img_path.parent, input_path)
-                output_dir_path = os.path.join(output_dir, relative_path) if relative_path != '.' else output_dir
-                os.makedirs(output_dir_path, exist_ok=True)
-                output_filename = f"{os.path.splitext(img_path.name)[0]}_padded{file_extension}"
-                output_path = os.path.join(output_dir_path, output_filename)
+                # Keep original directory structure for folder mode
+                img_path_obj = pathlib.Path(img_path)
+                output_filename = f"{img_path_obj.stem}_padded{file_extension}"
+                output_path = os.path.join(output_dir, output_filename)
                 
                 new_image.save(output_path, format=pillow_format, quality=95 if pillow_format == 'JPEG' else None)
-                successful.append(img_path.name)
+                successful.append(img_path_obj.name)
                 sys.stdout.write(f"\rProcessing {i}/{len(images)} images ({i/len(images)*100:.1f}%)...")
                 sys.stdout.flush()
         except Exception as e:
-            failed.append((img_path.name, str(e)))
-            logger.error(f"Failed to process {img_path.name}: {e}")
+            failed.append((pathlib.Path(img_path).name, str(e)))
+            logger.error(f"Failed to process {img_path}: {e}")
             sys.stdout.write(f"\rProcessing {i}/{len(images)} images ({i/len(images)*100:.1f}%)... (failed)")
             sys.stdout.flush()
     
     sys.stdout.write("\r" + " " * 50 + "\r")
     sys.stdout.flush()
     
-    return successful, failed, output_dir
+    return successful, failed
 
-if __name__ == "__main__":
+def main():
     while True:
         clear_screen()
+        print()
+        print()
         print("\033[92m==================================================\033[0m")
         print("\033[1;33mImage Padder\033[0m")
         print("Adds Padding to Images")
         print("\033[92m==================================================\033[0m")
         print()
-
-        max_attempts = 5
-        attempt = 0
-        input_path = None
-        while attempt < max_attempts:
-            input_path = input("Enter path: \n > ").strip()
-            input_path = clean_path(input_path)
-            try:
-                normalized_path = str(pathlib.Path(input_path).resolve())
-                if os.path.exists(normalized_path):
-                    input_path = normalized_path
-                    break
-                print(f\033[33m"Error: \033[0m'{normalized_path}'\033[33m does not exist. Ensure the path is correct and the external drive (if any) is mounted.\033[0m", file=sys.stderr)
-            except Exception as e:
-                print(f"\033[33mError resolving path \033[0m'{input_path}': {e}. \033[33mPlease try again.\033[0m", file=sys.stderr)
-            attempt += 1
-            if attempt == max_attempts:
-                print("\033[33mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
-                sys.exit(1)
+        
+        # Get input mode
+        input_mode = djj.prompt_choice(
+            "Input mode:\n1. Folder path\n2. Space-separated file paths\n",
+            ['1', '2'],
+            default='1'
+        )
         print()
-
-        include_subfolders = djj.prompt_choice("\033[33mInclude subfolders?\033[0m\n1. Yes, 2. No ", ['1', '2'], default='2') == '1'
+        
+        images = []
+        output_dir = None
+        
+        if input_mode == '1':
+            # Folder mode
+            src_dir = input("📁 \033[33mEnter folder path: \n -> \033[0m").strip()
+            src_dir = clean_path(src_dir)
+            
+            if not os.path.isdir(src_dir):
+                print(f"❌ \033[33mThe path\033[0m '{src_dir}' \033[33mis not a valid directory\033[0m.")
+                continue
+            
+            print()
+            include_sub = djj.prompt_choice(
+                "\033[33mInclude subfolders? \033[0m\n1. Yes, 2. No ",
+                ['1', '2'],
+                default='2'
+            ) == '1'
+            print()
+            
+            images = collect_images_from_folder(src_dir, include_sub)
+            output_dir = get_output_directory(images, is_folder_mode=True, first_folder=src_dir)
+            
+        else:
+            # File paths mode
+            file_paths = input("📁 \033[33mEnter file paths: \n -> \033[0m").strip()
+            
+            if not file_paths:
+                print("❌ No file paths provided.")
+                continue
+            
+            images = collect_images_from_paths(file_paths)
+            output_dir = get_output_directory(images, is_folder_mode=False)
+            print()
+        
+        if not images:
+            print("❌ \033[33mNo valid image files found.\033[0m")
+            continue
+        
+        print("\033[33mScanning for Images...\033[0m")
+        
+        # Get padding position
+        padding_position = djj.prompt_choice(
+            "\033[33mPadding position:\033[0m\n1. Left (image on left, padding on right)\n2. Right (image on right, padding on left)\n3. Center\n",
+            ['1', '2', '3'],
+            default='3'
+        )
         print()
+        
+        # Convert choice to position string
+        position_map = {'1': 'left', '2': 'right', '3': 'center'}
+        padding_position = position_map[padding_position]
 
-        attempt = 0
-        shape = None
-        while attempt < max_attempts:
-            shape_choice = input("\033[33mShape\033[0m1. Square\n2. Landscape\n3. Portrait\n4. Custom \n -> ").strip()
-            if shape_choice == '1':
-                shape = 'square'
-                break
-            elif shape_choice == '2':
-                shape = 'landscape'
-                break
-            elif shape_choice == '3':
-                shape = 'portrait'
-                break
-            elif shape_choice == '4':
-                shape = 'custom'
-                break
-            print("\033[33mPlease enter 1, 2, 3, or 4 only.\033[0m", file=sys.stderr)
-            attempt += 1
-            if attempt == max_attempts:
-                print("\033[33mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
-                sys.exit(1)
+        # Get shape
+        shape = djj.prompt_choice(
+            "\033[33mShape:\033[0m\n1. Square\n2. Landscape\n3. Portrait\n4. Custom\n",
+            ['1', '2', '3', '4'],
+            default='1'
+        )
         print()
+        
+        shape_map = {'1': 'square', '2': 'landscape', '3': 'portrait', '4': 'custom'}
+        shape = shape_map[shape]
 
         custom_width = None
         custom_height = None
         if shape == 'custom':
-            attempt = 0
-            while attempt < max_attempts:
-                try:
-                    custom_width = int(input("\033[33mCustom width in pixels: \033[0m").strip())
-                    print()
-                    if custom_width > 0:
-                        break
-                    print("\033[33mPlease enter a positive integer.\033[0m", file=sys.stderr)
-                except ValueError:
-                    print("\033[33mPlease enter a valid integer.\033[0m", file=sys.stderr)
-                attempt += 1
-                if attempt == max_attempts:
-                    print("\033[33mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
-                    sys.exit(1)
+            custom_width = djj.get_int_input("\033[33mCustom width in pixels\033[0m", min_val=1)
+            print()
+            custom_height = djj.get_int_input("\033[33mCustom height in pixels\033[0m", min_val=1)
             print()
 
-            attempt = 0
-            while attempt < max_attempts:
-                try:
-                    custom_height = int(input("\033[33mCustom height in pixels: \033[0m").strip())
-                    print()
-                    if custom_height > 0:
-                        break
-                    print("\033[33mPlease enter a positive integer.\033[0m", file=sys.stderr)
-                except ValueError:
-                    print("\033[33mPlease enter a valid integer.\033[0m", file=sys.stderr)
-                attempt += 1
-                if attempt == max_attempts:
-                    print("\033[33mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
-                    sys.exit(1)
-            print()
-
-        attempt = 0
-        color = None
-        while attempt < max_attempts:
-            color_choice = input("\033[33mPadding color \033[0m\n1. White\n2. Black\n3. Grey\n4. Custom) \n -> ").strip()
-            if color_choice == '1':
-                color = 'white'
-                break
-            elif color_choice == '2':
-                color = 'black'
-                break
-            elif color_choice == '3':
-                color = 'grey'
-                break
-            elif color_choice == '4':
-                color = 'custom'
-                break
-            print("\033[33mPlease enter 1, 2, 3, or 4 only.\033[0m", file=sys.stderr)
-            attempt += 1
-            if attempt == max_attempts:
-                print("\033[33mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
-                sys.exit(1)
+        # Get background type
+        bg_type = djj.prompt_choice(
+            "\033[33mBackground type:\033[0m\n1. Solid color\n2. Image background\n",
+            ['1', '2'],
+            default='1'
+        )
         print()
+        
+        bg_type = 'solid' if bg_type == '1' else 'image'
+        bg_mode = None
+        bg_blur = 8
+        bg_opacity = 0.25
+        
+        if bg_type == 'image':
+            # Get background mode
+            bg_mode = djj.prompt_choice(
+                "\033[33mImage background mode:\033[0m\n1. Stretched\n2. Tiled\n3. Centered\n",
+                ['1', '2', '3'],
+                default='1'
+            )
+            print()
+            
+            mode_map = {'1': 'stretched', '2': 'tiled', '3': 'centered'}
+            bg_mode = mode_map[bg_mode]
+            
+            # Get background blur
+            bg_blur_input = input("\033[33mBackground blur radius [1-50, default: 8]:\n -> \033[0m").strip()
+            try:
+                bg_blur = int(bg_blur_input) if bg_blur_input else 8
+                bg_blur = max(1, min(50, bg_blur))
+            except ValueError:
+                bg_blur = 8
+                print("\033[33mUsing default blur: 8\033[0m")
+            print()
+            
+            # Get background opacity
+            bg_opacity_input = input("\033[33mBackground opacity [0.0-1.0, default: 0.25]:\n -> \033[0m").strip()
+            try:
+                bg_opacity = float(bg_opacity_input) if bg_opacity_input else 0.25
+                bg_opacity = max(0.0, min(1.0, bg_opacity))
+            except ValueError:
+                bg_opacity = 0.25
+                print("\033[33mUsing default opacity: 0.25\033[0m")
+            print()
 
+        # Get color (only for solid background type)
         custom_color = None
-        if color == 'custom':
-            attempt = 0
-            while attempt < max_attempts:
-                try:
-                    color_input = input("Custom color (R,G,B,A - e.g., 255,255,255,255): \n > ").strip()
-                    r, g, b, a = map(int, color_input.split(','))
-                    if all(0 <= x <= 255 for x in [r, g, b, a]):
-                        custom_color = (r, g, b, a)
-                        break
-                    print("\033[33mEach value must be between \033[0m0 \033[33mand\033[0m 255.", file=sys.stderr)
-                except ValueError:
-                    print("\033[33mPlease enter four integers separated by commas \033[0m(e.g., 255,255,255,255).\n -> ", file=sys.stderr)
-                attempt += 1
-                if attempt == max_attempts:
-                    print("\033[33mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
-                    sys.exit(1)
+        if bg_type == 'solid':
+            color = djj.prompt_choice(
+                "\033[33mPadding color:\033[0m\n1. White\n2. Black\n3. Grey\n4. Custom\n",
+                ['1', '2', '3', '4'],
+                default='1'
+            )
             print()
+            
+            color_map = {'1': 'white', '2': 'black', '3': 'grey', '4': 'custom'}
+            color = color_map[color]
 
-        attempt = 0
-        output_format = None
-        while attempt < max_attempts:
-            format_choice = input("Output format (1. PNG, 2. JPG, 3. BMP, 4. GIF): \n > ").strip()
-            if format_choice == '1':
-                output_format = 'png'
-                break
-            elif format_choice == '2':
-                output_format = 'jpg'
-                break
-            elif format_choice == '3':
-                output_format = 'bmp'
-                break
-            elif format_choice == '4':
-                output_format = 'gif'
-                break
-            print("\033[33mPlease enter 1, 2, 3, or 4 only.\033[0m", file=sys.stderr)
-            attempt += 1
-            if attempt == max_attempts:
-                print("\033[33mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
-                sys.exit(1)
+            if color == 'custom':
+                max_attempts = 5
+                attempt = 0
+                while attempt < max_attempts:
+                    try:
+                        color_input = input("\033[33mCustom color (R,G,B,A - e.g., 255,255,255,255): \n -> \033[0m").strip()
+                        r, g, b, a = map(int, color_input.split(','))
+                        if all(0 <= x <= 255 for x in [r, g, b, a]):
+                            custom_color = (r, g, b, a)
+                            break
+                        print("\033[33mEach value must be between \033[0m0 \033[33mand\033[0m 255.")
+                    except ValueError:
+                        print("\033[33mPlease enter four integers separated by commas \033[0m(e.g., 255,255,255,255).")
+                    attempt += 1
+                    if attempt == max_attempts:
+                        print("\033[33mToo many invalid attempts. Exiting.\033[0m")
+                        sys.exit(1)
+                print()
+        else:
+            # For image backgrounds, color settings are not needed
+            color = 'white'
+
+        # Get output format
+        output_format = djj.prompt_choice(
+            "\033[33mOutput format:\033[0m\n1. PNG\n2. JPG\n3. BMP\n4. GIF\n",
+            ['1', '2', '3', '4'],
+            default='1'
+        )
         print()
+        
+        format_map = {'1': 'png', '2': 'jpg', '3': 'bmp', '4': 'gif'}
+        output_format = format_map[output_format]
 
         print("-------------")
-        successful, failed, output_dir = pad_images(input_path, output_format, shape, color, custom_width, custom_height, custom_color, include_subfolders)
+        successful, failed = pad_images(images, output_dir, output_format, shape, color, custom_width, custom_height, custom_color, padding_position, bg_type, bg_mode, bg_blur, bg_opacity)
         
         print("\n" * 1)
         print("\033[33mPadding Summary\033[0m")
         print("-------------")
         print(f"✅ \033[33mSuccessfully padded: \033[0m{len(successful)}\033[33m images\033[0m")
         if failed:
-            print(f"\033[33mFailed operations:\033[0m {len(failed)}\033[33m (see padding_errors.log in output folder)\033[0m")
-        print(f"\033[33mOutput folder:\033[0m \n{output_dir}")
+            print(f"❌ \033[33mFailed operations:\033[0m {len(failed)}\033[33m (see padding_errors.log in output folder)\033[0m")
+        print(f"📁\033[33m Output folder:\033[0m \n{output_dir}")
         print("\n" * 2)
 
-        try:
-            subprocess.run(['open', output_dir], check=True)
-        except subprocess.CalledProcessError as e:
-            print(f"\033[33mError opening output folder:\033[0m {e}", file=sys.stderr)
+        djj.prompt_open_folder(output_dir)
 
         action = djj.what_next()
         if action == 'exit':
             break
+
+if __name__ == "__main__":
+    main()

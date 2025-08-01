@@ -50,7 +50,7 @@ def reverse_and_merge(video_path, index, total, speed_factor, input_base):
     if speed_factor and speed_factor != 1.0:
         vf_filter += f",setpts={1/speed_factor}*PTS"
         af_filter += f",atempo={speed_factor}" if 0.5 <= speed_factor <= 2.0 else ""
-
+    
     run_ffmpeg([
         'ffmpeg', '-y',
         '-i', str(video_path),
@@ -238,17 +238,15 @@ def main():
             print(f"\033[33mOutput folders created in each processed directory\033[0m")
             print(f"\033[33mMain input folder: \033[0m\n{input_path}")
             print("\n" * 2)
-            # Open the main input folder when subfolders were processed
-            open_output_folder(input_path)
+            djj.prompt_open_folder(input_path)
         else:
             # Original logic for single folder processing
             if input_path:
                 output_base = Path(input_path) / "Output"
                 print(f"\033[33mOutput folder: \033[0m\n{output_base}")
                 print("\n" * 2)
-                if output_base.exists():
-                    open_output_folder(output_base)
-
+                djj.prompt_open_folder(output_base)
+                    
         action = djj.what_next()
         if action == 'exit':
             break

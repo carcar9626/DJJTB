@@ -237,10 +237,7 @@ if __name__ == "__main__":
         print(f"\033[33mOutput folder:\033[0m \n{output_dir}")
         print("\n" * 2)
 
-        try:
-            subprocess.run(['open', output_dir], check=True)
-        except subprocess.CalledProcessError as e:
-            print(f"\033[33mError opening output folder:\033[0m {e}", file=sys.stderr)
+        djj.prompt_open_folder(output_dir)
 
         action = djj.what_next()
         if action == 'exit':

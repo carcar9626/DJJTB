@@ -36,7 +36,9 @@ class DJJTBLauncher:
         print("4.🔗 Linkgrabber ✊🏼")
         print("5.📺 Media Info Viewer ℹ️")
         print("6.📱 APP LAUNCHER 🚀")
-        print("7.🌆 Image Finder (AI)🔎")
+        print("7.🌆 Image Finder (AI) 🔎")
+        print("8.🏷️  Add Root Folder Prefix 🗂️")
+        print("9.🗂️ File Identifier 🆔")
         print("\033[92m--------------------------------------------------\033[0m")
         print("✈️ E\033[91mx\033[0mit    🗂️ \033[1;32mC\033[0mlean Tabs")
         print("\033[92m==================================================\033[0m")
@@ -51,16 +53,18 @@ class DJJTBLauncher:
         print(" 1. VIDEOS")
         print(" 2. IMAGES")
         print(" 3. Media Sorter")
-        print(" 4. Playlist Generator")
+        print(" 4. Metadata Stripper + Identifier")
+        print(" 5. Playlist Generator")
+
         print()
         print("\033[1;33m📱 APPS 💻\033[0m")
         print("\033[92m--------------------------------------------------\033[0m")
-        print(" 5. Photomator")
-        print(" 6. Pixelmator")
-        print(" 7. DaVinci Resolve")
-        print(" 8. Wondershare Uniconverter")
-        print(" 9. Handbrake")
-        print("10. CollageIt 3")
+        print(" 6. Photomator")
+        print(" 7. Pixelmator")
+        print(" 8. DaVinci Resolve")
+        print(" 9. Wondershare Uniconverter")
+        print("10. Handbrake")
+        print("11. CollageIt 3")
         print()
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 0. ⏪ Back")
@@ -207,7 +211,7 @@ class DJJTBLauncher:
         while True:
             self.show_media_tools_menu()
             choice = djj.prompt_choice("\033[33mChoose a Tool\033[0m",
-                                     ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '0', '00'])
+                                     ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11',  '0', '00'])
             
             if choice == "1":  # Videos
                 result = self.handle_video_tools()
@@ -219,19 +223,21 @@ class DJJTBLauncher:
                     return
             elif choice == "3":  # Media Sorter
                 djj.run_script_in_tab("djjtb.media_tools.media_sorter", self.venv_path, self.project_path)
-            elif choice == "4":  # Playlist Generator
+            elif choice == "4":  # Media Metadata and Identifier
+                djj.run_script_in_tab("djjtb.media_tools.metadata_tool", self.venv_path, self.project_path)
+            elif choice == "5":  # Playlist Generator
                 djj.run_script_in_tab("djjtb.media_tools.playlist_generator", self.venv_path, self.project_path)
-            elif choice == "5":  # Photomator
+            elif choice == "6":  # Photomator
                 djj.open_app("/Applications/Photomator.app")
-            elif choice == "6":  # Pixelmator
+            elif choice == "7":  # Pixelmator
                 djj.open_app("/Applications/Pixelmator Pro.app")
-            elif choice == "7":  # DaVinci Resolve
+            elif choice == "8":  # DaVinci Resolve
                 djj.open_app("/Applications/DaVinci Resolve/DaVinci Resolve.app")
-            elif choice == "8":  # Wondershare Uniconverter
+            elif choice == "9":  # Wondershare Uniconverter
                 djj.open_app("/Applications/Wondershare UniConverter 15.app")
-            elif choice == "9":  # Handbrake
+            elif choice == "10":  # Handbrake
                 djj.open_app("/Applications/HandBrake.app")
-            elif choice == "10":  # CollageIt 3
+            elif choice == "11":  # CollageIt 3
                 djj.open_app("/Applications/CollageIt 3.app")
             elif choice in ["0", "00"]:
                 break
@@ -274,6 +280,12 @@ class DJJTBLauncher:
         elif choice == "7":
             cmd = f"source {self.venv_path}; cd {self.project_path}; python3 -m djjtb.quick_tools.image_finder"
             djj.run_command_in_tab(cmd)
+        elif choice == "8":
+            cmd = f"source {self.venv_path}; cd {self.project_path}; python3 -m djjtb.quick_tools.add_root_dir_prefix"
+            djj.run_command_in_tab(cmd)
+        elif choice == "9":
+            cmd = f"source {self.venv_path}; cd {self.project_path}; python3 -m djjtb.quick_tools.file_identifier"
+            djj.run_command_in_tab(cmd)
     
     def run(self):
         """Main launcher loop"""
@@ -283,13 +295,13 @@ class DJJTBLauncher:
         while True:
             self.show_main_menu()
             choice = djj.prompt_choice("\033[33mChoose a category\033[0m",
-                                     ['1', '2', '3', '4', '5', '6', '7', 'c', 'x'])
+                                     ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'c', 'x'])
             
             if choice == "1":
                 self.handle_media_tools()
             elif choice == "2":
                 self.handle_ai_tools()
-            elif choice in ["3", "4", "5", "6","7"]:
+            elif choice in ["3", "4", "5", "6","7","8","9"]:
                 self.handle_quick_tools(choice)
             elif choice == "c":
                 djj.cleanup_tabs()

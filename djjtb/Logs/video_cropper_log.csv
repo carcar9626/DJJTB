@@ -1,0 +1,7 @@
+timestamp,filename,audio_option,crop_mode,status,crop_filter,input_resolution,output_path,ffmpeg_summary,exit_code
+2025-07-29 00:00:43,0614VPT-00001_USL.mp4,1,1,success,2160:1280:0:0,NonexNone,/Users/home/Documents/Scripts/ScriptTests/20250614VPTEST/Output/Cropped/0614VPT-00001_USL_cropped.mp4,[libx264 @ 0x126608340] kb/s:1180.53,0
+2025-07-29 00:00:45,0614VPT-00002_USP.mp4,1,1,success,1440:1792:0:4,1440x1800,/Users/home/Documents/Scripts/ScriptTests/20250614VPTEST/Output/Cropped/0614VPT-00002_USP_cropped.mp4,[libx264 @ 0x13c607f60] kb/s:1067.24,0
+2025-07-29 00:00:46,0614VPT-00003_USP.mp4,1,1,success,1024:1280:2:0,1026x1280,/Users/home/Documents/Scripts/ScriptTests/20250614VPTEST/Output/Cropped/0614VPT-00003_USP_cropped.mp4,[libx264 @ 0x123e080a0] kb/s:391.60,0
+2025-07-29 00:00:46,0614VPT-00004_USP.mp4,1,1,success,768:1536:366:258,1440x1800,/Users/home/Documents/Scripts/ScriptTests/20250614VPTEST/Output/Cropped/0614VPT-00004_USP_cropped.mp4,[libx264 @ 0x1536080a0] kb/s:503.24,0
+2025-07-29 00:00:47,0614VPT-00005_USP.mp4,1,1,success,768:1536:366:258,1440x1800,/Users/home/Documents/Scripts/ScriptTests/20250614VPTEST/Output/Cropped/0614VPT-00005_USP_cropped.mp4,[libx264 @ 0x14f6080a0] kb/s:802.96,0
+2025-07-29 00:00:48,0614VPT-00006_P34.mp4,1,1,success,976:1280:6:0,984x1280,/Users/home/Documents/Scripts/ScriptTests/20250614VPTEST/Output/Cropped/0614VPT-00006_P34_cropped.mp4,[libx264 @ 0x153e080a0] kb/s:258.29,0

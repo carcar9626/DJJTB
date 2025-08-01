@@ -269,14 +269,11 @@ def main():
         print(f"\033[33m\n🏁 Done!\033[0m {success_count} \033[33mfile(s) converted ({conversion_type}), \033[0m{error_count} \033[33merror(s).\033[0m")
         print(f"📁\033[33m Output folder:\033[0m {final_output_dir}")
         
-        try:
-            subprocess.run(["open", final_output_dir], check=True)
-        except subprocess.CalledProcessError as e:
-            print(f"⚠️ \033[33mCould not open output folder: \033[0m{e}")
+        djj.prompt_open_folder(final_output_dir)
         
         action = djj.what_next()
         if action == 'exit':
             break
 
 if __name__ == "__main__":
-    main()  
+    main()

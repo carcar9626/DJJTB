@@ -228,7 +228,7 @@ def run():
     print ()
     print ("\033[92m==================================================\033[0m")
     print ("\033[1;33mSlideshow Watermark\033[0m")
-    print ("Generate slideshow from images, overlay on video"
+    print ("Generate slideshow from images, overlay on video")
     print ("\033[92m==================================================\033[0m")
     print ()
     while True:
@@ -241,14 +241,13 @@ def run():
         is_flat_mode = mode != "1"
 
         try:
-            image_duration = float(input("🕒 Duration per image\n in seconds (default: 3): ").strip())
+            image_duration = float(input("🕒 Duration per image in seconds\n (default: 3): ").strip())
         except:
             print("❌ Invalid number, using default 3.0s.")
             image_duration = 3.0
 
         try:
-            scale_input = input("📏 Overlay height as percentage of video \n
-            in percent (default: 30): ").strip()
+            scale_input = input("📏 Overlay height as percentage of video\nin percent (default: 30): ").strip()
             scale_ratio = round(float(scale_input) / 100, 2)
         except:
             print("❌ Invalid number, using default 30%.")
@@ -256,6 +255,7 @@ def run():
 
         if is_flat_mode:
             process_flat_mode(parent, image_duration, scale_ratio)
+            djj.prompt_open_folder(parent)
         else:
             subdirs = [os.path.join(parent, d) for d in os.listdir(parent)
                        if os.path.isdir(os.path.join(parent, d))]
@@ -265,10 +265,7 @@ def run():
                 print(f"📽️ Processing {idx}/{total} videos ({percent}%)...")
                 process_folder(sub, image_duration, scale_ratio, False)
 
-        try:
-            subprocess.run(["open", parent], check=False)
-        except:
-            pass
+                djj.prompt_open_folder(parent)
 
         action = djj.what_next()
         if action == 'exit':

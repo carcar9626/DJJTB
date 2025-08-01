@@ -59,7 +59,8 @@
 				<key>ActionParameters</key>
 				<dict>
 					<key>COMMAND_STRING</key>
-					<string>open "/Users/home/Documents/Scripts/DJJTB/djjtb.command"</string>
+					<string>open "/Users/home/Documents/Scripts/DJJTB/run_djjtb_py.command"
+</string>
 					<key>CheckedForUserDefaultShell</key>
 					<true/>
 					<key>inputMethod</key>

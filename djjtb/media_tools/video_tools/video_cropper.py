@@ -15,11 +15,6 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 LOG_FILE = LOG_DIR / "video_cropper_log.csv"
 
 
-def open_output_folder(folder_path):
-    try:
-        subprocess.run(["open", str(folder_path)])
-    except Exception as e:
-        print(f"\033[33m⚠️ Could not open folder:\033[0m {e}")
 
 
 def get_cropdetect_crop(video_path):
@@ -221,8 +216,7 @@ def process_videos(video_paths, audio_option, crop_mode):
     print(f"\033[33mOutput folder(s):\033[0m {', '.join(str(d) for d in output_base_dirs)}")
     print()
 
-    if output_base_dirs:
-        open_output_folder(output_base_dirs[0])
+    djj.prompt_open_folder(output_base_dirs[0])
 
 
 def main():

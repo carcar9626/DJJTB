@@ -7,8 +7,54 @@ import select
 import time
 import json
 import tempfile
-# ADD THESE FUNCTIONS TO YOUR utils.py FILE
 
+def prompt_open_folder(folder_path, initial_wait=60, countdown_seconds=10):
+    """
+    Prompt user to open folder with countdown option
+    """
+    import time
+    import select
+    import sys
+    
+    while True:  # Loop until we get a valid response or timeout
+        print(f"\033[33mOpen output folder?\033[0m\n1. Yes\n2. No")
+        
+        # Initial wait period
+        ready, _, _ = select.select([sys.stdin], [], [], initial_wait)
+        
+        if ready:
+            choice = input().strip()
+            if choice == '1':
+                try:
+                    subprocess.run(['open', str(folder_path)], check=True)
+                    print(f"\033[92m✓ Opened: {folder_path}\033[0m")
+                except subprocess.CalledProcessError as e:
+                    print(f"\033[33m⚠️  Error opening folder: {e}\033[0m")
+                break  # Exit the loop
+            elif choice == '2':
+                break  # Exit without opening
+            # Invalid choice - loop continues
+        else:
+            # Start countdown
+            print(f"\033[33mNo response - continuing in {countdown_seconds} seconds (press enter to choose)...\033[0m")
+            countdown_broken = False
+            for i in range(countdown_seconds, 0, -1):
+                print(f"{i}...", end='\r', flush=True)
+                if select.select([sys.stdin], [], [], 1)[0]:
+                    input()  # consume input
+                    countdown_broken = True
+                    break
+            
+            if not countdown_broken:
+                # Countdown completed - exit without opening
+                print("\r" + " " * 20 + "\r", end='', flush=True)
+                break
+            else:
+                # Countdown was broken - clear line and loop back to prompt
+                print("\r" + " " * 50 + "\r", end='', flush=True)
+                # Loop continues to show prompt again
+
+        
 #this one is for codeformer launcher
 def get_string_input(prompt, default=None):
     """Get string input with optional default value."""
@@ -672,7 +718,10 @@ def return_to_djjtb():
     
 def what_next():
     """Handle the 'What Next?' prompt and return action to take"""
-    again = prompt_choice("\033[33m What Next?\033[0m\n1. Again\n2. Return to DJJTB\n3. Exit\n> ", ['1', '2', '3'], default='2')
+    print()
+    print("---------------")
+    print()
+    again = prompt_choice("\033[33mWhat Next? 🤷🏻‍♂️ \033[0m\n1. Go Again 🔁\n2. Return to DJJTB ⏮️\n3. Exit ✋🏼\n> ", ['1', '2', '3'], default='2')
     
     if again == '3':
         print("👋 Exiting.")

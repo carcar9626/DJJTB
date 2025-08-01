@@ -315,16 +315,13 @@ if __name__ == "__main__":
             print("📁 \033[33mOutput folders:\033[0m")
             for output_dir in sorted(output_dirs):
                 print(f"  {output_dir}")
+                
         else:
             print("\033[33mNo output folders created.\033[0m")
         print("\n" * 2)
 
-        if output_dirs:
-            try:
-                subprocess.run(['open', sorted(output_dirs)[0]], check=True)
-            except subprocess.CalledProcessError as e:
-                print(f"\033[33mError opening output folder:\033[0m {e}", file=sys.stderr)
-
+        djj.prompt_open_folder(output_dir)
+        
         action = djj.what_next()
         if action == 'exit':
             break

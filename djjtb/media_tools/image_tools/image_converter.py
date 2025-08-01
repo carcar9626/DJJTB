@@ -159,12 +159,9 @@ if __name__ == "__main__":
         if failed:
             print(f"\033[33mFailed conversions: \033[0m{len(failed)} \033[33m(see convert_errors.log in output folder)\033[0m")
         print(f"\033[33mOutput folder:\033[0m \n{output_dir}")
-        print("\n" * 2)
+        print()
 
-        try:
-            subprocess.run(['open', output_dir], check=True)
-        except subprocess.CalledProcessError as e:
-            print(f"\033[33mError opening output folder:\033[0m {e}", file=sys.stderr)
+        djj.prompt_open_folder(output_dir)
 
         action = djj.what_next()
         if action == 'exit':

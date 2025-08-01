@@ -6,11 +6,6 @@ from PIL import Image, ImageChops
 import sys
 os.system('clear')
     
-def open_output_folder(folder_path):
-    try:
-        subprocess.run(["open", str(folder_path)])
-    except Exception as e:
-        print(f"\033[33m⚠️ Could not open folder:\033[0m {e}")
 
 def detect_border_color(im, tolerance=5):
     # Sample corners to guess padding color
@@ -137,7 +132,7 @@ def main():
                 if os.path.exists(normalized_path):
                     input_path = normalized_path
                     break
-                print(f\033[33m"Error:\033[0m '{normalized_path}' \033[33mdoes not exist. Ensure the path is correct and the external drive (if any) is mounted. Please try again.\033[0m", file=sys.stderr)
+                print(f"\033[33mError:\033[0m '{normalized_path}' \033[33mdoes not exist. Ensure the path is correct and the external drive (if any) is mounted. Please try again.\033[0m", file=sys.stderr)
             except Exception as e:
                 print(f"\033[33mError resolving path \033[0m'{input_path}': {e}. \033[33mPlease try again.\033[0m", file=sys.stderr)
             attempt += 1
@@ -149,16 +144,14 @@ def main():
         
         # Prompt for subfolder inclusion (same as resizer)
         include_sub = djj.prompt_choice("\033[33mInclude subfolders?\033[0m\n1. Yes, 2. No ", ['1', '2'], default='2') == '1'
-        
         print()
-        print("-------------")
-        
+        print("\033[1;33mProcessing...\033[0m")
+
         # Process images
         successful, failed, output_base = process_folder(input_path, include_sub)
-        
+        print("\n" * 2)
         # Display results (matching resizer format)
-        print("\n" * 1)
-        print("\033[33mStrip Padding Summary\033[0m")
+        print("\033[1;33mStrip Padding Summary\033[0m")
         print("---------------------")
         print(f"\033[33mSuccessfully processed:\033[0m {successful} \033[33mimages\033[0m")
         if failed:
@@ -169,7 +162,7 @@ def main():
         print("\n" * 2)
         
         # Open output folder
-        open_output_folder(output_base)
+        djj.prompt_open_folder(output_base)
         
         # Prompt to go again
         action = djj.what_next()
