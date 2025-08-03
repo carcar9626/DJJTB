@@ -23,14 +23,16 @@ def load_images(folder_path, output_path):
     landscape, square, portrait = [], [], []
 
     folder_path = str(pathlib.Path(folder_path).resolve())
-    output_path = str(pathlib.Path(output_path).resolve())
+    # Get the base Output folder path (not just the specific subfolder)
+    base_output_path = str(pathlib.Path(folder_path, "Output").resolve())
 
     for root, _, files in os.walk(folder_path):
         root_resolved = str(pathlib.Path(root).resolve())
-        if root_resolved.startswith(output_path):
+        # Skip any folder that starts with the Output path
+        if root_resolved.startswith(base_output_path):
             continue
         for f in files:
-            if f.lower().endswith(image_extensions) and not f.startswith('collage_'):
+            if f.lower().endswith(image_extensions) and not f.startswith('collage_') and not f.startswith('CLG_'):
                 img_path = os.path.join(root, f)
                 rel_path = os.path.relpath(img_path, folder_path)
                 try:
@@ -144,6 +146,15 @@ def create_collage(folder_path, output_path, num_collages, orientation, include_
                 ('square', (2, 2), 4),     # if source is square then 1x2
                 ('portrait', (1, 2), 2)    # if source is portrait then 2x2
             ]
+        },
+        '900x1920': {
+            'name': '900x1920',
+            'canvas': (900, 1920),
+            'categories': [
+                ('landscape', (3, 1), 3),  # following portrait layout pattern
+                ('square', (3, 2), 6),     # following portrait layout pattern
+                ('portrait', (2, 2), 4)    # following portrait layout pattern
+            ]
         }
     }
     
@@ -208,6 +219,9 @@ def create_collage(folder_path, output_path, num_collages, orientation, include_
         cell_height = canvas_height // rows
         positions = [(r, c) for r in range(rows) for c in range(cols)]
         random.shuffle(positions)
+        
+        # Debug info
+        logger.info(f"Collage {i+1}: Using {category_name} category with {rows}x{cols} grid")
 
         for idx, (row, col) in enumerate(positions):
             if idx >= len(selected_images):
@@ -217,14 +231,14 @@ def create_collage(folder_path, output_path, num_collages, orientation, include_
             try:
                 img = Image.open(img_path).convert('RGBA')
 
-                # Create individual blurred background for this cell (like legacy script)
+                # Create individual blurred background for this cell
                 bg_img = img.copy().resize((cell_width, cell_height), Image.Resampling.LANCZOS)
                 bg_img = bg_img.filter(ImageFilter.GaussianBlur(radius=background_blur_radius))
                 alpha = Image.new('L', bg_img.size, int(255 * background_opacity))
                 bg_img.putalpha(alpha)
                 canvas.paste(bg_img, (col * cell_width, row * cell_height), bg_img)
 
-                # Scale and center the foreground image
+                # Scale and center the foreground image (preserve aspect ratio)
                 img_ratio = img.width / img.height
                 target_w = cell_width
                 target_h = int(target_w / img_ratio)
@@ -356,10 +370,10 @@ def main():
         ) == '1'
         print()
 
-        # Updated orientation choices with new options
+        # Updated orientation choices with new 900x1920 option
         orientation_choice = djj.prompt_choice(
-            "\033[33mCollage format:\033[0m\n1. Horizontal (1920x1080)\n2. Vertical (1080x1920)\n3. Square (1080x1080)\n4. 1280x1080\n",
-            ['1', '2', '3', '4'],
+            "\033[33mCollage format:\033[0m\n1. Horizontal (1920x1080)\n2. Vertical (1080x1920)\n3. Square (1080x1080)\n4. 1280x1080\n5. 900x1920\n",
+            ['1', '2', '3', '4', '5'],
             default='1'
         )
         print()
@@ -389,7 +403,8 @@ def main():
             '1': 'horizontal',
             '2': 'vertical',
             '3': 'square',
-            '4': '1280x1080'
+            '4': '1280x1080',
+            '5': '900x1920'
         }
         orientation = orientation_map[orientation_choice]
 
@@ -416,7 +431,8 @@ def main():
             'horizontal': 'Horizontal',
             'vertical': 'Vertical',
             'square': 'Square',
-            '1280x1080': '1280x1080'
+            '1280x1080': '1280x1080',
+            '900x1920': '900x1920'
         }
         subfolder = orientation_names[orientation]
         output = os.path.join(folder_path, "Output", "Collages", subfolder)
@@ -432,4 +448,4 @@ def main():
             break
 
 if __name__ == '__main__':
-    main()
+    main()  
