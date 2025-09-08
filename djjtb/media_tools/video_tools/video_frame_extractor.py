@@ -17,7 +17,7 @@ def prompt_integer(prompt, min_value=1):
             if value >= min_value:
                 return value
             else:
-                print(f"\033[33mPlease enter a number >\033[0m= {min_value}.")
+                print(f"\033[93mPlease enter a number >\033[0m= {min_value}.")
         except ValueError:
             print("Invalid input. Please enter a number.")
 
@@ -35,11 +35,11 @@ def extract_frames(input_path, subfolders=False, frame_interval=None):
         else:
             videos = [f for f in input_path_obj.glob('*') if f.suffix.lower() in video_extensions and f.is_file()]
     else:
-        print("\033[33mError: Input must be a video file or directory.\033[0m", file=sys.stderr)
+        print("\033[93mError: Input must be a video file or directory.\033[0m", file=sys.stderr)
         return
     
     if len(videos) == 0:
-        print("\033[33mError: No video files found.\033[0m", file=sys.stderr)
+        print("\033[93mError: No video files found.\033[0m", file=sys.stderr)
         return
     
     if frame_interval is None:
@@ -92,10 +92,10 @@ def extract_frames(input_path, subfolders=False, frame_interval=None):
             if total_images > 3000:
                 sys.stdout.write(f"\r{' ' * 60}\r")
                 sys.stdout.flush()
-                print(f"\n\033[33mWarning: \033[0m{total_images} \033[33mimages will be extracted from \033[0m{video_name}\033[33m.\033[0m")
-                proceed = djj.prompt_choice("\033[33mThis is a large number of frames. Do you want to proceed?\033[0m\n1. Yes, 2. No ", ['1', '2'], default='2')
+                print(f"\n\033[93mWarning: \033[0m{total_images} \033[93mimages will be extracted from \033[0m{video_name}\033[93m.\033[0m")
+                proceed = djj.prompt_choice("\033[93mThis is a large number of frames. Do you want to proceed?\033[0m\n1. Yes, 2. No ", ['1', '2'], default='2')
                 if proceed != '1':
-                    print(f"\033[33mFrame extraction cancelled for \033[0m{video_name}\033[33m.\033[0m")
+                    print(f"\033[93mFrame extraction cancelled for \033[0m{video_name}\033[93m.\033[0m")
                     logger.info(f"Frame extraction cancelled for {video_name} (user choice)")
                     output_base_dirs.append(output_base_dir)
                     continue
@@ -119,20 +119,20 @@ def extract_frames(input_path, subfolders=False, frame_interval=None):
             logger.error(f"Error processing {video_name}: {e.stderr}")
             sys.stdout.write(f"\r{' ' * 60}\r")
             sys.stdout.flush()
-            print(f"\033[33mError processing\033[0m {video_name}: {e.stderr}")
+            print(f"\033[93mError processing\033[0m {video_name}: {e.stderr}")
         
         output_base_dirs.append(output_base_dir)
     
     sys.stdout.write(f"\r{' ' * 60}\r")
     sys.stdout.flush()
     
-    logger.info(f"\033[33mFrame extraction complete for \033[0m{total_videos}\033[33m videos\033[0m")
+    logger.info(f"\033[93mFrame extraction complete for \033[0m{total_videos}\033[93m videos\033[0m")
     print()
-    print("\n\033[33mFrame Extraction Summary\033[0m")
+    print("\n\033[93mFrame Extraction Summary\033[0m")
     print("------------------------")
-    print(f"\033[33mVideos processed:\033[0m {total_videos}")
-    print(f"\033[33mFrame interval:\033[0m {frame_interval}")
-    print(f"\033[33mOutput folder(s):\033[0m {len(output_base_dirs)} \033[33mcreated.\033[0m")
+    print(f"\033[93mVideos processed:\033[0m {total_videos}")
+    print(f"\033[93mFrame interval:\033[0m {frame_interval}")
+    print(f"\033[93mOutput folder(s):\033[0m {len(output_base_dirs)} \033[93mcreated.\033[0m")
     print()
     
     djj.prompt_open_folder(output_base_dir)
@@ -147,17 +147,17 @@ def main():
         print()
         print()
         print("\033[92m==================================================\033[0m")
-        print("\033[1;33mFrame Extractor\033[0m")
+        print("\033[1;93mFrame Extractor\033[0m")
         print("Extract frames from videos")
         print("\033[92m==================================================\033[0m")
         print()
         
-        folder = input("\033[33mEnter path: \n -> \033[0m").strip()
+        folder = input("\033[93mEnter path: \n -> \033[0m").strip()
         if not folder or not os.path.exists(folder):
-            print("\033[33mInvalid path.\033[0m")
+            print("\033[93mInvalid path.\033[0m")
             continue
         
-        include_sub = djj.prompt_choice("\033[33mInclude subfolders? \033[0m\n1. Yes, 2. No ", ['1', '2'], default='2') == '1'
+        include_sub = djj.prompt_choice("\033[93mInclude subfolders? \033[0m\n1. Yes, 2. No ", ['1', '2'], default='2') == '1'
         print()
         
         extract_frames(folder, include_sub)

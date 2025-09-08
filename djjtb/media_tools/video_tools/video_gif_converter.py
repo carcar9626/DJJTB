@@ -219,16 +219,16 @@ def main():
         
         if input_mode == '1':
             # Folder mode
-            src_dir = input("📁 \033[33mEnter folder path: \n -> \033[0m").strip()
+            src_dir = input("📁 \033[93mEnter folder path: \n -> \033[0m").strip()
             src_dir = clean_path(src_dir)
             
             if not os.path.isdir(src_dir):
-                print(f"❌ \033[33mThe path\033[0m '{src_dir}' \033[33mis not a valid directory\033[0m.")
+                print(f"❌ \033[93mThe path\033[0m '{src_dir}' \033[93mis not a valid directory\033[0m.")
                 continue
             
             print()
             include_sub = djj.prompt_choice(
-                "\033[33mInclude subfolders? \033[0m\n1. Yes, 2. No ",
+                "\033[93mInclude subfolders? \033[0m\n1. Yes, 2. No ",
                 ['1', '2'],
                 default='2'
             ) == '1'
@@ -240,7 +240,7 @@ def main():
         else:
             # File paths mode
             file_type = "GIF files" if conversion_mode == '1' else "Video files"
-            file_paths = input(f"📁 \033[33mEnter {file_type} paths (max ~10 files recommended): \n -> \033[0m").strip()
+            file_paths = input(f"📁 \033[93mEnter {file_type} paths (max ~10 files recommended): \n -> \033[0m").strip()
             
             if not file_paths:
                 print("❌ No file paths provided.")
@@ -252,7 +252,7 @@ def main():
         
         if not media_files:
             file_type = "GIF" if conversion_mode == '1' else "video"
-            print(f"❌ \033[33mNo valid {file_type} files found.\033[0m")
+            print(f"❌ \033[93mNo valid {file_type} files found.\033[0m")
             continue
         
         # Get conversion settings
@@ -266,8 +266,8 @@ def main():
         success_count, error_count, final_output_dir = process_conversions(media_files, output_dir, conversion_mode, settings)
         
         conversion_type = "GIF to Video" if conversion_mode == '1' else "Video to GIF"
-        print(f"\033[33m\n🏁 Done!\033[0m {success_count} \033[33mfile(s) converted ({conversion_type}), \033[0m{error_count} \033[33merror(s).\033[0m")
-        print(f"📁\033[33m Output folder:\033[0m {final_output_dir}")
+        print(f"\033[93m\n🏁 Done!\033[0m {success_count} \033[93mfile(s) converted ({conversion_type}), \033[0m{error_count} \033[93merror(s).\033[0m")
+        print(f"📁\033[93m Output folder:\033[0m {final_output_dir}")
         
         djj.prompt_open_folder(final_output_dir)
         

@@ -150,7 +150,7 @@ def main():
     while True:
         # Get input mode using utils prompt_choice
         input_mode = djj.prompt_choice(
-            "\033[33mInput mode:\033[0m\n1. Folder path\n2. Space-separated file paths\n",
+            "\033[93mInput mode:\033[0m\n1. Folder path\n2. Space-separated file paths\n",
             ['1', '2'],
             default='2'
         )
@@ -166,7 +166,7 @@ def main():
             print()
             
             include_sub = djj.prompt_choice(
-                "\033[33mInclude subfolders?\033[0m\n1. Yes, 2. No ",
+                "\033[93mInclude subfolders?\033[0m\n1. Yes, 2. No ",
                 ['1', '2'],
                 default='2'
             ) == '1'
@@ -176,10 +176,10 @@ def main():
             
         else:
             # File paths mode
-            file_paths = input("📁 \033[33mEnter file paths (space-separated): \n\033[0m -> ").strip()
+            file_paths = input("📁 \033[93mEnter file paths (space-separated): \n\033[0m -> ").strip()
             
             if not file_paths:
-                print("❌ \033[33mNo file paths provided.\033[0m")
+                print("❌ \033[93mNo file paths provided.\033[0m")
                 continue
             
             videos = collect_videos_from_paths(file_paths)
@@ -189,11 +189,11 @@ def main():
             print()
 
         if not videos:
-            print("❌ \033[33mNo valid video files found. Try again.\033[0m\n")
+            print("❌ \033[93mNo valid video files found. Try again.\033[0m\n")
             continue
 
         print("Scanning for videos...")
-        print(f"✅ \033[33m{len(videos)} videos found\033[0m")
+        print(f"✅ \033[93m{len(videos)} videos found\033[0m")
         print()
 
         speed_factor = ask_speed_factor()
@@ -205,13 +205,13 @@ def main():
         failed = []
 
         # Calculate prefix length dynamically based on total
-        prefix = f"\033[33mProcessing video\033[0m {total}\033[33m/\033[0m{total}: "
+        prefix = f"\033[93mProcessing video\033[0m {total}\033[93m/\033[0m{total}: "
         max_name_len = max(len(os.path.basename(v)[:30] + ("..." if len(os.path.basename(v)) > 30 else "")) for v in videos) + len(prefix) + 10
 
         for idx, vid_path in enumerate(videos, 1):
             # Update progress line with truncated filename
             display_name = os.path.basename(vid_path)[:30] + "..." if len(os.path.basename(vid_path)) > 30 else os.path.basename(vid_path)
-            sys.stdout.write(f"\r\033[33mProcessing video\033[0m {idx}\033[33m/\033[0m{total}: {display_name}")
+            sys.stdout.write(f"\r\033[93mProcessing video\033[0m {idx}\033[93m/\033[0m{total}: {display_name}")
             sys.stdout.flush()
             try:
                 reverse_and_merge(vid_path, idx, total, speed_factor, input_path)
@@ -225,25 +225,25 @@ def main():
 
         # Display results
         print()
-        print("\033[33mReverse Merge Summary\033[0m")
+        print("\033[93mReverse Merge Summary\033[0m")
         print("---------------------")
-        print(f"\033[33mSuccessfully processed:\033[0m {successful} \033[33mvideos\033[0m")
+        print(f"\033[93mSuccessfully processed:\033[0m {successful} \033[93mvideos\033[0m")
         if failed:
-            print("\033[33mFailed processing:\033[0m")
+            print("\033[93mFailed processing:\033[0m")
             for name, error in failed:
                 print(f"  {name}: {error}")
 
         # Handle output folder opening based on subfolder processing
         if include_sub and input_mode == '1':
-            print(f"\033[33mOutput folders created in each processed directory\033[0m")
-            print(f"\033[33mMain input folder: \033[0m\n{input_path}")
+            print(f"\033[93mOutput folders created in each processed directory\033[0m")
+            print(f"\033[93mMain input folder: \033[0m\n{input_path}")
             print("\n" * 2)
             djj.prompt_open_folder(input_path)
         else:
             # Original logic for single folder processing
             if input_path:
                 output_base = Path(input_path) / "Output"
-                print(f"\033[33mOutput folder: \033[0m\n{output_base}")
+                print(f"\033[93mOutput folder: \033[0m\n{output_base}")
                 print("\n" * 2)
                 djj.prompt_open_folder(output_base)
                     

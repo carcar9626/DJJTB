@@ -128,7 +128,7 @@ class DJJTBLauncher:
                 djj.wait_with_skip(8, "Back to Media Tools")
             self.show_video_tools_menu()
             
-            choice = djj.prompt_choice("\033[33mChoose a Tool\033[0m" if first_entry else "\033[33mChoose another option\033[0m",
+            choice = djj.prompt_choice("\033[93mChoose a Tool\033[0m" if first_entry else "\033[93mChoose another option\033[0m",
                                      ['1', '2', '3', '4', '5', '6', '7', '8', '0', '00'])
             first_entry = False
             
@@ -165,7 +165,7 @@ class DJJTBLauncher:
                 djj.wait_with_skip(8, "Back to Media Tools")
             self.show_image_tools_menu()
             
-            choice = djj.prompt_choice("\033[33mChoose a Tool\033[0m" if first_entry else "\033[33mChoose another option\033[0m",
+            choice = djj.prompt_choice("\033[93mChoose a Tool\033[0m" if first_entry else "\033[93mChoose another option\033[0m",
                                      ['1', '2', '3', '4', '5', '6', '7', '8', '0', '00'])
             first_entry = False
             
@@ -197,7 +197,7 @@ class DJJTBLauncher:
         """Handle media tools submenu"""
         while True:
             self.show_media_tools_menu()
-            choice = djj.prompt_choice("\033[33mChoose a Tool\033[0m",
+            choice = djj.prompt_choice("\033[93mChoose a Tool\033[0m",
                                      ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '0', '00'])
             
             if choice == "1":  # Videos
@@ -238,7 +238,7 @@ class DJJTBLauncher:
         """Handle AI tools submenu"""
         while True:
             self.show_ai_tools_menu()
-            choice = djj.prompt_choice("\033[33mChoose an AI tool\033[0m",
+            choice = djj.prompt_choice("\033[93mChoose an AI tool\033[0m",
                                      ['1', '2', '3', '4', '0', '00'])
             
             if choice == "1":  # Prompt Randomizer
@@ -277,7 +277,7 @@ class DJJTBLauncher:
         
         while True:
             self.show_main_menu()
-            choice = djj.prompt_choice("\033[33mChoose a category\033[0m",
+            choice = djj.prompt_choice("\033[93mChoose a category\033[0m",
                                      ['1', '2', '3', '4', '5', '6', 'c', 'x'])
             
             if choice == "1":
@@ -289,7 +289,7 @@ class DJJTBLauncher:
             elif choice == "c":
                 djj.cleanup_tabs()
             elif choice == "x":
-                print("\033[33mExiting...\033[0m")
+                print("\033[93mExiting...\033[0m")
                 break
             
             os.system('clear')

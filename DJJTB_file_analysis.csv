@@ -1,8 +1,0 @@
-filename,extension,extension_suggests,true_file_type,mime_type,type_mismatch,size_bytes,size_mb,path,full_path,modified_date
-__init__.py,.py,Text,Other,inode/x-empty,No,0,0.0,/Users/home/Documents/Scripts/DJJTB,/Users/home/Documents/Scripts/DJJTB/__init__.py,2025-07-22 03:43:09
-Archive.zip,.zip,Archive,Application,application/octet-stream,Yes,17892569,17.06,/Users/home/Documents/Scripts/DJJTB,/Users/home/Documents/Scripts/DJJTB/Archive.zip,2025-07-31 22:18:15
-djjtb.py,.py,Text,Text,text/x-script.python,No,15122,0.01,/Users/home/Documents/Scripts/DJJTB,/Users/home/Documents/Scripts/DJJTB/djjtb.py,2025-07-31 17:39:24
-LICENSE,,Unknown,Text,text/plain,Yes,1067,0.0,/Users/home/Documents/Scripts/DJJTB,/Users/home/Documents/Scripts/DJJTB/LICENSE,2025-07-22 04:35:53
-README.md,.md,Text,Text,text/plain,No,6924,0.01,/Users/home/Documents/Scripts/DJJTB,/Users/home/Documents/Scripts/DJJTB/README.md,2025-07-22 03:43:09
-requirements.txt,.txt,Text,Text,text/plain,No,1311,0.0,/Users/home/Documents/Scripts/DJJTB,/Users/home/Documents/Scripts/DJJTB/requirements.txt,2025-07-31 00:45:44
-run_djjtb_py.command,.command,Unknown,Text,text/x-shellscript,Yes,111,0.0,/Users/home/Documents/Scripts/DJJTB,/Users/home/Documents/Scripts/DJJTB/run_djjtb_py.command,2025-07-22 03:43:09

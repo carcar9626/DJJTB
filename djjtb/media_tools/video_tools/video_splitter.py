@@ -25,10 +25,10 @@ def get_video_duration(video_path):
             raise ValueError("ffprobe returned an empty duration. Ensure the video file is valid.")
         return float(duration_str)
     except subprocess.CalledProcessError as e:
-        print(f"\033[33mError running ffprobe:\033[0m {e}", file=sys.stderr)
+        print(f"\033[93mError running ffprobe:\033[0m {e}", file=sys.stderr)
         raise
     except ValueError as e:
-        print(f"\033[33mError parsing video duration:\033[0m {e}", file=sys.stderr)
+        print(f"\033[93mError parsing video duration:\033[0m {e}", file=sys.stderr)
         raise
 
 def collect_videos_from_folder(input_path, subfolders=False):
@@ -68,7 +68,7 @@ def collect_videos_from_paths(file_paths):
 def get_video_input():
     """Get video input using consistent pattern from reference script"""
     input_mode = djj.prompt_choice(
-        "\033[33mInput mode:\033[0m\n1. Folder path, 2. Files & Folders (space-divided)\n",
+        "\033[93mInput mode:\033[0m\n1. Folder path, 2. Files & Folders (space-divided)\n",
         ['1', '2'],
         default='1'
     )
@@ -78,16 +78,16 @@ def get_video_input():
     
     if input_mode == '1':
         # Folder mode
-        src_dir = input("📁 \033[33mEnter folder path: \n -> \033[0m").strip()
+        src_dir = input("📁 \033[93mEnter folder path: \n -> \033[0m").strip()
         src_dir = clean_path(src_dir)
         
         if not os.path.isdir(src_dir):
-            print(f"❌ \033[33mThe path\033[0m '{src_dir}' \033[33mis not a valid directory\033[0m.")
+            print(f"❌ \033[93mThe path\033[0m '{src_dir}' \033[93mis not a valid directory\033[0m.")
             return []
         
         print()
         include_sub = djj.prompt_choice(
-            "\033[33mInclude subfolders? \033[0m\n1. Yes, 2. No ",
+            "\033[93mInclude subfolders? \033[0m\n1. Yes, 2. No ",
             ['1', '2'],
             default='2'
         ) == '1'
@@ -97,25 +97,25 @@ def get_video_input():
         
     else:
         # File/folder paths mode
-        file_paths = input("📁 \033[33mEnter file/folder paths (space-separated): \n -> \033[0m").strip()
+        file_paths = input("📁 \033[93mEnter file/folder paths (space-separated): \n -> \033[0m").strip()
         
         if not file_paths:
-            print("❌ \033[33mNo paths provided.\033[0m")
+            print("❌ \033[93mNo paths provided.\033[0m")
             return []
         
         videos = collect_videos_from_paths(file_paths)
         print()
     
     if not videos:
-        print("❌ \033[33mNo valid video files found.\033[0m")
+        print("❌ \033[93mNo valid video files found.\033[0m")
         return []
     
-    print(f"\033[33m✓ Found \033[0m{len(videos)} \033[33mvideo file(s)\033[0m")
+    print(f"\033[93m✓ Found \033[0m{len(videos)} \033[93mvideo file(s)\033[0m")
     # Show first few files
     for i, video in enumerate(videos[:3]):
-        print(f"  \033[33m{i+1}. \033[0m{os.path.basename(video)}")
+        print(f"  \033[93m{i+1}. \033[0m{os.path.basename(video)}")
     if len(videos) > 3:
-        print(f"  \033[33m... and\033[0m {len(videos) - 3} \033[33mmore\033[0m")
+        print(f"  \033[93m... and\033[0m {len(videos) - 3} \033[93mmore\033[0m")
     print()
     
     return videos
@@ -126,7 +126,7 @@ def split_video_by_duration(videos, clip_duration, audio_choice):
         return [], [], None
 
     print()
-    print("\033[33mSplitting Videos...\033[0m")
+    print("\033[93mSplitting Videos...\033[0m")
     
     
     successful = []
@@ -147,8 +147,8 @@ def split_video_by_duration(videos, clip_duration, audio_choice):
             if clip_duration >= duration:
                 error_msg = f"Clip duration ({clip_duration}s) must be less than video duration ({duration}s) for {video_path_obj.name}"
                 logger.error(error_msg)
-                print(f"\033[33mError:\033[0m {error_msg}", file=sys.stderr)
-                failed.append((video_path_obj.name, None, "\033[33mClip duration too long\033[0m"))
+                print(f"\033[93mError:\033[0m {error_msg}", file=sys.stderr)
+                failed.append((video_path_obj.name, None, "\033[93mClip duration too long\033[0m"))
                 continue
             
             num_clips = int(duration // clip_duration)
@@ -161,8 +161,8 @@ def split_video_by_duration(videos, clip_duration, audio_choice):
                 output_file = output_dir / f"{video_name}_{clip_duration}s-{j+1:04d}.mp4"
 
                 progress = ((i - 1 + (j + 1) / num_clips) / total_videos) * 100
-                status_line = f"\033[33mProcessing\033[0m {i}\033[33m/\033[0m{total_videos} \033[33mvideos\033[0m, \033[33mclips\033[0m {j+1}\033[33m/\033[0m{num_clips} ({progress:.1f}%)"
-                print(f"\r\033[33m{status_line}\033[0m", end='', flush=True)
+                status_line = f"\033[93mProcessing\033[0m {i}\033[93m/\033[0m{total_videos} \033[93mvideos\033[0m, \033[93mclips\033[0m {j+1}\033[93m/\033[0m{num_clips} ({progress:.1f}%)"
+                print(f"\r\033[93m{status_line}\033[0m", end='', flush=True)
                 
                 try:
                     # Build FFmpeg command based on audio choice
@@ -189,7 +189,7 @@ def split_video_by_duration(videos, clip_duration, audio_choice):
             
         except Exception as e:
             failed.append((video_path_obj.name, None, str(e)))
-            print(f"\r\033[33mProcessing\033[0m {i}\033[33m/\033[0m{total_videos} \033[33mvideos\033[0m ({i/total_videos*100:.1f}%)... \033[33m(failed) \033[0m   ", end='', flush=True)
+            print(f"\r\033[93mProcessing\033[0m {i}\033[93m/\033[0m{total_videos} \033[93mvideos\033[0m ({i/total_videos*100:.1f}%)... \033[93m(failed) \033[0m   ", end='', flush=True)
     
     print("\r" + " " * 80 + "\r", end='', flush=True)
     
@@ -200,7 +200,7 @@ def split_video_by_portions(videos, num_portions, audio_choice):
     if not videos:
         return [], [], None
     print()
-    print("\033[33mSplitting Videos...\033[0m")
+    print("\033[93mSplitting Videos...\033[0m")
     
     successful = []
     failed = []
@@ -220,8 +220,8 @@ def split_video_by_portions(videos, num_portions, audio_choice):
             if num_portions > duration:
                 error_msg = f"Number of portions ({num_portions}) cannot exceed video duration ({duration}s) for {video_path_obj.name}"
                 logger.error(error_msg)
-                print(f"\033[33mError:\033[0m {error_msg}", file=sys.stderr)
-                failed.append((video_path_obj.name, None, "\033[33mToo many portions for video duration\033[0m"))
+                print(f"\033[93mError:\033[0m {error_msg}", file=sys.stderr)
+                failed.append((video_path_obj.name, None, "\033[93mToo many portions for video duration\033[0m"))
                 continue
             
             clip_duration = duration / num_portions
@@ -235,7 +235,7 @@ def split_video_by_portions(videos, num_portions, audio_choice):
                 part_num = j + 1
                 percent = int((part_num / num_portions) * 100)
             
-                print(f"\r\033[33mSplitting Videos\033[0m {i}\033[33m/\033[0m{len(videos)} , \033[33mParts\033[0m {part_num}\033[33m/\033[0m{num_portions} ({percent}%)...", end='', flush=True)
+                print(f"\r\033[93mSplitting Videos\033[0m {i}\033[93m/\033[0m{len(videos)} , \033[93mParts\033[0m {part_num}\033[93m/\033[0m{num_portions} ({percent}%)...", end='', flush=True)
                 try:
                     # Build FFmpeg command based on audio choice
                     if audio_choice == '3':  # Add Silent Audio Track
@@ -258,11 +258,11 @@ def split_video_by_portions(videos, num_portions, audio_choice):
                     failed.append((video_path_obj.name, j+1, str(e)))
                     logger.error(f"Error generating {output_file}: {e}")
                     progress = ((i - 1 + (j + 1) / num_portions) / len(videos)) * 100
-                    print(f"\r\033[33mProcessing\033[0m {i}\033[33m/\033[0m{len(videos)} \033[33mvideos,\033[0m \033[33mpart\033[0m {j+1}\033[33m/\033[0m{num_portions} ({progress:.1f}%)... (failed)    ", end='', flush=True)
+                    print(f"\r\033[93mProcessing\033[0m {i}\033[93m/\033[0m{len(videos)} \033[93mvideos,\033[0m \033[93mpart\033[0m {j+1}\033[93m/\033[0m{num_portions} ({progress:.1f}%)... (failed)    ", end='', flush=True)
         except Exception as e:
             failed.append((video_path_obj.name, None, str(e)))
-            logger.error(f"\033[33mFailed to process\033[0m {video_path_obj.name}: {e}")
-            print(f"\033[33m\rProcessing \033[0m{i}\033[33m/\033[0m{len(videos)} \033[33mvideos\033[0m ({i/len(videos)*100:.1f}%)...\033[33m (failed) \033[0m   ", end='', flush=True)
+            logger.error(f"\033[93mFailed to process\033[0m {video_path_obj.name}: {e}")
+            print(f"\033[93m\rProcessing \033[0m{i}\033[93m/\033[0m{len(videos)} \033[93mvideos\033[0m ({i/len(videos)*100:.1f}%)...\033[93m (failed) \033[0m   ", end='', flush=True)
     
     print("\r" + " " * 80 + "\r", end='', flush=True)
     
@@ -272,7 +272,7 @@ if __name__ == "__main__":
     while True:
         os.system('clear')
         print("\033[92m==================================================\033[0m")
-        print("\033[1;33mVideo Splitter\033[0m")
+        print("\033[1;93mVideo Splitter\033[0m")
         print("Splits Videos into Clips")
         print("\033[92m==================================================\033[0m")
         print()
@@ -283,7 +283,7 @@ if __name__ == "__main__":
             continue
 
         # Choose splitting method
-        split_method = djj.prompt_choice("\033[33mSplit method?\033[0m\n1. By Duration, 2. By Portions ", ['1', '2'], default='1')
+        split_method = djj.prompt_choice("\033[93mSplit method?\033[0m\n1. By Duration, 2. By Portions ", ['1', '2'], default='1')
         print()
 
         if split_method == '1':
@@ -292,13 +292,13 @@ if __name__ == "__main__":
             print()
         else:
             # Portion-based splitting
-            num_portions = djj.get_int_input("\033[33mNumber of portions:\n(ie. 4)\033[0m: ", min_val=2)
+            num_portions = djj.get_int_input("\033[93mNumber of portions:\n(ie. 4)\033[0m: ", min_val=2)
             print()
 
-        audio_choice = djj.prompt_choice("\033[33mAudio handling?\033[0m\n1. Keep Original Audio\n2. Strip Audio\n3. Add Silent Audio Track)\n", ['1', '2', '3'], default='1')
+        audio_choice = djj.prompt_choice("\033[93mAudio handling?\033[0m\n1. Keep Original Audio\n2. Strip Audio\n3. Add Silent Audio Track)\n", ['1', '2', '3'], default='1')
         print()
 
-        print("\033[33m-------------\033[0m")
+        print("\033[93m-------------\033[0m")
         
         if split_method == '1':
             successful, failed, output_dirs = split_video_by_duration(videos, clip_duration, audio_choice)
@@ -306,18 +306,18 @@ if __name__ == "__main__":
             successful, failed, output_dirs = split_video_by_portions(videos, num_portions, audio_choice)
         
         print("\n" * 1)
-        print("\033[33mSplitting Summary\033[0m")
+        print("\033[93mSplitting Summary\033[0m")
         print("-------------")
-        print(f"\033[33m✅ Successfully split:\033[0m {len(successful)} \033[33mclips\033[0m")
+        print(f"\033[93m✅ Successfully split:\033[0m {len(successful)} \033[93mclips\033[0m")
         if failed:
-            print(f"❌ \033[33mFailed operations:\033[0m {len(failed)} \033[33m(see logs in output folders)\033[0m")
+            print(f"❌ \033[93mFailed operations:\033[0m {len(failed)} \033[93m(see logs in output folders)\033[0m")
         if output_dirs:
-            print("📁 \033[33mOutput folders:\033[0m")
+            print("📁 \033[93mOutput folders:\033[0m")
             for output_dir in sorted(output_dirs):
                 print(f"  {output_dir}")
                 
         else:
-            print("\033[33mNo output folders created.\033[0m")
+            print("\033[93mNo output folders created.\033[0m")
         print("\n" * 2)
 
         djj.prompt_open_folder(output_dir)

@@ -69,21 +69,21 @@ def prepare_slides(images, folder_path, orientation, duration_per_slide, backgro
     setup_logging(output_dir)
     
     if not images:
-        print("\033[33mNo images found.\033[0m", file=sys.stderr)
+        print("\033[93mNo images found.\033[0m", file=sys.stderr)
         return None, 0
     
     print()
-    print("\033[33mScanning for images...\033[0m")
-    print(f"{len(images)} \033[33mimages found\033[0m")
+    print("\033[93mScanning for images...\033[0m")
+    print(f"{len(images)} \033[93mimages found\033[0m")
     print()
     
     # Calculate total duration and warn if over 15 minutes
     total_duration = len(images) * duration_per_slide
     if total_duration > 900:  # 15 minutes in seconds
-        print(f"\n\033[33mWarning: The resulting video will be \033[0m{total_duration // 60} \033[33mminutes and\033[0m {total_duration % 60} \033[33mseconds long, exceeding 15 minutes.\033[0m")
-        choice = input("\033[33mDo you want to continue? \033[0m\ny for Yes, any other key for No: ").strip().lower()
+        print(f"\n\033[93mWarning: The resulting video will be \033[0m{total_duration // 60} \033[93mminutes and\033[0m {total_duration % 60} \033[93mseconds long, exceeding 15 minutes.\033[0m")
+        choice = input("\033[93mDo you want to continue? \033[0m\ny for Yes, any other key for No: ").strip().lower()
         if choice != 'y':
-            print("\033[33mOperation cancelled.\033[0m")
+            print("\033[93mOperation cancelled.\033[0m")
             return None, 0
     
     # Prepare temporary directory for processed images
@@ -139,22 +139,22 @@ def prepare_slides(images, folder_path, orientation, duration_per_slide, backgro
             canvas.save(output_filename, 'PNG')
             successful += 1
             print()
-            sys.stdout.write(f"\r\033[33mPreparing slides \033[0m{i}/{len(images)}...")
+            sys.stdout.write(f"\r\033[93mPreparing slides \033[0m{i}/{len(images)}...")
             sys.stdout.flush()
         except Exception as e:
             logging.error(f"Error processing {os.path.basename(img_path)}: {e}")
-            sys.stdout.write(f"\r\033[33mPreparing slide \033[0m{i}/{len(images)}... \033[33m(failed)\033[0m")
+            sys.stdout.write(f"\r\033[93mPreparing slide \033[0m{i}/{len(images)}... \033[93m(failed)\033[0m")
             sys.stdout.flush()
             continue
     print()
-    print("\n\033[33mCreating Slideshow...\033[0m")
+    print("\n\033[93mCreating Slideshow...\033[0m")
     print("-------------")
     # Clear processing line
     sys.stdout.write("\r" + " " * 50 + "\r")
     sys.stdout.flush()
     
     if successful == 0:
-        print("\033[33mNo images were processed successfully.\033[0m", file=sys.stderr)
+        print("\033[93mNo images were processed successfully.\033[0m", file=sys.stderr)
         return None, 0
     
     # Create unique output filename
@@ -182,7 +182,7 @@ def prepare_slides(images, folder_path, orientation, duration_per_slide, backgro
         subprocess.run(ffmpeg_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     except subprocess.CalledProcessError as e:
         logging.error(f"Error creating video: {e.stderr}")
-        print("\033[33mError creating video. Check slideshow_errors.log for details.\033[0m", file=sys.stderr)
+        print("\033[93mError creating video. Check slideshow_errors.log for details.\033[0m", file=sys.stderr)
         return None, successful
     
     # Clean up temporary files
@@ -205,7 +205,7 @@ if __name__ == '__main__':
         
         # Input mode selection
         input_mode = djj.prompt_choice(
-            "\033[33mInput mode:\033[0m\n1. Folder path\n2. Space-separated file paths\n",
+            "\033[93mInput mode:\033[0m\n1. Folder path\n2. Space-separated file paths\n",
             ['1', '2'],
             default='1'
         )
@@ -220,7 +220,7 @@ if __name__ == '__main__':
             print()
             
             include_sub = djj.prompt_choice(
-                "\033[33mInclude subfolders?\033[0m\n1. Yes\n2. No\n",
+                "\033[93mInclude subfolders?\033[0m\n1. Yes\n2. No\n",
                 ['1', '2'],
                 default='2'
             ) == '1'
@@ -230,10 +230,10 @@ if __name__ == '__main__':
             
         else:
             # File paths mode
-            file_paths = input("📁 \033[33mEnter image paths (space-separated):\n\033[0m -> ").strip()
+            file_paths = input("📁 \033[93mEnter image paths (space-separated):\n\033[0m -> ").strip()
             
             if not file_paths:
-                print("❌ \033[33mNo file paths provided.\033[0m")
+                print("❌ \033[93mNo file paths provided.\033[0m")
                 continue
             
             images = collect_images_from_paths(file_paths)
@@ -243,16 +243,16 @@ if __name__ == '__main__':
             print()
 
         if not images:
-            print("❌ \033[33mNo valid image files found. Try again.\033[0m\n")
+            print("❌ \033[93mNo valid image files found. Try again.\033[0m\n")
             continue
 
         print("Scanning for images...")
-        print(f"✅ \033[33m{len(images)} images found\033[0m")
+        print(f"✅ \033[93m{len(images)} images found\033[0m")
         print()
         
         # Prompt for orientation
         orientation_choice = djj.prompt_choice(
-            "\033[33mSlideshow Orientation:\033[0m\n1. Landscape (1920x1080)\n2. Portrait (1080x1920)\n",
+            "\033[93mSlideshow Orientation:\033[0m\n1. Landscape (1920x1080)\n2. Portrait (1080x1920)\n",
             ['1', '2'],
             default='1'
         )
@@ -261,7 +261,7 @@ if __name__ == '__main__':
         
         # Background type selection
         background_choice = djj.prompt_choice(
-            "\033[33mBackground type:\033[0m\n1. Blurred (from image)\n2. Solid color\n",
+            "\033[93mBackground type:\033[0m\n1. Blurred (from image)\n2. Solid color\n",
             ['1', '2'],
             default='1'
         )
@@ -274,27 +274,27 @@ if __name__ == '__main__':
         
         if background_choice == '1':
             # Blurred background options
-            bg_opacity_input = input("\033[33mBackground opacity [0.0-1.0, default: 0.25]:\n\033[0m -> ").strip()
+            bg_opacity_input = input("\033[93mBackground opacity [0.0-1.0, default: 0.25]:\n\033[0m -> ").strip()
             try:
                 background_opacity = float(bg_opacity_input) if bg_opacity_input else 0.25
                 background_opacity = max(0.0, min(1.0, background_opacity))
             except ValueError:
                 background_opacity = 0.25
-                print("\033[33mUsing default opacity: 0.25\033[0m")
+                print("\033[93mUsing default opacity: 0.25\033[0m")
             print()
 
-            bg_blur_input = input("\033[33mBackground blur radius [1-50, default: 8]:\n\033[0m -> ").strip()
+            bg_blur_input = input("\033[93mBackground blur radius [1-50, default: 8]:\n\033[0m -> ").strip()
             try:
                 background_blur_radius = int(bg_blur_input) if bg_blur_input else 8
                 background_blur_radius = max(1, min(50, background_blur_radius))
             except ValueError:
                 background_blur_radius = 8
-                print("\033[33mUsing default blur: 8\033[0m")
+                print("\033[93mUsing default blur: 8\033[0m")
             print()
         else:
             # Solid color background
             background_type = 'solid'
-            color_input = input("\033[33mBackground color [R,G,B format like 0,0,0 for black, default: 0,0,0]:\n\033[0m -> ").strip()
+            color_input = input("\033[93mBackground color [R,G,B format like 0,0,0 for black, default: 0,0,0]:\n\033[0m -> ").strip()
             try:
                 if color_input:
                     r, g, b = map(int, color_input.split(','))
@@ -303,22 +303,22 @@ if __name__ == '__main__':
                     background_color = (0, 0, 0)
             except ValueError:
                 background_color = (0, 0, 0)
-                print("\033[33mUsing default color: black (0,0,0)\033[0m")
+                print("\033[93mUsing default color: black (0,0,0)\033[0m")
             print()
 
-            bg_opacity_input = input("\033[33mBackground opacity [0.0-1.0, default: 1.0]:\n\033[0m -> ").strip()
+            bg_opacity_input = input("\033[93mBackground opacity [0.0-1.0, default: 1.0]:\n\033[0m -> ").strip()
             try:
                 background_opacity = float(bg_opacity_input) if bg_opacity_input else 1.0
                 background_opacity = max(0.0, min(1.0, background_opacity))
             except ValueError:
                 background_opacity = 1.0
-                print("\033[33mUsing default opacity: 1.0\033[0m")
+                print("\033[93mUsing default opacity: 1.0\033[0m")
             print()
         
         # Prompt for duration per slide
         while True:
             try:
-                duration_input = input("\033[33mEnter slide duration in seconds [default: 3]:\n\033[0m -> ").strip()
+                duration_input = input("\033[93mEnter slide duration in seconds [default: 3]:\n\033[0m -> ").strip()
                 if not duration_input:
                     duration_per_slide = 3
                     break
@@ -326,9 +326,9 @@ if __name__ == '__main__':
                 if duration_per_slide > 0:
                     break
                 else:
-                    print("\033[33mPlease enter a positive number.\033[0m")
+                    print("\033[93mPlease enter a positive number.\033[0m")
             except ValueError:
-                print("\033[33mPlease enter a valid number.\033[0m")
+                print("\033[93mPlease enter a valid number.\033[0m")
         
         print("\n" * 2)
         print("\033[1;33mProcessing...\033[0m")
@@ -347,14 +347,14 @@ if __name__ == '__main__':
         
         # Display results
         print("\n" * 2)
-        print("\033[33mSlideshow Creation Summary\033[0m")
+        print("\033[93mSlideshow Creation Summary\033[0m")
         print("-------------")
-        print(f"\033[33mSuccessfully processed: \033[0m{successful}\033[33m images\033[0m")
+        print(f"\033[93mSuccessfully processed: \033[0m{successful}\033[93m images\033[0m")
         if output_file:
-            print(f"\033[33mOutput video:\033[0m {output_file}")
-            print(f"\033[33mOutput folder:\033[0m {os.path.dirname(output_file)}")
+            print(f"\033[93mOutput video:\033[0m {output_file}")
+            print(f"\033[93mOutput folder:\033[0m {os.path.dirname(output_file)}")
         else:
-            print("\033[33mFailed to create video. Check slideshow_errors.log for details.\033[0m")
+            print("\033[93mFailed to create video. Check slideshow_errors.log for details.\033[0m")
         print("\n" * 2)
         
         # Open output folder

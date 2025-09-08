@@ -43,13 +43,13 @@ def resize_images(input_path, dimension_type, desired_dimension, include_sub, ou
         pattern = '**/*' if include_sub else '*'
         images = [f for f in input_path.glob(pattern) if f.suffix.lower() in image_extensions and f.is_file()]
     else:
-        print("\033[33mError: Input must be a file or directory.\033[0m", file=sys.stderr)
+        print("\033[93mError: Input must be a file or directory.\033[0m", file=sys.stderr)
         return [], []
     
-    print ("\033[33mScanning for Images...\033[0m")
-    print(f"{len(images)} \033[33mimages found\033[0m")
+    print ("\033[93mScanning for Images...\033[0m")
+    print(f"{len(images)} \033[93mimages found\033[0m")
     print ()
-    print ("\033[33mResizing Images...\033[0m")
+    print ("\033[93mResizing Images...\033[0m")
     successful = []
     failed = []
     
@@ -107,7 +107,7 @@ def resize_images(input_path, dimension_type, desired_dimension, include_sub, ou
         except Exception as e:
             failed.append((img_path.name, str(e)))
             logging.error(f"Error processing {img_path.name}: {e}")
-            sys.stdout.write(f"\033[33m\rProcessing image\033[0m {i}/{len(images)}... (failed)")
+            sys.stdout.write(f"\033[93m\rProcessing image\033[0m {i}/{len(images)}... (failed)")
             sys.stdout.flush()
     
     # Clear processing line
@@ -130,7 +130,7 @@ if __name__ == '__main__':
         attempt = 0
         input_path = None
         while attempt < max_attempts:
-            input_path = input("\033[33mEnter path: \n -> \033[0m").strip()
+            input_path = input("\033[93mEnter path: \n -> \033[0m").strip()
             # Remove quotes if present
             input_path = input_path.strip("'").strip('"')
             # Remove any leading/trailing spaces again after stripping quotes
@@ -141,33 +141,33 @@ if __name__ == '__main__':
                 if os.path.exists(normalized_path):
                     input_path = normalized_path
                     break
-                print(f"\033[33mError:\033[0m '{normalized_path}' \033[33mdoes not exist. Ensure the path is correct and the external drive (if any) is mounted. Please try again.\033[0m", file=sys.stderr)
+                print(f"\033[93mError:\033[0m '{normalized_path}' \033[93mdoes not exist. Ensure the path is correct and the external drive (if any) is mounted. Please try again.\033[0m", file=sys.stderr)
             except Exception as e:
-                print(f"\033[33mError resolving path \033[0m'{input_path}': {e}. \033[33mPlease try again\033[0m.", file=sys.stderr)
+                print(f"\033[93mError resolving path \033[0m'{input_path}': {e}. \033[93mPlease try again\033[0m.", file=sys.stderr)
             attempt += 1
             if attempt == max_attempts:
-                print("\033[33mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
+                print("\033[93mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
                 sys.exit(1)
         print ()
         # Prompt for subfolder inclusion
-        include_sub = djj.prompt_choice("\033[33mInclude subfolders? \033[0m\m1. Yes, 2. No ", ['1', '2'], default='2') == '1'
+        include_sub = djj.prompt_choice("\033[93mInclude subfolders? \033[0m\m1. Yes, 2. No ", ['1', '2'], default='2') == '1'
 
         # Prompt for dimension type
         attempt = 0
         dimension_type = None
         while attempt < max_attempts:
             time.sleep(0.1)
-            dim_choice = input("\033[33mDimension Anchor\033[0m\n 1.↔️ , 2.↕️ ): ").strip()
+            dim_choice = input("\033[93mDimension Anchor\033[0m\n 1.↔️ , 2.↕️ ): ").strip()
             if dim_choice == '1':
                 dimension_type = 1
                 break
             elif dim_choice == '2':
                 dimension_type = 2
                 break
-            print("\033[33mPlease enter 1 or 2 only\033[0m", file=sys.stderr)
+            print("\033[93mPlease enter 1 or 2 only\033[0m", file=sys.stderr)
             attempt += 1
             if attempt == max_attempts:
-                print("\033[33mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
+                print("\033[93mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
                 sys.exit(1)
         
         # Prompt for desired dimension
@@ -175,33 +175,33 @@ if __name__ == '__main__':
         desired_dimension = None
         while attempt < max_attempts:
             try:
-                dim_input = input("\033[33mOutput dimension in px:\n > \033[0m ").strip()
+                dim_input = input("\033[93mOutput dimension in px:\n > \033[0m ").strip()
                 desired_dimension = int(dim_input)
                 if desired_dimension > 0:
                     break
-                print("\033[33mPlease enter a positive integer.\n\ > 033[0m ", file=sys.stderr)
+                print("\033[93mPlease enter a positive integer.\n\ > 033[0m ", file=sys.stderr)
             except ValueError:
-                print("\033[33mPlease enter a valid integer.\n > \033[0m", file=sys.stderr)
+                print("\033[93mPlease enter a valid integer.\n > \033[0m", file=sys.stderr)
             attempt += 1
             if attempt == max_attempts:
-                print("\033[33mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
+                print("\033[93mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
                 sys.exit(1)
         
         # Prompt for output format
         attempt = 0
         output_format = None
         while attempt < max_attempts:
-            format_choice = input("\033[33mFormat \033[0m(1.png 2.jpg): \n > ").strip()
+            format_choice = input("\033[93mFormat \033[0m(1.png 2.jpg): \n > ").strip()
             if format_choice == '1':
                 output_format = 'png'
                 break
             elif format_choice == '2':
                 output_format = 'jpg'
                 break
-            print("\033[33mPlease enter '1' for PNG or '2' for JPG only.\n\033[0m >", file=sys.stderr)
+            print("\033[93mPlease enter '1' for PNG or '2' for JPG only.\n\033[0m >", file=sys.stderr)
             attempt += 1
             if attempt == max_attempts:
-                print("\033[33mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
+                print("\033[93mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
                 sys.exit(1)
         print ()
         print ("-------------")
@@ -213,14 +213,14 @@ if __name__ == '__main__':
         
         # Display results
         print("\n" * 1)
-        print("\033[33mResize Summary\033[0m")
+        print("\033[93mResize Summary\033[0m")
         print("-------------")
-        print(f"\033[33mSuccessfully resized:\033[0m {len(successful)} \033[33mimages\033[0m")
+        print(f"\033[93mSuccessfully resized:\033[0m {len(successful)} \033[93mimages\033[0m")
         if failed:
-            print("\033[33mFailed resizes:\033[0m")
+            print("\033[93mFailed resizes:\033[0m")
             for name, error in failed:
                 print(f"  {name}: {error}")
-        print(f"\033[33mOutput folder: \033[0m\n{output_base}")
+        print(f"\033[93mOutput folder: \033[0m\n{output_base}")
         print("\n" * 2)
         
         # Open output folder (base directory)

@@ -148,7 +148,7 @@ def collect_and_select_files(input_path, include_sub=False, file_types='both'):
     
     # Show files and let user select
     selection_mode = djj.prompt_choice(
-        "\033[33mFile selection:\033[0m\n1. Process all files\n2. Select specific files\n",
+        "\033[93mFile selection:\033[0m\n1. Process all files\n2. Select specific files\n",
         ['1', '2'],
         default='1'
     )
@@ -157,7 +157,7 @@ def collect_and_select_files(input_path, include_sub=False, file_types='both'):
         return all_files
     
     # Show files for selection
-    print("\033[33mAvailable files:\033[0m")
+    print("\033[93mAvailable files:\033[0m")
     for i, file_path in enumerate(all_files, 1):
         print(f"{i:3d}. {os.path.basename(file_path)}")
     
@@ -294,7 +294,7 @@ def main():
 
         # Get input mode
         input_mode = djj.prompt_choice(
-            "\033[33mInput mode:\033[0m\n1. Folder path\n2. Space-separated file paths\n",
+            "\033[93mInput mode:\033[0m\n1. Folder path\n2. Space-separated file paths\n",
             ['1', '2'],
             default='2'
         )
@@ -302,7 +302,7 @@ def main():
 
         # Ask for file type filter
         file_types = djj.prompt_choice(
-            "\033[33mProcess which files?\033[0m\n1. Videos only\n2. Images only\n3. Audio only\n4. All media files\n",
+            "\033[93mProcess which files?\033[0m\n1. Videos only\n2. Images only\n3. Audio only\n4. All media files\n",
             ['1', '2', '3', '4'],
             default='4'
         )
@@ -318,7 +318,7 @@ def main():
             print()
             
             include_sub = djj.prompt_choice(
-                "\033[33mInclude subfolders?\033[0m\n1. Yes, 2. No ",
+                "\033[93mInclude subfolders?\033[0m\n1. Yes, 2. No ",
                 ['1', '2'],
                 default='2'
             ) == '1'
@@ -326,9 +326,9 @@ def main():
             
             media_files = collect_and_select_files(input_path, include_sub, file_type_filter)
         else:
-            file_paths = input("📁 \033[33mEnter file paths (space-separated): \n\033[0m -> ").strip()
+            file_paths = input("📁 \033[93mEnter file paths (space-separated): \n\033[0m -> ").strip()
             if not file_paths:
-                print("❌ \033[33mNo file paths provided.\033[0m")
+                print("❌ \033[93mNo file paths provided.\033[0m")
                 continue
             
             media_files = collect_files_from_paths(file_paths, file_type_filter)
@@ -337,15 +337,15 @@ def main():
             print()
 
         if not media_files:
-            print("❌ \033[33mNo valid media files selected. Try again.\033[0m\n")
+            print("❌ \033[93mNo valid media files selected. Try again.\033[0m\n")
             continue
 
-        print(f"✅ \033[33m{len(media_files)} files selected for processing\033[0m")
+        print(f"✅ \033[93m{len(media_files)} files selected for processing\033[0m")
         print()
 
         # Ask about metadata export first
         export_metadata = djj.prompt_choice(
-            "\033[33mExport detailed metadata to CSV?\033[0m\n1. Yes\n2. No\n",
+            "\033[93mExport detailed metadata to CSV?\033[0m\n1. Yes\n2. No\n",
             ['1', '2'],
             default='2'
         ) == '1'
@@ -358,7 +358,7 @@ def main():
             
             for idx, file_path in enumerate(media_files, 1):
                 display_name = os.path.basename(file_path)[:30] + "..." if len(os.path.basename(file_path)) > 30 else os.path.basename(file_path)
-                sys.stdout.write(f"\r\033[33mExtracting metadata\033[0m {idx}\033[33m/\033[0m{len(media_files)}: {display_name}                    ")
+                sys.stdout.write(f"\r\033[93mExtracting metadata\033[0m {idx}\033[93m/\033[0m{len(media_files)}: {display_name}                    ")
                 sys.stdout.flush()
                 
                 try:
@@ -411,19 +411,19 @@ def main():
                 csv_path = Path(input_base_path) / csv_filename
                 
                 if export_to_csv(metadata_data, csv_path):
-                    print(f"✅ \033[33mMetadata exported to:\033[0m {csv_path}")
+                    print(f"✅ \033[93mMetadata exported to:\033[0m {csv_path}")
                     print()
 
         # Processing workflow
         workflow = djj.prompt_choice(
-            "\033[33mProcessing workflow:\033[0m\n1. Strip metadata, then inject fake\n2. Only inject fake (don't strip)\n3. Only strip metadata\n",
+            "\033[93mProcessing workflow:\033[0m\n1. Strip metadata, then inject fake\n2. Only inject fake (don't strip)\n3. Only strip metadata\n",
             ['1', '2', '3'],
             default='1'
         )
         print()
 
         replace_mode = djj.prompt_choice(
-            "\033[33mFile handling:\033[0m\n1. Replace original files\n2. Create new files\n",
+            "\033[93mFile handling:\033[0m\n1. Replace original files\n2. Create new files\n",
             ['1', '2'],
             default='2'
         ) == '1'
@@ -431,7 +431,7 @@ def main():
 
         if workflow in ['1', '3']:
             method = djj.prompt_choice(
-                "\033[33mMetadata removal method:\033[0m\n1. FFmpeg\n2. ExifTool\n",
+                "\033[93mMetadata removal method:\033[0m\n1. FFmpeg\n2. ExifTool\n",
                 ['1', '2'],
                 default='1'
             )
@@ -448,7 +448,7 @@ def main():
 
         for idx, file_path in enumerate(media_files, 1):
             display_name = os.path.basename(file_path)[:30] + "..." if len(os.path.basename(file_path)) > 30 else os.path.basename(file_path)
-            sys.stdout.write(f"\r\033[33mProcessing\033[0m {idx}\033[33m/\033[0m{len(media_files)}: {display_name}                    ")
+            sys.stdout.write(f"\r\033[93mProcessing\033[0m {idx}\033[93m/\033[0m{len(media_files)}: {display_name}                    ")
             sys.stdout.flush()
             
             try:
@@ -538,7 +538,7 @@ def main():
             fake_success = 0
             for idx, file_path in enumerate(processed_files, 1):
                 display_name = os.path.basename(file_path)[:30] + "..." if len(os.path.basename(file_path)) > 30 else os.path.basename(file_path)
-                sys.stdout.write(f"\r\033[33mInjecting\033[0m {idx}\033[33m/\033[0m{len(processed_files)}: {display_name}                    ")
+                sys.stdout.write(f"\r\033[93mInjecting\033[0m {idx}\033[93m/\033[0m{len(processed_files)}: {display_name}                    ")
                 sys.stdout.flush()
                 
                 try:
@@ -565,9 +565,9 @@ def main():
             print(f"✅ Fake metadata injected: {fake_success} files")
 
         print()
-        print(f"✅ \033[33mProcessing complete:\033[0m {successful} files processed")
+        print(f"✅ \033[93mProcessing complete:\033[0m {successful} files processed")
         if failed:
-            print(f"❌ \033[33mFailed:\033[0m {len(failed)} files")
+            print(f"❌ \033[93mFailed:\033[0m {len(failed)} files")
 
         # Show output location
         if not replace_mode and input_base_path:
@@ -575,10 +575,10 @@ def main():
             output_base = Path(input_base_path) / "Output" / workflow_names[int(workflow) - 1]
             
             if output_base.exists():
-                print(f"\n📁 \033[33mOutput folder:\033[0m\n{output_base}")
+                print(f"\n📁 \033[93mOutput folder:\033[0m\n{output_base}")
                 
                 open_folder = djj.prompt_choice(
-                    "\033[33mOpen output folder?\033[0m\n1. Yes\n2. No\n",
+                    "\033[93mOpen output folder?\033[0m\n1. Yes\n2. No\n",
                     ['1', '2'],
                     default='1'
                 ) == '1'

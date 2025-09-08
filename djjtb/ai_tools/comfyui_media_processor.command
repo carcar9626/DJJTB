@@ -4,7 +4,7 @@
 
 export PATH="$HOME/.pyenv/bin:$PATH"
 eval "$(pyenv init -)"
-cd /Volumes/Desmond_SSD_2TB/ComfyUI
+cd /Volumes/Movies_2SSD/ComfyUI
 pyenv local 3.10.17
 source .venv/bin/activate
 export PYTORCH_ENABLE_MPS_FALLBACK=1

@@ -126,9 +126,9 @@ def pad_images(images, output_dir, output_format, shape, color, custom_width, cu
     logger = setup_logging(output_dir)
     
     print()
-    print(f"{len(images)} \033[33mimages found\033[0m")
+    print(f"{len(images)} \033[93mimages found\033[0m")
     print()
-    print("\033[33mPadding Images...\033[0m")
+    print("\033[93mPadding Images...\033[0m")
     
     successful = []
     failed = []
@@ -215,16 +215,16 @@ def main():
         
         if input_mode == '1':
             # Folder mode
-            src_dir = input("📁 \033[33mEnter folder path: \n -> \033[0m").strip()
+            src_dir = input("📁 \033[93mEnter folder path: \n -> \033[0m").strip()
             src_dir = clean_path(src_dir)
             
             if not os.path.isdir(src_dir):
-                print(f"❌ \033[33mThe path\033[0m '{src_dir}' \033[33mis not a valid directory\033[0m.")
+                print(f"❌ \033[93mThe path\033[0m '{src_dir}' \033[93mis not a valid directory\033[0m.")
                 continue
             
             print()
             include_sub = djj.prompt_choice(
-                "\033[33mInclude subfolders? \033[0m\n1. Yes, 2. No ",
+                "\033[93mInclude subfolders? \033[0m\n1. Yes, 2. No ",
                 ['1', '2'],
                 default='2'
             ) == '1'
@@ -235,7 +235,7 @@ def main():
             
         else:
             # File paths mode
-            file_paths = input("📁 \033[33mEnter file paths: \n -> \033[0m").strip()
+            file_paths = input("📁 \033[93mEnter file paths: \n -> \033[0m").strip()
             
             if not file_paths:
                 print("❌ No file paths provided.")
@@ -246,14 +246,14 @@ def main():
             print()
         
         if not images:
-            print("❌ \033[33mNo valid image files found.\033[0m")
+            print("❌ \033[93mNo valid image files found.\033[0m")
             continue
         
-        print("\033[33mScanning for Images...\033[0m")
+        print("\033[93mScanning for Images...\033[0m")
         
         # Get padding position
         padding_position = djj.prompt_choice(
-            "\033[33mPadding position:\033[0m\n1. Left (image on left, padding on right)\n2. Right (image on right, padding on left)\n3. Center\n",
+            "\033[93mPadding position:\033[0m\n1. Left (image on left, padding on right)\n2. Right (image on right, padding on left)\n3. Center\n",
             ['1', '2', '3'],
             default='3'
         )
@@ -265,7 +265,7 @@ def main():
 
         # Get shape
         shape = djj.prompt_choice(
-            "\033[33mShape:\033[0m\n1. Square\n2. Landscape\n3. Portrait\n4. Custom\n",
+            "\033[93mShape:\033[0m\n1. Square\n2. Landscape\n3. Portrait\n4. Custom\n",
             ['1', '2', '3', '4'],
             default='1'
         )
@@ -277,14 +277,14 @@ def main():
         custom_width = None
         custom_height = None
         if shape == 'custom':
-            custom_width = djj.get_int_input("\033[33mCustom width in pixels\033[0m", min_val=1)
+            custom_width = djj.get_int_input("\033[93mCustom width in pixels\033[0m", min_val=1)
             print()
-            custom_height = djj.get_int_input("\033[33mCustom height in pixels\033[0m", min_val=1)
+            custom_height = djj.get_int_input("\033[93mCustom height in pixels\033[0m", min_val=1)
             print()
 
         # Get background type
         bg_type = djj.prompt_choice(
-            "\033[33mBackground type:\033[0m\n1. Solid color\n2. Image background\n",
+            "\033[93mBackground type:\033[0m\n1. Solid color\n2. Image background\n",
             ['1', '2'],
             default='1'
         )
@@ -298,7 +298,7 @@ def main():
         if bg_type == 'image':
             # Get background mode
             bg_mode = djj.prompt_choice(
-                "\033[33mImage background mode:\033[0m\n1. Stretched\n2. Tiled\n3. Centered\n",
+                "\033[93mImage background mode:\033[0m\n1. Stretched\n2. Tiled\n3. Centered\n",
                 ['1', '2', '3'],
                 default='1'
             )
@@ -308,30 +308,30 @@ def main():
             bg_mode = mode_map[bg_mode]
             
             # Get background blur
-            bg_blur_input = input("\033[33mBackground blur radius [1-50, default: 8]:\n -> \033[0m").strip()
+            bg_blur_input = input("\033[93mBackground blur radius [1-50, default: 8]:\n -> \033[0m").strip()
             try:
                 bg_blur = int(bg_blur_input) if bg_blur_input else 8
                 bg_blur = max(1, min(50, bg_blur))
             except ValueError:
                 bg_blur = 8
-                print("\033[33mUsing default blur: 8\033[0m")
+                print("\033[93mUsing default blur: 8\033[0m")
             print()
             
             # Get background opacity
-            bg_opacity_input = input("\033[33mBackground opacity [0.0-1.0, default: 0.25]:\n -> \033[0m").strip()
+            bg_opacity_input = input("\033[93mBackground opacity [0.0-1.0, default: 0.25]:\n -> \033[0m").strip()
             try:
                 bg_opacity = float(bg_opacity_input) if bg_opacity_input else 0.25
                 bg_opacity = max(0.0, min(1.0, bg_opacity))
             except ValueError:
                 bg_opacity = 0.25
-                print("\033[33mUsing default opacity: 0.25\033[0m")
+                print("\033[93mUsing default opacity: 0.25\033[0m")
             print()
 
         # Get color (only for solid background type)
         custom_color = None
         if bg_type == 'solid':
             color = djj.prompt_choice(
-                "\033[33mPadding color:\033[0m\n1. White\n2. Black\n3. Grey\n4. Custom\n",
+                "\033[93mPadding color:\033[0m\n1. White\n2. Black\n3. Grey\n4. Custom\n",
                 ['1', '2', '3', '4'],
                 default='1'
             )
@@ -345,17 +345,17 @@ def main():
                 attempt = 0
                 while attempt < max_attempts:
                     try:
-                        color_input = input("\033[33mCustom color (R,G,B,A - e.g., 255,255,255,255): \n -> \033[0m").strip()
+                        color_input = input("\033[93mCustom color (R,G,B,A - e.g., 255,255,255,255): \n -> \033[0m").strip()
                         r, g, b, a = map(int, color_input.split(','))
                         if all(0 <= x <= 255 for x in [r, g, b, a]):
                             custom_color = (r, g, b, a)
                             break
-                        print("\033[33mEach value must be between \033[0m0 \033[33mand\033[0m 255.")
+                        print("\033[93mEach value must be between \033[0m0 \033[93mand\033[0m 255.")
                     except ValueError:
-                        print("\033[33mPlease enter four integers separated by commas \033[0m(e.g., 255,255,255,255).")
+                        print("\033[93mPlease enter four integers separated by commas \033[0m(e.g., 255,255,255,255).")
                     attempt += 1
                     if attempt == max_attempts:
-                        print("\033[33mToo many invalid attempts. Exiting.\033[0m")
+                        print("\033[93mToo many invalid attempts. Exiting.\033[0m")
                         sys.exit(1)
                 print()
         else:
@@ -364,7 +364,7 @@ def main():
 
         # Get output format
         output_format = djj.prompt_choice(
-            "\033[33mOutput format:\033[0m\n1. PNG\n2. JPG\n3. BMP\n4. GIF\n",
+            "\033[93mOutput format:\033[0m\n1. PNG\n2. JPG\n3. BMP\n4. GIF\n",
             ['1', '2', '3', '4'],
             default='1'
         )
@@ -377,12 +377,12 @@ def main():
         successful, failed = pad_images(images, output_dir, output_format, shape, color, custom_width, custom_height, custom_color, padding_position, bg_type, bg_mode, bg_blur, bg_opacity)
         
         print("\n" * 1)
-        print("\033[33mPadding Summary\033[0m")
+        print("\033[93mPadding Summary\033[0m")
         print("-------------")
-        print(f"✅ \033[33mSuccessfully padded: \033[0m{len(successful)}\033[33m images\033[0m")
+        print(f"✅ \033[93mSuccessfully padded: \033[0m{len(successful)}\033[93m images\033[0m")
         if failed:
-            print(f"❌ \033[33mFailed operations:\033[0m {len(failed)}\033[33m (see padding_errors.log in output folder)\033[0m")
-        print(f"📁\033[33m Output folder:\033[0m \n{output_dir}")
+            print(f"❌ \033[93mFailed operations:\033[0m {len(failed)}\033[93m (see padding_errors.log in output folder)\033[0m")
+        print(f"📁\033[93m Output folder:\033[0m \n{output_dir}")
         print("\n" * 2)
 
         djj.prompt_open_folder(output_dir)

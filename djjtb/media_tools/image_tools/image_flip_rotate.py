@@ -37,7 +37,7 @@ def rotate_or_flip_images(input_path, operation, choice, custom_angle, include_s
     input_path = pathlib.Path(input_path).resolve()
     if not input_path.exists():
         logger.error("Input path does not exist.")
-        print("\033[33mError: Input path does not exist\033[0m.", file=sys.stderr)
+        print("\033[93mError: Input path does not exist\033[0m.", file=sys.stderr)
         return [], [], output_dir
 
     image_extensions = ('.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp', '.tiff')
@@ -49,13 +49,13 @@ def rotate_or_flip_images(input_path, operation, choice, custom_angle, include_s
         images = [f for f in sorted(input_path.glob(pattern)) if f.suffix.lower() in image_extensions and f.is_file()]
     else:
         logger.error("Input must be a file or directory.")
-        print("\033[33mError: Input must be a file or directory.\033[0m", file=sys.stderr)
+        print("\033[93mError: Input must be a file or directory.\033[0m", file=sys.stderr)
         return [], [], output_dir
     
-    print("\033[33mScanning for Images...\033[0m")
-    print(f"{len(images)} \033[33mimages found\033[0m")
+    print("\033[93mScanning for Images...\033[0m")
+    print(f"{len(images)} \033[93mimages found\033[0m")
     print()
-    print("\033[33mProcessing Images...\033[0m")
+    print("\033[93mProcessing Images...\033[0m")
     print
     
     successful = []
@@ -125,32 +125,32 @@ if __name__ == "__main__":
                 if os.path.exists(normalized_path):
                     input_path = normalized_path
                     break
-                print(f"\033[33mError: \033[0m'{normalized_path}' \033[33mdoes not exist. Ensure the path is correct and the external drive (if any) is mounted.\033[0m", file=sys.stderr)
+                print(f"\033[93mError: \033[0m'{normalized_path}' \033[93mdoes not exist. Ensure the path is correct and the external drive (if any) is mounted.\033[0m", file=sys.stderr)
             except Exception as e:
-                print(f"\033[33mError resolving path \033[0m'{input_path}': {e}. \033[33mPlease try again.\033[0m", file=sys.stderr)
+                print(f"\033[93mError resolving path \033[0m'{input_path}': {e}. \033[93mPlease try again.\033[0m", file=sys.stderr)
             attempt += 1
             if attempt == max_attempts:
-                print("\033[33mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
+                print("\033[93mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
                 sys.exit(1)
         print()
 
-        include_subfolders = djj.prompt_choice("\033[33mInclude subfolders?\033[0m\n1. Yes, 2. No ", ['1', '2'], default='2') == '1'
+        include_subfolders = djj.prompt_choice("\033[93mInclude subfolders?\033[0m\n1. Yes, 2. No ", ['1', '2'], default='2') == '1'
         print()
 
         attempt = 0
         operation = None
         while attempt < max_attempts:
-            op_choice = input("\033[33mOperation\033[0m\n1. Flip, 2. Rotate:  ").strip()
+            op_choice = input("\033[93mOperation\033[0m\n1. Flip, 2. Rotate:  ").strip()
             if op_choice == '1':
                 operation = 'flip'
                 break
             elif op_choice == '2':
                 operation = 'rotate'
                 break
-            print("\033[33mPlease enter 1 or 2 only.\033[0m", file=sys.stderr)
+            print("\033[93mPlease enter 1 or 2 only.\033[0m", file=sys.stderr)
             attempt += 1
             if attempt == max_attempts:
-                print("\033[33mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
+                print("\033[93mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
                 sys.exit(1)
         print()
 
@@ -159,7 +159,7 @@ if __name__ == "__main__":
         if operation == 'flip':
             attempt = 0
             while attempt < max_attempts:
-                flip_choice = input("\033[33mFlip direction\033[0m\n1. Horizontal ↔️, 2. Vertical ↕️: ").strip()
+                flip_choice = input("\033[93mFlip direction\033[0m\n1. Horizontal ↔️, 2. Vertical ↕️: ").strip()
                 print()
                 if flip_choice == '1':
                     choice = 'horizontal'
@@ -167,15 +167,15 @@ if __name__ == "__main__":
                 elif flip_choice == '2':
                     choice = 'vertical'
                     break
-                print("\033[33mPlease enter 1 or 2 only.\033[0m", file=sys.stderr)
+                print("\033[93mPlease enter 1 or 2 only.\033[0m", file=sys.stderr)
                 attempt += 1
                 if attempt == max_attempts:
-                    print("\033[33mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
+                    print("\033[93mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
                     sys.exit(1)
         else:
             attempt = 0
             while attempt < max_attempts:
-                rotate_choice = input("\033[33mRotation\033[0m\n1. 90°, 2. 180°, 3. 270°, 4. Custom: ").strip()
+                rotate_choice = input("\033[93mRotation\033[0m\n1. 90°, 2. 180°, 3. 270°, 4. Custom: ").strip()
                 print()
                 if rotate_choice in ['1', '2', '3']:
                     choice = {'1': '90', '2': '180', '3': '270'}[rotate_choice]
@@ -194,17 +194,17 @@ if __name__ == "__main__":
                             print("Too many invalid attempts. Exiting.", file=sys.stderr)
                             sys.exit(1)
                     break
-                print("\033[33mPlease enter 1, 2, 3, or 4 only.\033[0m", file=sys.stderr)
+                print("\033[93mPlease enter 1, 2, 3, or 4 only.\033[0m", file=sys.stderr)
                 attempt += 1
                 if attempt == max_attempts:
-                    print("\033[33mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
+                    print("\033[93mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
                     sys.exit(1)
         print()
 
         attempt = 0
         output_format = None
         while attempt < max_attempts:
-            format_choice = input("\033[33mOutput format \033[0m\n1. PNG, 2. JPG, 3. BMP, 4. GIF: ").strip()
+            format_choice = input("\033[93mOutput format \033[0m\n1. PNG, 2. JPG, 3. BMP, 4. GIF: ").strip()
             print()
             if format_choice == '1':
                 output_format = 'png'
@@ -218,10 +218,10 @@ if __name__ == "__main__":
             elif format_choice == '4':
                 output_format = 'gif'
                 break
-            print("\033[33mPlease enter 1, 2, 3, or 4 only.\033[0m", file=sys.stderr)
+            print("\033[93mPlease enter 1, 2, 3, or 4 only.\033[0m", file=sys.stderr)
             attempt += 1
             if attempt == max_attempts:
-                print("\033[33mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
+                print("\033[93mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
                 sys.exit(1)
         print()
 
@@ -229,12 +229,12 @@ if __name__ == "__main__":
         successful, failed, output_dir = rotate_or_flip_images(input_path, operation, choice, custom_angle, include_subfolders, output_format)
         
         print("\n" * 1)
-        print("\033[33mRotate/Flip Summary\033[0m")
+        print("\033[93mRotate/Flip Summary\033[0m")
         print("-------------")
-        print(f"\033[33m✅ Successfully processed:\033[0m {len(successful)}\033[33m images\033[0m")
+        print(f"\033[93m✅ Successfully processed:\033[0m {len(successful)}\033[93m images\033[0m")
         if failed:
-            print(f"\033[33mFailed operations:\033[0m {len(failed)} \033[33m(see rotate_flip_errors.log in output folder)\033[0m")
-        print(f"\033[33mOutput folder:\033[0m \n{output_dir}")
+            print(f"\033[93mFailed operations:\033[0m {len(failed)} \033[93m(see rotate_flip_errors.log in output folder)\033[0m")
+        print(f"\033[93mOutput folder:\033[0m \n{output_dir}")
         print("\n" * 2)
 
         djj.prompt_open_folder(output_dir)

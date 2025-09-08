@@ -1,0 +1,200 @@
+🔹 djj.cleanup_tabs (4 file(s)):
+   - djjtb.py
+   - djjtb/helpers/update_tools.py
+   - test/djjtb_cd_beta1.py
+   - test/djjtb_gui.py
+
+🔹 djj.collect_files (1 file(s)):
+   - djjtb/quick_tools/plist_converter.py
+
+🔹 djj.function (1 file(s)):
+   - djjtb/helpers/scan_djj_usage.py
+
+🔹 djj.get_audio_options (2 file(s)):
+   - djjtb/media_tools/video_tools/video_re-encoder.py
+   - djjtb/media_tools/video_tools/video_splitter.py
+
+🔹 djj.get_centralized_media_input (2 file(s)):
+   - djjtb/helpers/djj.readme_generator.py
+   - test/djjtb_input_handling.py
+
+🔹 djj.get_centralized_output_path (2 file(s)):
+   - djjtb/helpers/djj.readme_generator.py
+   - test/djjtb_input_handling.py
+
+🔹 djj.get_float_input (3 file(s)):
+   - djjtb/media_tools/video_tools/video_reverse_merge.py
+   - djjtb/media_tools/video_tools/video_slideshow_watermark.py
+   - djjtb/media_tools/video_tools/video_splitter.py
+
+🔹 djj.get_int_input (2 file(s)):
+   - djjtb/media_tools/image_tools/image_padder.py
+   - djjtb/media_tools/video_tools/video_splitter.py
+
+🔹 djj.get_media_input (1 file(s)):
+   - djjtb/media_tools/playlist_generator.py
+
+🔹 djj.get_path_input (10 file(s)):
+   - djjtb/ai_tools/codeformer_runner.py
+   - djjtb/media_tools/image_tools/image_collage_creator.py
+   - djjtb/media_tools/image_tools/image_slideshow_maker.py
+   - djjtb/media_tools/metadata_tool.py
+   - djjtb/media_tools/playlist_generator.py
+   - djjtb/media_tools/video_tools/video_reverse_merge.py
+   - djjtb/media_tools/video_tools/video_slideshow_watermark.py
+   - djjtb/quick_tools/add_root_dir_prefix.py
+   - djjtb/quick_tools/file_identifier.py
+   - djjtb/quick_tools/readme_generator.py
+
+🔹 djj.get_string_input (3 file(s)):
+   - djjtb/ai_tools/codeformer_runner.py
+   - djjtb/media_tools/playlist_generator.py
+   - djjtb/quick_tools/readme_generator.py
+
+🔹 djj.input_folder (1 file(s)):
+   - djjtb/quick_tools/plist_converter.py
+
+🔹 djj.input_paths (1 file(s)):
+   - djjtb/quick_tools/plist_converter.py
+
+🔹 djj.launch_app (1 file(s)):
+   - test/djjtb_cd_beta1.py
+
+🔹 djj.open_app (2 file(s)):
+   - djjtb.py
+   - test/djjtb_gui.py
+
+🔹 djj.open_terminal_with_settings (3 file(s)):
+   - djjtb.py
+   - test/djjtb_cd_beta1.py
+   - test/djjtb_gui.py
+
+🔹 djj.print_header (1 file(s)):
+   - djjtb/quick_tools/plist_converter.py
+
+🔹 djj.prompt_choice (28 file(s)):
+   - djjtb.py
+   - djjtb/ai_tools/codeformer_runner.py
+   - djjtb/helpers/djj.readme_generator.py
+   - djjtb/media_tools/image_tools/image_collage_creator.py
+   - djjtb/media_tools/image_tools/image_converter.py
+   - djjtb/media_tools/image_tools/image_flip_rotate.py
+   - djjtb/media_tools/image_tools/image_padder.py
+   - djjtb/media_tools/image_tools/image_pairing.py
+   - djjtb/media_tools/image_tools/image_resizer.py
+   - djjtb/media_tools/image_tools/image_slideshow_maker.py
+   - djjtb/media_tools/image_tools/image_strip_padding.py
+   - djjtb/media_tools/metadata_tool.py
+   - djjtb/media_tools/playlist_generator.py
+   - djjtb/media_tools/video_tools/video_cropper.py
+   - djjtb/media_tools/video_tools/video_frame_extractor.py
+   - djjtb/media_tools/video_tools/video_gif_converter.py
+   - djjtb/media_tools/video_tools/video_group_merger.py
+   - djjtb/media_tools/video_tools/video_re-encoder.py
+   - djjtb/media_tools/video_tools/video_reverse_merge.py
+   - djjtb/media_tools/video_tools/video_slideshow_watermark.py
+   - djjtb/media_tools/video_tools/video_splitter.py
+   - djjtb/quick_tools/app_launcher.py
+   - djjtb/quick_tools/file_identifier.py
+   - djjtb/quick_tools/image_finder.py
+   - djjtb/quick_tools/plist_converter.py
+   - djjtb/quick_tools/readme_generator.py
+   - test/djjtb_cd_beta1.py
+   - test/djjtb_input_handling.py
+
+🔹 djj.prompt_open_folder (20 file(s)):
+   - djjtb/media_tools/image_tools/image_collage_creator.py
+   - djjtb/media_tools/image_tools/image_converter.py
+   - djjtb/media_tools/image_tools/image_flip_rotate.py
+   - djjtb/media_tools/image_tools/image_padder.py
+   - djjtb/media_tools/image_tools/image_pairing.py
+   - djjtb/media_tools/image_tools/image_resizer.py
+   - djjtb/media_tools/image_tools/image_slideshow_maker.py
+   - djjtb/media_tools/image_tools/image_strip_padding.py
+   - djjtb/media_tools/playlist_generator.py
+   - djjtb/media_tools/video_tools/video_cropper.py
+   - djjtb/media_tools/video_tools/video_frame_extractor.py
+   - djjtb/media_tools/video_tools/video_gif_converter.py
+   - djjtb/media_tools/video_tools/video_group_merger.py
+   - djjtb/media_tools/video_tools/video_re-encoder.py
+   - djjtb/media_tools/video_tools/video_reverse_merge.py
+   - djjtb/media_tools/video_tools/video_slideshow_watermark.py
+   - djjtb/media_tools/video_tools/video_speed_changer.py
+   - djjtb/media_tools/video_tools/video_splitter.py
+   - djjtb/quick_tools/add_root_dir_prefix.py
+   - djjtb/quick_tools/readme_generator.py
+
+🔹 djj.return_to_djjtb (3 file(s)):
+   - djjtb/helpers/update_tools.py
+   - djjtb/quick_tools/app_launcher.py
+   - djjtb/quick_tools/image_finder.py
+
+🔹 djj.run_app_launcher (2 file(s)):
+   - djjtb.py
+   - test/djjtb_cd_beta1.py
+
+🔹 djj.run_command_in_tab (3 file(s)):
+   - djjtb.py
+   - test/djjtb_cd_beta1.py
+   - test/djjtb_gui.py
+
+🔹 djj.run_script_in_tab (4 file(s)):
+   - djjtb.py
+   - test/djjtb_cd_beta1.py
+   - test/djjtb_gui.py
+   - test/djjtb_input_handling.py
+
+🔹 djj.setup_logging (7 file(s)):
+   - djjtb/media_tools/image_tools/image_collage_creator.py
+   - djjtb/media_tools/video_tools/video_cropper.py
+   - djjtb/media_tools/video_tools/video_frame_extractor.py
+   - djjtb/media_tools/video_tools/video_gif_converter.py
+   - djjtb/media_tools/video_tools/video_group_merger.py
+   - djjtb/media_tools/video_tools/video_re-encoder.py
+   - djjtb/media_tools/video_tools/video_splitter.py
+
+🔹 djj.setup_terminal (5 file(s)):
+   - djjtb.py
+   - djjtb/media_tools/metadata_tool.py
+   - djjtb/quick_tools/file_identifier.py
+   - test/djjtb_cd_beta1.py
+   - test/djjtb_gui.py
+
+🔹 djj.switch_to_terminal_tab (3 file(s)):
+   - djjtb.py
+   - test/djjtb_cd_beta1.py
+   - test/djjtb_input_handling.py
+
+🔹 djj.wait_with_skip (5 file(s)):
+   - djjtb.py
+   - djjtb/quick_tools/app_launcher.py
+   - djjtb/quick_tools/readme_generator.py
+   - test/djjtb_cd_beta1.py
+   - test/djjtb_input_handling.py
+
+🔹 djj.what_next (24 file(s)):
+   - djjtb/ai_tools/codeformer_runner.py
+   - djjtb/media_tools/image_tools/image_collage_creator.py
+   - djjtb/media_tools/image_tools/image_converter.py
+   - djjtb/media_tools/image_tools/image_flip_rotate.py
+   - djjtb/media_tools/image_tools/image_padder.py
+   - djjtb/media_tools/image_tools/image_pairing.py
+   - djjtb/media_tools/image_tools/image_resizer.py
+   - djjtb/media_tools/image_tools/image_slideshow_maker.py
+   - djjtb/media_tools/image_tools/image_strip_padding.py
+   - djjtb/media_tools/metadata_tool.py
+   - djjtb/media_tools/playlist_generator.py
+   - djjtb/media_tools/video_tools/video_cropper.py
+   - djjtb/media_tools/video_tools/video_frame_extractor.py
+   - djjtb/media_tools/video_tools/video_gif_converter.py
+   - djjtb/media_tools/video_tools/video_group_merger.py
+   - djjtb/media_tools/video_tools/video_re-encoder.py
+   - djjtb/media_tools/video_tools/video_reverse_merge.py
+   - djjtb/media_tools/video_tools/video_slideshow_watermark.py
+   - djjtb/media_tools/video_tools/video_speed_changer.py
+   - djjtb/media_tools/video_tools/video_splitter.py
+   - djjtb/quick_tools/add_root_dir_prefix.py
+   - djjtb/quick_tools/file_identifier.py
+   - djjtb/quick_tools/plist_converter.py
+   - djjtb/quick_tools/readme_generator.py
+

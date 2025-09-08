@@ -9,12 +9,12 @@ def handle_video_tools_with_central_paths(self):
         self.show_video_tools_menu()
         
         if first_entry:
-            choice = djj.prompt_choice("\033[33mChoose a Tool\033[0m",
+            choice = djj.prompt_choice("\033[93mChoose a Tool\033[0m",
                                      ['1', '2', '3', '4', '5', '6', '7', '8', '0', '00'])
             first_entry = False
         else:
             djj.wait_with_skip(8, "Back to Video Tools")
-            choice = djj.prompt_choice("\033[33mChoose another option\033[0m",
+            choice = djj.prompt_choice("\033[93mChoose another option\033[0m",
                                      ['1', '2', '3', '4', '5', '6', '7', '8', '0', '00'])
         
         # Get paths BEFORE launching script
@@ -39,7 +39,7 @@ def handle_video_tools_with_central_paths(self):
             )
             
             if not media_files:
-                print("\033[33mNo media files selected. Returning to menu.\033[0m")
+                print("\033[93mNo media files selected. Returning to menu.\033[0m")
                 continue
             
             # Get output path centrally
@@ -73,12 +73,12 @@ def handle_image_tools_with_central_paths(self):
         self.show_image_tools_menu()
         
         if first_entry:
-            choice = djj.prompt_choice("\033[33mChoose a Tool\033[0m",
+            choice = djj.prompt_choice("\033[93mChoose a Tool\033[0m",
                                      ['1', '2', '3', '4', '5', '6', '7', '8', '0', '00'])
             first_entry = False
         else:
             djj.wait_with_skip(8, "Back to Image Tools")
-            choice = djj.prompt_choice("\033[33mChoose another option\033[0m",
+            choice = djj.prompt_choice("\033[93mChoose another option\033[0m",
                                      ['1', '2', '3', '4', '5', '6', '7', '8', '0', '00'])
         
         # Get paths BEFORE launching script
@@ -104,7 +104,7 @@ def handle_image_tools_with_central_paths(self):
             )
             
             if not media_files:
-                print("\033[33mNo media files selected. Returning to menu.\033[0m")
+                print("\033[93mNo media files selected. Returning to menu.\033[0m")
                 continue
             
             # Get output path centrally

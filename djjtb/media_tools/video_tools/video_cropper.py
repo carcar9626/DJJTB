@@ -102,11 +102,11 @@ def collect_videos_from_folder(input_path, subfolders=False):
         else:
             videos = [f for f in input_path_obj.glob('*') if f.suffix.lower() in video_extensions and f.is_file()]
     else:
-        print("\033[33mError: Input must be a video file or directory.\033[0m", file=sys.stderr)
+        print("\033[93mError: Input must be a video file or directory.\033[0m", file=sys.stderr)
         return []
 
     if not videos:
-        print("\033[33mError: No video files found\033[0m.", file=sys.stderr)
+        print("\033[93mError: No video files found\033[0m.", file=sys.stderr)
         return []
     
     return sorted(videos, key=lambda x: str(x).lower())
@@ -124,9 +124,9 @@ def collect_videos_from_paths(file_paths):
         if path_obj.is_file() and path_obj.suffix.lower() in VIDEO_EXTENSIONS:
             videos.append(path_obj)
         elif path_obj.is_dir():
-            print(f"\033[33m⚠️ Skipping directory in file list: \033[0m{path}")
+            print(f"\033[93m⚠️ Skipping directory in file list: \033[0m{path}")
         else:
-            print(f"\033[33m⚠️ Skipping invalid video file:\033[0m {path}")
+            print(f"\033[93m⚠️ Skipping invalid video file:\033[0m {path}")
     
     return sorted(videos, key=lambda x: str(x).lower())
 
@@ -151,7 +151,7 @@ def process_videos(video_paths, audio_option, crop_mode):
             crop_filter, raw_log = get_cropdetect_crop(file)
             if not crop_filter:
                 logger.error(f"Could not detect borders for {file.name}")
-                print(f"\033[33m❌ Skipped: Could not detect borders for\033[0m {file.name}")
+                print(f"\033[93m❌ Skipped: Could not detect borders for\033[0m {file.name}")
                 failed_videos += 1
                 continue
         elif crop_mode in {"2.1", "2.2"}:
@@ -176,7 +176,7 @@ def process_videos(video_paths, audio_option, crop_mode):
 
         # Progress indicator
         progress = (i / total) * 100
-        sys.stdout.write(f"\033[33m\rProcessing\033[0m {i}/{total} ({progress:.1f}%)...")
+        sys.stdout.write(f"\033[93m\rProcessing\033[0m {i}/{total} ({progress:.1f}%)...")
         sys.stdout.flush()
 
         result = subprocess.run(cmd, stderr=subprocess.PIPE, stdout=subprocess.DEVNULL, text=True)
@@ -207,13 +207,13 @@ def process_videos(video_paths, audio_option, crop_mode):
     sys.stdout.write("\r" + " " * 60 + "\r")
     sys.stdout.flush()
     
-    logger.info(f"\033[33mCropped\033[0m {successful_videos} \033[33mof\033[0m {total} \033[33mvideos successfully\033[0m")
-    print("\033[33m\nCropping Summary\033[0m")
+    logger.info(f"\033[93mCropped\033[0m {successful_videos} \033[93mof\033[0m {total} \033[93mvideos successfully\033[0m")
+    print("\033[93m\nCropping Summary\033[0m")
     print("----------------")
-    print(f"\033[33mVideos processed:\033[0m {total}")
-    print(f"\033[33mVideos successfully cropped:\033[0m {successful_videos}")
-    print(f"\033[33mVideos failed:\033[0m {failed_videos}")
-    print(f"\033[33mOutput folder(s):\033[0m {', '.join(str(d) for d in output_base_dirs)}")
+    print(f"\033[93mVideos processed:\033[0m {total}")
+    print(f"\033[93mVideos successfully cropped:\033[0m {successful_videos}")
+    print(f"\033[93mVideos failed:\033[0m {failed_videos}")
+    print(f"\033[93mOutput folder(s):\033[0m {', '.join(str(d) for d in output_base_dirs)}")
     print()
 
     djj.prompt_open_folder(output_base_dirs[0])
@@ -231,7 +231,7 @@ def main():
         
         # Get input mode
         input_mode = djj.prompt_choice(
-            "\033[33mInput mode:\033[0m\n1. Folder path\n2. Space-separated file paths\n",
+            "\033[93mInput mode:\033[0m\n1. Folder path\n2. Space-separated file paths\n",
             ['1', '2'],
             default='1'
         )
@@ -241,14 +241,14 @@ def main():
         
         if input_mode == '1':
             # Folder mode
-            input_path = input("📁 \033[33mEnter folder path: \n ->\033[0m ").strip().strip('"')
+            input_path = input("📁 \033[93mEnter folder path: \n ->\033[0m ").strip().strip('"')
             if not input_path:
-                print("\033[33mNo input path provided.\033[0m")
+                print("\033[93mNo input path provided.\033[0m")
                 continue
             
             print()
             include_sub = djj.prompt_choice(
-                "\033[33mInclude subfolders?\033[0m\n1. Yes, 2. No",
+                "\033[93mInclude subfolders?\033[0m\n1. Yes, 2. No",
                 ['1', '2'],
                 default='2'
             ) == '1'
@@ -258,10 +258,10 @@ def main():
             
         else:
             # File paths mode
-            file_paths = input("📁 \033[33mEnter space-separated file paths: \n ->\033[0m ").strip()
+            file_paths = input("📁 \033[93mEnter space-separated file paths: \n ->\033[0m ").strip()
             
             if not file_paths:
-                print("❌ \033[33mNo file paths provided.\033[0m")
+                print("❌ \033[93mNo file paths provided.\033[0m")
                 continue
             
             video_paths = collect_videos_from_paths(file_paths)
@@ -270,24 +270,24 @@ def main():
         if not video_paths:
             continue
 
-        print("\033[33mAudio options:\033[0m")
+        print("\033[93mAudio options:\033[0m")
         print("1. Keep original audio")
         print("2. Add silent track")
         print("3. Remove audio")
         audio_option = djj.prompt_choice("Choose audio option: \n ", ['1', '2', '3'], default='1')
         print()
 
-        print("\033[33mCropping Mode:\033[0m")
+        print("\033[93mCropping Mode:\033[0m")
         print("1. Trim Paddings")
         print("2. Crop to Fit")
-        crop_mode = djj.prompt_choice("C\033[33mhoose cropping mode: \n\033[0m", ['1', '2'], default='1')
+        crop_mode = djj.prompt_choice("C\033[93mhoose cropping mode: \n\033[0m", ['1', '2'], default='1')
 
         if crop_mode == '2':
             print()
-            print("\033[33mCrop to Fit Options:\033[0m")
+            print("\033[93mCrop to Fit Options:\033[0m")
             print("1. Horizontal (16:9)")
             print("2. Vertical (9:16)")
-            submode = djj.prompt_choice("\033[33mChoose sub-mode:\033[0m \n ", ['1', '2'], default='1')
+            submode = djj.prompt_choice("\033[93mChoose sub-mode:\033[0m \n ", ['1', '2'], default='1')
             crop_mode = f"2.{submode}"
         print()
 

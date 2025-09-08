@@ -40,16 +40,16 @@ def process_folder(folder_path, include_sub=False):
     
     # Validate input path
     if not folder.exists():
-        print("\033[33mError: Input path does not exist.\033[0m", file=sys.stderr)
+        print("\033[93mError: Input path does not exist.\033[0m", file=sys.stderr)
         return 0, []
     
     # Set output directory to ***input_path***/Output/Stripped (matching resizer pattern)
     output_base = folder / "Output" / "Stripped"
     output_base.mkdir(parents=True, exist_ok=True)
     
-    print(f"\n📂 \033[33mProcessing images in:\033[0m {folder}")
+    print(f"\n📂 \033[93mProcessing images in:\033[0m {folder}")
     if include_sub:
-        print("\n📁 \033[33mIncluding subfolders\033[0m")
+        print("\n📁 \033[93mIncluding subfolders\033[0m")
     print()
     
     # Collect images using same logic as resizer
@@ -63,13 +63,13 @@ def process_folder(folder_path, include_sub=False):
         pattern = '**/*' if include_sub else '*'
         images = [f for f in folder.glob(pattern) if f.suffix.lower() in image_extensions and f.is_file()]
     else:
-        print("\033[33mError: Input must be a file or directory.\033[0m", file=sys.stderr)
+        print("\033[93mError: Input must be a file or directory.\033[0m", file=sys.stderr)
         return 0, []
     
-    print("\033[33mScanning for Images...\033[0m")
-    print(f"{len(images)} \033[33mimages found\033[0m")
+    print("\033[93mScanning for Images...\033[0m")
+    print(f"{len(images)} \033[93mimages found\033[0m")
     print()
-    print("\033[33mStripping padding...\033[0m")
+    print("\033[93mStripping padding...\033[0m")
     
     successful = 0
     failed = []
@@ -90,12 +90,12 @@ def process_folder(folder_path, include_sub=False):
                 cropped.save(out_path)
                 
                 successful += 1
-                sys.stdout.write(f"\r\033[33mProcessing image\033[0m {i}\033[33m/\033[0m{len(images)}...")
+                sys.stdout.write(f"\r\033[93mProcessing image\033[0m {i}\033[93m/\033[0m{len(images)}...")
                 sys.stdout.flush()
                 
         except Exception as e:
             failed.append((file.name, str(e)))
-            sys.stdout.write(f"\rP\033[33mrocessing image\033[0m {i}\033[33m/\033[0m{len(images)}... \033[33m(failed)\033[0m")
+            sys.stdout.write(f"\rP\033[93mrocessing image\033[0m {i}\033[93m/\033[0m{len(images)}... \033[93m(failed)\033[0m")
             sys.stdout.flush()
     
     # Clear processing line
@@ -132,18 +132,18 @@ def main():
                 if os.path.exists(normalized_path):
                     input_path = normalized_path
                     break
-                print(f"\033[33mError:\033[0m '{normalized_path}' \033[33mdoes not exist. Ensure the path is correct and the external drive (if any) is mounted. Please try again.\033[0m", file=sys.stderr)
+                print(f"\033[93mError:\033[0m '{normalized_path}' \033[93mdoes not exist. Ensure the path is correct and the external drive (if any) is mounted. Please try again.\033[0m", file=sys.stderr)
             except Exception as e:
-                print(f"\033[33mError resolving path \033[0m'{input_path}': {e}. \033[33mPlease try again.\033[0m", file=sys.stderr)
+                print(f"\033[93mError resolving path \033[0m'{input_path}': {e}. \033[93mPlease try again.\033[0m", file=sys.stderr)
             attempt += 1
             if attempt == max_attempts:
-                print("\033[33mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
+                print("\033[93mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
                 sys.exit(1)
         
         print()
         
         # Prompt for subfolder inclusion (same as resizer)
-        include_sub = djj.prompt_choice("\033[33mInclude subfolders?\033[0m\n1. Yes, 2. No ", ['1', '2'], default='2') == '1'
+        include_sub = djj.prompt_choice("\033[93mInclude subfolders?\033[0m\n1. Yes, 2. No ", ['1', '2'], default='2') == '1'
         print()
         print("\033[1;33mProcessing...\033[0m")
 
@@ -153,12 +153,12 @@ def main():
         # Display results (matching resizer format)
         print("\033[1;33mStrip Padding Summary\033[0m")
         print("---------------------")
-        print(f"\033[33mSuccessfully processed:\033[0m {successful} \033[33mimages\033[0m")
+        print(f"\033[93mSuccessfully processed:\033[0m {successful} \033[93mimages\033[0m")
         if failed:
-            print("\033[33mFailed processing:\033[0m")
+            print("\033[93mFailed processing:\033[0m")
             for name, error in failed:
                 print(f"  {name}: {error}")
-        print(f"\033[33mOutput folder: \033[0m\n{output_base}")
+        print(f"\033[93mOutput folder: \033[0m\n{output_base}")
         print("\n" * 2)
         
         # Open output folder

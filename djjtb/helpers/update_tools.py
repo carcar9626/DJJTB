@@ -33,7 +33,7 @@ def update_script(file_path):
         + [f"{indent}{line}" for line in lines[main_start + 1:]]
         + [
             f"{indent}except KeyboardInterrupt:\n",
-            f"{indent}    print(\"\\n\\033[33m⚠️ Process interrupted by user.\\033[0m\")\n",
+            f"{indent}    print(\"\\n\\033[93m⚠️ Process interrupted by user.\\033[0m\")\n",
             f"{indent}    djj.cleanup_tabs()  # Close the current tool tab\n",
             f"{indent}    djj.return_to_djjtb()  # Switch to launcher tab\n",
            "f{indent}    return\n"

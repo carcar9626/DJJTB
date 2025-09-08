@@ -154,19 +154,19 @@ if __name__ == "__main__":
         attempt = 0
         input_path = None
         while attempt < max_attempts:
-            input_path = input("\033[33mEnter path:\033[0m \n -> ").strip()
+            input_path = input("\033[93mEnter path:\033[0m \n -> ").strip()
             input_path = clean_path(input_path)
             try:
                 normalized_path = str(pathlib.Path(input_path).resolve())
                 if os.path.exists(normalized_path):
                     input_path = normalized_path
                     break
-                print(f"\033[33mError:\033[0m '{normalized_path}' \033[33mdoes not exist. Ensure the path is correct and the external drive (if any) is mounted.\033[0m", file=sys.stderr)
+                print(f"\033[93mError:\033[0m '{normalized_path}' \033[93mdoes not exist. Ensure the path is correct and the external drive (if any) is mounted.\033[0m", file=sys.stderr)
             except Exception as e:
-                print(f"\033[33mError resolving path\033[0m '{input_path}': {e}. \033[33mPlease try again.\033[0m", file=sys.stderr)
+                print(f"\033[93mError resolving path\033[0m '{input_path}': {e}. \033[93mPlease try again.\033[0m", file=sys.stderr)
             attempt += 1
             if attempt == max_attempts:
-                print("\033[33mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
+                print("\033[93mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
                 sys.exit(1)
         print()
 
@@ -177,15 +177,15 @@ if __name__ == "__main__":
         pic1_duration = None
         while attempt < max_attempts:
             try:
-                pic1_duration = float(input("\033[33mDuration for first image (seconds)\033[0m [default: 5]: ").strip() or 5)
+                pic1_duration = float(input("\033[93mDuration for first image (seconds)\033[0m [default: 5]: ").strip() or 5)
                 if pic1_duration > 0:
                     break
-                print("\033[33mPlease enter a positive number.\033[0m", file=sys.stderr)
+                print("\033[93mPlease enter a positive number.\033[0m", file=sys.stderr)
             except ValueError:
-                print("\033[33mPlease enter a valid number.\033[0m", file=sys.stderr)
+                print("\033[93mPlease enter a valid number.\033[0m", file=sys.stderr)
             attempt += 1
             if attempt == max_attempts:
-                print("\033[33mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
+                print("\033[93mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
                 sys.exit(1)
         print()
 
@@ -193,15 +193,15 @@ if __name__ == "__main__":
         pic2_duration = None
         while attempt < max_attempts:
             try:
-                pic2_duration = float(input("\033[33mDuration for second image (seconds)\033[0m\n [default: 5]: ").strip() or 5)
+                pic2_duration = float(input("\033[93mDuration for second image (seconds)\033[0m\n [default: 5]: ").strip() or 5)
                 if pic2_duration > 0:
                     break
                 print("Please enter a positive number.", file=sys.stderr)
             except ValueError:
-                print("\033[33mPlease enter a valid number.\033[0m", file=sys.stderr)
+                print("\033[93mPlease enter a valid number.\033[0m", file=sys.stderr)
             attempt += 1
             if attempt == max_attempts:
-                print("\033[33mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
+                print("\033[93mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
                 sys.exit(1)
         print()
 
@@ -213,17 +213,17 @@ if __name__ == "__main__":
                 print()
                 if transition_duration >= 0:
                     break
-                print("\033[33mPlease enter a non-negative number.\033[0m", file=sys.stderr)
+                print("\033[93mPlease enter a non-negative number.\033[0m", file=sys.stderr)
             except ValueError:
-                print("\033[33mPlease enter a valid number.\033[0m", file=sys.stderr)
+                print("\033[93mPlease enter a valid number.\033[0m", file=sys.stderr)
             attempt += 1
             if attempt == max_attempts:
-                print("\033[33mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
+                print("\033[93mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
                 sys.exit(1)
         print()
 
         total_duration = pic1_duration + pic2_duration - transition_duration
-        print(f"\033[33mTotal video duration: \033[0m{total_duration} seconds")
+        print(f"\033[93mTotal video duration: \033[0m{total_duration} seconds")
         print("-------------")
 
         success_count, error_count, output_base = process_pairs(
@@ -231,12 +231,12 @@ if __name__ == "__main__":
         )
 
         print("\n" * 1)
-        print("\033[33mPairing Summary\033[0m")
+        print("\033[93mPairing Summary\033[0m")
         print("-------------")
-        print(f"✅ \033[33mSuccessfully processed:\033[0m {success_count} \033[33mpairs\033[0m")
+        print(f"✅ \033[93mSuccessfully processed:\033[0m {success_count} \033[93mpairs\033[0m")
         if error_count:
-            print(f"\033[33mFailed pairs:\033[0m {error_count} \033[33m(see pairing_errors.log in output folder)\033[0m")
-        print(f"\033[33mOutput folder: \033[0m\n{output_base}")
+            print(f"\033[93mFailed pairs:\033[0m {error_count} \033[93m(see pairing_errors.log in output folder)\033[0m")
+        print(f"\033[93mOutput folder: \033[0m\n{output_base}")
         print("\n" * 2)
 
         djj.prompt_open_folder(output_base)

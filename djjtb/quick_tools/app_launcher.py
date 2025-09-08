@@ -9,9 +9,9 @@ def launch_app(app_name):
         subprocess.run(["open", "-a", app_name], check=True)
         print(f"\033[92m✓ Launched {app_name}\033[0m")
     except subprocess.CalledProcessError:
-        print(f"\033[33m⚠️  Could not launch {app_name} - app may not be installed\033[0m")
+        print(f"\033[93m⚠️  Could not launch {app_name} - app may not be installed\033[0m")
     except Exception as e:
-        print(f"\033[33m⚠️  Error launching {app_name}: {e}\033[0m")
+        print(f"\033[93m⚠️  Error launching {app_name}: {e}\033[0m")
 
 def daily_apps_menu():
     """Daily Apps submenu"""
@@ -34,7 +34,7 @@ def daily_apps_menu():
         print("\033[92m-------------------------------\033[0m")
         
         choice = djj.prompt_choice(
-            "\033[33mChoose app\033[0m",
+            "\033[93mChoose app\033[0m",
             ['1', '2', '3', '4', '5', '6', '7', '0', '00']
         )
         
@@ -76,7 +76,7 @@ def tools_utilities_menu():
         print("\033[92m-------------------------------\033[0m")
         
         choice = djj.prompt_choice(
-            "\033[33mChoose a tool\033[0m",
+            "\033[93mChoose a tool\033[0m",
             ['1', '2', '3', '4', '5', '0', '00']
         )
         
@@ -116,7 +116,7 @@ def web_tools_menu():
         print("\033[92m-------------------------------\033[0m")
         
         choice = djj.prompt_choice(
-            "\033[33mChoose a tool\033[0m",
+            "\033[93mChoose a tool\033[0m",
             ['1', '2', '3', '4', '5', '0', '00']
         )
         
@@ -158,7 +158,7 @@ def system_utilities_menu():
         print("\033[92m-------------------------------\033[0m")
         
         choice = djj.prompt_choice(
-            "\033[33mChoose a system utility\033[0m",
+            "\033[93mChoose a system utility\033[0m",
             ['1', '2', '3', '4', '5', '6', '7', '0', '00']
         )
         
@@ -208,7 +208,7 @@ def app_launcher_main():
         print("\033[92m===================================\033[0m")
         
         choice = djj.prompt_choice(
-            "\033[33mChoose an option\033[0m",
+            "\033[93mChoose an option\033[0m",
             ['1', '2', '3', '4', '5', '6', '7', '8', '0', '00']
         )
         

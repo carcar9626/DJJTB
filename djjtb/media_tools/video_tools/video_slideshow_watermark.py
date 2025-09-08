@@ -6,8 +6,8 @@ import shutil
 from collections import defaultdict
 import djjtb.utils as djj
 os.system('clear')
-# Block 1 – FFmpeg Helper
 
+# Block 1 – FFmpeg Helper
 def get_video_dimensions(video_path):
     try:
         result = subprocess.run(
@@ -68,8 +68,18 @@ def build_slideshow(images, image_duration, video_duration, output_size, slidesh
 
     concat_list.unlink(missing_ok=True)
 
-# Block 3 – Overlay slideshow
-def overlay_watermark(video_path, slideshow_path, output_path, scale_ratio, video_width, video_height):
+# Block 3 – Overlay slideshow with flexible positioning
+def get_overlay_position(position_choice):
+    """Get overlay position coordinates based on user choice"""
+    positions = {
+        '1': ('10', '10'),                    # Top-left
+        '2': ('W-w-10', '10'),               # Top-right
+        '3': ('10', 'H-h-10'),               # Bottom-left
+        '4': ('W-w-10', 'H-h-10')            # Bottom-right (default)
+    }
+    return positions.get(position_choice, positions['4'])  # Default to bottom-right
+
+def overlay_watermark(video_path, slideshow_path, output_path, scale_ratio, video_width, video_height, overlay_position):
     overlay_h = int(video_height * scale_ratio)
 
     # 🔍 Get actual slideshow width (after FFmpeg scales it)
@@ -86,12 +96,15 @@ def overlay_watermark(video_path, slideshow_path, output_path, scale_ratio, vide
         print(f"⚠️ Could not get slideshow width, using fallback.")
         overlay_w = int(video_width * 0.5)
 
+    # Get position coordinates
+    pos_x, pos_y = get_overlay_position(overlay_position)
+
     # ✅ FFmpeg: drop shadow matches scaled overlay exactly
     filter_complex = (
         f"[1:v]scale={overlay_w}:{overlay_h}[wm];"
         f"color=black@0.4:size={overlay_w}x{overlay_h}:duration=1[shadow];"
         f"[shadow][wm]overlay=3:3[wm_with_shadow];"
-        f"[0:v][wm_with_shadow]overlay=10:H-h-10"
+        f"[0:v][wm_with_shadow]overlay={pos_x}:{pos_y}"
     )
 
     subprocess.run([
@@ -108,7 +121,7 @@ def overlay_watermark(video_path, slideshow_path, output_path, scale_ratio, vide
     ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 # Block 4 – Main processing
-def process_folder(folder, image_duration, scale_ratio, is_flat_mode, base_output_dir=None):
+def process_folder(folder, image_duration, scale_ratio, overlay_position, is_flat_mode, base_output_dir=None):
     valid_exts = (".mp4", ".mov", ".webm")
     image_exts = (".jpg", ".jpeg", ".png", ".webp")
     videos = [f for f in os.listdir(folder) if f.lower().endswith(valid_exts)]
@@ -152,13 +165,13 @@ def process_folder(folder, image_duration, scale_ratio, is_flat_mode, base_outpu
     )
 
     output_path = out_watermarked / f"{video_stem}_watermarked.mp4"
-    overlay_watermark(video_path, slideshow_path, output_path, scale_ratio, video_width, video_height)
+    overlay_watermark(video_path, slideshow_path, output_path, scale_ratio, video_width, video_height, overlay_position)
 
     print(f"✅ Done: {output_path}")
     print()
     
 # Block 5 – Flat Mode Processor
-def process_flat_mode(parent, image_duration, scale_ratio):
+def process_flat_mode(parent, image_duration, scale_ratio, overlay_position):
     valid_exts = (".mp4", ".mov", ".webm")
     image_exts = (".jpg", ".jpeg", ".png", ".webp")
     videos = [f for f in os.listdir(parent) if f.lower().endswith(valid_exts)]
@@ -166,7 +179,7 @@ def process_flat_mode(parent, image_duration, scale_ratio):
     total = len(videos)
     for idx, video_file in enumerate(videos, 1):
         percent = int((idx / total) * 100)
-        print(f"📽️ Processing {idx}/{total} videos ({percent}%)...")
+        print(f"\033[93m📽️ Processing \033[0m{idx}\033[93m/\033[0m{total} \033[93mvideos\033[0m ({percent}%)\033[93m...\033[0m")
         video_path = os.path.join(parent, video_file)
         video_stem = Path(video_file).stem
 
@@ -176,13 +189,13 @@ def process_flat_mode(parent, image_duration, scale_ratio):
             if f.lower().endswith(image_exts) and Path(f).stem.startswith(video_stem)
         ])
         if not images:
-            print(f"⚠️ No matching images for {video_file}, skipping.")
+            print(f"\033[93m⚠️ No matching images for\033[0m {video_file}, \033[93mskipping.\033[0m")
             continue
 
         # Get video info
         video_duration, video_width, video_height = get_video_dimensions(video_path)
         if not video_duration or not video_height:
-            print(f"❌ Could not retrieve video info for {video_path}")
+            print(f"\033[93m❌ Could not retrieve video info for \033[0m{video_path}")
             continue
 
         # Prepare output directories
@@ -214,7 +227,7 @@ def process_flat_mode(parent, image_duration, scale_ratio):
             shutil.copy(str(slideshow_path), str(final_slideshow))
 
         output_path = watermarked_dir / f"{video_stem}_watermarked.mp4"
-        overlay_watermark(video_path, slideshow_path, output_path, scale_ratio, video_width, video_height)
+        overlay_watermark(video_path, slideshow_path, output_path, scale_ratio, video_width, video_height, overlay_position)
 
         # Clean temp if you want (can remove this later)
         shutil.rmtree(temp_dir, ignore_errors=True)
@@ -223,38 +236,65 @@ def process_flat_mode(parent, image_duration, scale_ratio):
         print()  # Line break
 
 # Block 6 – Main Loop
-def run():
-    print ()
-    print ()
-    print ("\033[92m==================================================\033[0m")
-    print ("\033[1;33mSlideshow Watermark\033[0m")
-    print ("Generate slideshow from images, overlay on video")
-    print ("\033[92m==================================================\033[0m")
-    print ()
+def main():
+    print()
+    print()
+    print("\033[92m==================================================\033[0m")
+    print("\033[1;93mSlideshow Watermark\033[0m")
+    print("Generate slideshow from images, overlay on video")
+    print("\033[92m==================================================\033[0m")
+    print()
+    
     while True:
-        parent = input("📁 Enter path: \n -> ").strip()
-        if not os.path.isdir(parent):
-            print("❌ Not a valid folder.")
-            continue
+        # Use proper path input handling
+        parent = djj.get_path_input("📁 Enter path")
+        print()
+        
+        mode = djj.prompt_choice(
+            "📂 Are videos in subfolders?\n1. Yes (per-video subfolders), 2. No (flat folder) ",
+            ['1', '2'],
+            default='1'
+        )
+        is_flat_mode = mode == '2'
+        print()
 
-        mode = input("📂 Are videos in subfolders?\n1. Yes (per-video subfolders), 2. No (flat folder):  ").strip()
-        is_flat_mode = mode != "1"
-
-        try:
-            image_duration = float(input("🕒 Duration per image in seconds\n (default: 3): ").strip())
-        except:
-            print("❌ Invalid number, using default 3.0s.")
+        # Use proper float input handling with defaults
+        image_duration = djj.get_float_input(
+            "🕒 Duration per image in seconds (default: 3): ",
+            min_val=0.1,
+            max_val=30.0
+        )
+        if image_duration is None:
             image_duration = 3.0
+        print()
 
-        try:
-            scale_input = input("📏 Overlay height as percentage of video\nin percent (default: 30): ").strip()
-            scale_ratio = round(float(scale_input) / 100, 2)
-        except:
-            print("❌ Invalid number, using default 30%.")
-            scale_ratio = 0.3
+        # Use proper float input for scale ratio
+        scale_percentage = djj.get_float_input(
+            "📏 Overlay height as percentage of video (default: 30)",
+            min_val=5.0,
+            max_val=80.0
+        )
+        if scale_percentage is None:
+            scale_percentage = 30.0
+        scale_ratio = round(scale_percentage / 100, 2)
+        print()
+
+        # Get overlay position
+        print("\033[93mOverlay Position:\033[0m")
+        print("1. Top-left")
+        print("2. Top-right")
+        print("3. Bottom-left")
+        print("4. Bottom-right")
+        
+        overlay_position = djj.prompt_choice(
+            " \033[93mChoice \033[0m ",
+            ['1', '2', '3', '4'],
+            default='4'
+        )
+        print()
 
         if is_flat_mode:
-            process_flat_mode(parent, image_duration, scale_ratio)
+            process_flat_mode(parent, image_duration, scale_ratio, overlay_position)
             djj.prompt_open_folder(parent)
         else:
             subdirs = [os.path.join(parent, d) for d in os.listdir(parent)
@@ -262,14 +302,14 @@ def run():
             total = len(subdirs)
             for idx, sub in enumerate(subdirs, 1):
                 percent = int((idx / total) * 100)
-                print(f"📽️ Processing {idx}/{total} videos ({percent}%)...")
-                process_folder(sub, image_duration, scale_ratio, False)
-
-                djj.prompt_open_folder(parent)
+                print(f"\033[93m📽️ Processing\033[0m {idx}\033[93m/\033[0m{total} \033[93mvideos\033[0m ({percent}%)\033[93m...\033[0m")
+                process_folder(sub, image_duration, scale_ratio, overlay_position, False)
+                print ("\n" * 2)
+            djj.prompt_open_folder(parent)
 
         action = djj.what_next()
         if action == 'exit':
             break
 
 if __name__ == "__main__":
-    run()
+    main()

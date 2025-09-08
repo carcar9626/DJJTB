@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 
 # Define base paths
-data_path = "/Users/home/Documents/Linkgrabber_Results"
+data_path = "/Users/home/Documents/Scripts/DJJTB_output/link_grabber"
 csv_path = os.path.join(data_path, "csv")
 txt_path = os.path.join(data_path, "txt")
 
@@ -17,7 +17,7 @@ txt_path = os.path.join(data_path, "txt")
 os.makedirs(csv_path, exist_ok=True)
 os.makedirs(txt_path, exist_ok=True)
 
-# Regex to detect URL and extract extension
+# Regex to detect URLs and extract extension
 url_pattern = re.compile(r"(https?|ftp|magnet):\/\/[^\s]+", re.IGNORECASE)
 extension_pattern = re.compile(r"\.([a-zA-Z0-9]{1,6})(?:\?|$)")
 
@@ -85,9 +85,13 @@ def main():
     while True:
         try:
             clipboard = pyperclip.paste()
-            if clipboard != last_clipboard:
+            if not isinstance(clipboard, str):
+                clipboard = str(clipboard or "")
+            clipboard = clipboard.strip()
+            
+            if clipboard and clipboard != last_clipboard:
                 last_clipboard = clipboard
-                # CHANGED: Use finditer() to get ALL full URL matches
+                # Find all URLs in clipboard text
                 url_matches = url_pattern.finditer(clipboard)
                 for match in url_matches:
                     log_link(match.group(0))

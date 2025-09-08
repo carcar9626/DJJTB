@@ -47,14 +47,14 @@ def convert_images(input_path, output_format, keep_metadata, include_subfolders)
         images = [f for f in sorted(input_path.glob(pattern)) if f.suffix.lower() in image_extensions and f.is_file()]
     else:
         logger.error("Input must be a file or directory.")
-        print("\033[33mError: Input must be a file or directory.\033[0m", file=sys.stderr)
+        print("\033[93mError: Input must be a file or directory.\033[0m", file=sys.stderr)
         return [], []
     
     print()
-    print("\033[33mScanning for Images...\033[0m")
-    print(f"{len(images)} \033[33mimages found\033[0m")
+    print("\033[93mScanning for Images...\033[0m")
+    print(f"{len(images)} \033[93mimages found\033[0m")
     print()
-    print("\033[33mConverting Images...\033[0m")
+    print("\033[93mConverting Images...\033[0m")
     
     successful = []
     failed = []
@@ -95,7 +95,7 @@ if __name__ == "__main__":
     while True:
         clear_screen()
         print("\033[92m==================================================\033[0m")
-        print("\033[1;33mImage Converter\033[0m")
+        print("\033[1;93mImage Converter\033[0m")
         print("Converts Images to New Format")
         print("\033[92m==================================================\033[0m")
         print()
@@ -111,12 +111,12 @@ if __name__ == "__main__":
                 if os.path.exists(normalized_path):
                     input_path = normalized_path
                     break
-                print(f"\033[33mError:\033[0m '{normalized_path}' \033[33mdoes not exist. Ensure the path is correct and the external drive (if any) is mounted.\033[0m", file=sys.stderr)
+                print(f"\033[93mError:\033[0m '{normalized_path}' \033[93mdoes not exist. Ensure the path is correct and the external drive (if any) is mounted.\033[0m", file=sys.stderr)
             except Exception as e:
-                print(f"\033[33mError resolving path \033[0m'{input_path}': {e}. \033[33mPlease try again.\033[0m", file=sys.stderr)
+                print(f"\033[93mError resolving path \033[0m'{input_path}': {e}. \033[93mPlease try again.\033[0m", file=sys.stderr)
             attempt += 1
             if attempt == max_attempts:
-                print("\033[33mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
+                print("\033[93mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
                 sys.exit(1)
         print()
 
@@ -139,26 +139,26 @@ if __name__ == "__main__":
             elif format_choice == '4':
                 output_format = 'gif'
                 break
-            print("\033[33mPlease enter 1, 2, 3, or 4 only.\033[0m", file=sys.stderr)
+            print("\033[93mPlease enter 1, 2, 3, or 4 only.\033[0m", file=sys.stderr)
             attempt += 1
             if attempt == max_attempts:
-                print("\033[33mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
+                print("\033[93mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
                 sys.exit(1)
         print()
 
-        keep_metadata = djj.prompt_choice("\033[33mKeep metadata? \033[0m\n1. Yes, 2. No ", ['1', '2'], default='2') == '1'
+        keep_metadata = djj.prompt_choice("\033[93mKeep metadata? \033[0m\n1. Yes, 2. No ", ['1', '2'], default='2') == '1'
         print()
 
         print("-------------")
         successful, failed, output_dir = convert_images(input_path, output_format, keep_metadata, include_subfolders)
         
         print("\n" * 1)
-        print("\033[33mConversion Summary\033[0m")
+        print("\033[93mConversion Summary\033[0m")
         print("-------------")
-        print(f"✅ \033[33mSuccessfully converted:\033[0m {len(successful)} \033[33mimages\033[0m")
+        print(f"✅ \033[93mSuccessfully converted:\033[0m {len(successful)} \033[93mimages\033[0m")
         if failed:
-            print(f"\033[33mFailed conversions: \033[0m{len(failed)} \033[33m(see convert_errors.log in output folder)\033[0m")
-        print(f"\033[33mOutput folder:\033[0m \n{output_dir}")
+            print(f"\033[93mFailed conversions: \033[0m{len(failed)} \033[93m(see convert_errors.log in output folder)\033[0m")
+        print(f"\033[93mOutput folder:\033[0m \n{output_dir}")
         print()
 
         djj.prompt_open_folder(output_dir)

@@ -193,7 +193,7 @@ def create_collage(folder_path, output_path, num_collages, orientation, include_
     categories = [(n, imgs, g, num) for n, imgs, g, num in category_configs if len(imgs) >= num]
     if not categories:
         logger.error("No unused images available for selected orientation.")
-        print("\033[33mNo unused images available for selected orientation.\033[0m", file=sys.stderr)
+        print("\033[93mNo unused images available for selected orientation.\033[0m", file=sys.stderr)
         return
 
     collages_created = 0
@@ -274,7 +274,7 @@ def create_collage(folder_path, output_path, num_collages, orientation, include_
             save_used_images(used_images, used_file)
 
         progress = int(((i + 1) / num_collages) * 100)
-        sys.stdout.write(f"\r\033[33mCreating Collages\033[0m {i + 1}\033[33m/\033[0m{num_collages} ({progress}%)...")
+        sys.stdout.write(f"\r\033[93mCreating Collages\033[0m {i + 1}\033[93m/\033[0m{num_collages} ({progress}%)...")
         sys.stdout.flush()
 
         # Update categories
@@ -295,13 +295,13 @@ def create_collage(folder_path, output_path, num_collages, orientation, include_
     sys.stdout.flush()
     logger.info(f"Collages created: {collages_created}, Images used: {total_images_used}")
     print()
-    print("\033[33mCollage Summary\033[0m")
+    print("\033[93mCollage Summary\033[0m")
     print("---------------")
-    print(f"\033[33mCollages created:\033[0m {collages_created}")
-    print(f"\033[33mImages used:\033[0m {total_images_used}")
-    print(f"\033[33mOutput folder:\033[0m {output_path}")
+    print(f"\033[93mCollages created:\033[0m {collages_created}")
+    print(f"\033[93mImages used:\033[0m {total_images_used}")
+    print(f"\033[93mOutput folder:\033[0m {output_path}")
     if log_used_images:
-        print(f"{total_images_used}\033[33m used images tracked in:\033[0m {used_file}")
+        print(f"{total_images_used}\033[93m used images tracked in:\033[0m {used_file}")
     print()
 
     djj.prompt_open_folder(output_path)
@@ -310,14 +310,14 @@ def main():
     while True:
         print()
         print("\033[92m==================================================\033[0m")
-        print("\033[1;33mCollage Creator\033[0m")
+        print("\033[1;93mCollage Creator\033[0m")
         print("Auto create collages from folder")
         print("\033[92m==================================================\033[0m")
         print()
 
         # Input mode selection (like video_reverse_merge reference)
         input_mode = djj.prompt_choice(
-            "\033[33mInput mode:\033[0m\n1. Folder path\n2. Space-separated file paths\n",
+            "\033[93mInput mode:\033[0m\n1. Folder path\n2. Space-separated file paths\n",
             ['1', '2'],
             default='1'
         )
@@ -332,7 +332,7 @@ def main():
             print()
             
             include_sub = djj.prompt_choice(
-                "\033[33mInclude subfolders?\033[0m\n1. Yes\n2. No\n",
+                "\033[93mInclude subfolders?\033[0m\n1. Yes\n2. No\n",
                 ['1', '2'],
                 default='2'
             ) == '1'
@@ -342,10 +342,10 @@ def main():
             
         else:
             # File paths mode
-            file_paths = input("📁 \033[33mEnter image paths (space-separated):\n\033[0m -> ").strip()
+            file_paths = input("📁 \033[93mEnter image paths (space-separated):\n\033[0m -> ").strip()
             
             if not file_paths:
-                print("❌ \033[33mNo file paths provided.\033[0m")
+                print("❌ \033[93mNo file paths provided.\033[0m")
                 continue
             
             images = collect_images_from_paths(file_paths)
@@ -355,16 +355,16 @@ def main():
             print()
 
         if not images:
-            print("❌ \033[33mNo valid image files found. Try again.\033[0m\n")
+            print("❌ \033[93mNo valid image files found. Try again.\033[0m\n")
             continue
 
         print("Scanning for images...")
-        print(f"✅ \033[33m{len(images)} images found\033[0m")
+        print(f"✅ \033[93m{len(images)} images found\033[0m")
         print()
 
         # Rest of the options
         log_used = djj.prompt_choice(
-            "\033[33mLog used images?\033[0m\n1. Yes\n2. No\n",
+            "\033[93mLog used images?\033[0m\n1. Yes\n2. No\n",
             ['1', '2'],
             default='1'
         ) == '1'
@@ -372,30 +372,30 @@ def main():
 
         # Updated orientation choices with new 900x1920 option
         orientation_choice = djj.prompt_choice(
-            "\033[33mCollage format:\033[0m\n1. Horizontal (1920x1080)\n2. Vertical (1080x1920)\n3. Square (1080x1080)\n4. 1280x1080\n5. 900x1920\n",
+            "\033[93mCollage format:\033[0m\n1. Horizontal (1920x1080)\n2. Vertical (1080x1920)\n3. Square (1080x1080)\n4. 1280x1080\n5. 900x1920\n",
             ['1', '2', '3', '4', '5'],
             default='1'
         )
         print()
 
         # Background opacity setting
-        bg_opacity_input = input("\033[33mBackground opacity [0.0-1.0, default: 0.25]:\n\033[0m -> ").strip()
+        bg_opacity_input = input("\033[93mBackground opacity [0.0-1.0, default: 0.25]:\n\033[0m -> ").strip()
         try:
             bg_opacity = float(bg_opacity_input) if bg_opacity_input else 0.25
             bg_opacity = max(0.0, min(1.0, bg_opacity))  # Clamp between 0 and 1
         except ValueError:
             bg_opacity = 0.25
-            print("\033[33mUsing default opacity: 0.25\033[0m")
+            print("\033[93mUsing default opacity: 0.25\033[0m")
         print()
 
         # Background blur setting
-        bg_blur_input = input("\033[33mBackground blur radius [1-50, default: 8]:\n\033[0m -> ").strip()
+        bg_blur_input = input("\033[93mBackground blur radius [1-50, default: 8]:\n\033[0m -> ").strip()
         try:
             bg_blur = int(bg_blur_input) if bg_blur_input else 8
             bg_blur = max(1, min(50, bg_blur))  # Clamp between 1 and 50
         except ValueError:
             bg_blur = 8
-            print("\033[33mUsing default blur: 8\033[0m")
+            print("\033[93mUsing default blur: 8\033[0m")
         print()
 
         # Map choices to orientation keys
@@ -411,7 +411,7 @@ def main():
         # Fixed: Get number of collages properly
         while True:
             try:
-                num_collages_input = input("\033[33mNumber of collages [default: 10]:\n\033[0m -> ").strip()
+                num_collages_input = input("\033[93mNumber of collages [default: 10]:\n\033[0m -> ").strip()
                 if not num_collages_input:
                     num_collages = 10
                     break
@@ -419,12 +419,12 @@ def main():
                 if num_collages > 0:
                     break
                 else:
-                    print("\033[33mPlease enter a positive number.\033[0m")
+                    print("\033[93mPlease enter a positive number.\033[0m")
             except ValueError:
-                print("\033[33mPlease enter a valid number.\033[0m")
+                print("\033[93mPlease enter a valid number.\033[0m")
         
         print("\n" * 2)
-        print("\033[1;33mProcessing...\033[0m")
+        print("\033[1;93mProcessing...\033[0m")
 
         # Create output path based on orientation
         orientation_names = {
@@ -437,10 +437,9 @@ def main():
         subfolder = orientation_names[orientation]
         output = os.path.join(folder_path, "Output", "Collages", subfolder)
         
-        create_collage(folder_path, output, num_collages, orientation, input_mode == '1',
-                       log_used_images=log_used, background_opacity=bg_opacity,
-                       background_blur_radius=bg_blur)
+        create_collage(folder_path, output, num_collages, orientation, input_mode == '1', log_used_images=log_used, background_opacity=bg_opacity, background_blur_radius=bg_blur)
                        
+        print("\n" * 2)
 
         
         action = djj.what_next()
@@ -448,4 +447,4 @@ def main():
             break
 
 if __name__ == '__main__':
-    main()  
+    main()

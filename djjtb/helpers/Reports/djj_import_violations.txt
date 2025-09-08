@@ -1,0 +1,5 @@
+❌ Found non-compliant utils imports:
+
+Desktop/DJJTB/djjtb/media_tools/video_tools/video_cropper_beta.py:11: from djjtb.utils import PathManager, print_error
+Documents/Scripts/DJJTB/djjtb/media_tools/video_tools/video_cropper_beta.py:9: from djjtb.utils import PathManager, print_error
+Documents/Scripts/DJJTB_backup_20250722_034309/djjtb/media_tools/video_tools/video_cropper_beta.py:9: from djjtb.utils import PathManager, print_error

@@ -211,7 +211,7 @@ def main():
         print()
         print()
         print("\033[92m==================================================\033[0m")
-        print("\033[1;33mSpeed Changer\033[0m")
+        print("\033[1;93mSpeed Changer\033[0m")
         print("Adjust video playback speed")
         print("\033[92m==================================================\033[0m")
         print()
