@@ -6,16 +6,16 @@ echo "🛑 This will force push and overwrite the remote repository!"
 
 # Ensure djjvenv is ignored
 if ! grep -q '^djjvenv/$' .gitignore; then
-    echo "Adding 'djjvenv/' to .gitignore..."
-    echo "djjvenv/" >> .gitignore
+    echo "Adding 'venv/' to .gitignore..."
+    echo "venv/" >> .gitignore
 else
-    echo "'djjvenv/' is already in .gitignore."
+    echo "'venv/' is already in .gitignore."
 fi
 
 # Remove djjvenv from git tracking if already added before
-if git ls-files --error-unmatch djjvenv/ >/dev/null 2>&1; then
-    echo "Removing 'djjvenv/' from Git tracking..."
-    git rm -r --cached djjvenv/
+if git ls-files --error-unmatch venv/ >/dev/null 2>&1; then
+    echo "Removing 'venv/' from Git tracking..."
+    git rm -r --cached venv/
 fi
 echo
 echo "Do you want to flush __pycache__ directories before pushing?"
@@ -52,4 +52,5 @@ git commit -m "$commit_msg"
 echo "Force pushing to origin main (overwriting remote)..."
 git push origin main --force
 echo
-echo "Done."
+echo "Complete. Press any key to exit"
+read -n 1
