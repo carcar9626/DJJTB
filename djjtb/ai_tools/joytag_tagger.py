@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """
-JoyTag Image Tagger for DJJTB
+JoyTag Image Tagger for DJJTB - WITH XMP DETECTION
 Uses JoyTag model for comprehensive image tagging with Danbooru schema
 Optimized for M2 MacBook Air 8GB RAM
+FIXED: ONNX data type mismatch (double -> float)
+NEW: Skip images that already have XMP sidecar files
 """
 
 import os
@@ -128,9 +130,9 @@ def download_joytag_model():
 def setup_joytag_environment():
     """Complete setup of JoyTag environment"""
     print()
-    print("\033[92m==================================================\033[0m")
+    print("\033[92m======================================================================\033[0m")
     print("\033[1;33m🚀 JoyTag Environment Setup\033[0m")
-    print("\033[92m==================================================\033[0m")
+    print("\033[92m======================================================================\033[0m")
     
     # Step 1: Check/create environment
     if not check_environment():
@@ -174,45 +176,35 @@ class JoyTagProcessor:
             return False
     
     def load_model(self):
-        """Load JoyTag model"""
+        """Load JoyTag model - pure ONNX approach"""
         if self.model is not None:
             return True
             
         print("\033[93m📥 Loading JoyTag model...\033[0m")
         
         try:
-            import torch
-            from transformers import AutoModelForImageClassification, AutoImageProcessor
             import onnxruntime as ort
+            import numpy as np
             
-            # Try ONNX model first (faster)
+            # Look for ONNX model file
             onnx_path = os.path.join(JOYTAG_MODEL_DIR, "model.onnx")
-            if os.path.exists(onnx_path):
-                print("\033[33m🏃 Using ONNX model for faster inference\033[0m")
+            if not os.path.exists(onnx_path):
+                print(f"❌ \033[33mONNX model not found at:\033[0m {onnx_path}")
+                return False
                 
-                # Set up ONNX Runtime with appropriate providers
-                providers = []
-                if self.device == "mps":
-                    providers.append("CPUExecutionProvider")  # MPS not supported for ONNX
-                else:
-                    providers.append("CPUExecutionProvider")
-                
-                self.model = ort.InferenceSession(onnx_path, providers=providers)
-                self.model_type = "onnx"
-                
-                # Load processor for preprocessing
-                from transformers import AutoImageProcessor
-                self.processor = AutoImageProcessor.from_pretrained(JOYTAG_MODEL_DIR)
-                
-            else:
-                print("\033[33m🐌 Using PyTorch model\033[0m")
-                # Fallback to PyTorch model
-                self.model = AutoModelForImageClassification.from_pretrained(
-                    JOYTAG_MODEL_DIR,
-                    torch_dtype=torch.float32
-                ).to(self.device)
-                self.processor = AutoImageProcessor.from_pretrained(JOYTAG_MODEL_DIR)
-                self.model_type = "pytorch"
+            print("\033[33m🏃 Loading ONNX model for JoyTag\033[0m")
+            
+            # Set up ONNX Runtime providers
+            providers = ["CPUExecutionProvider"]  # JoyTag works fine on CPU
+            
+            self.model = ort.InferenceSession(onnx_path, providers=providers)
+            self.model_type = "onnx"
+            
+            # Get input shape from model
+            input_shape = self.model.get_inputs()[0].shape
+            self.input_size = input_shape[2] if len(input_shape) > 2 else 448  # Default JoyTag size
+            
+            print(f"\033[33m📐 Model input size:\033[0m {self.input_size}x{self.input_size}")
             
             # Load labels/tags
             self._load_labels()
@@ -225,28 +217,35 @@ class JoyTagProcessor:
             return False
     
     def _load_labels(self):
-        """Load the tag labels"""
+        """Load the tag labels for JoyTag"""
         try:
-            # Try to load from config or separate file
-            import json
+            # JoyTag typically has a top_tags.txt file with the labels
+            possible_label_files = [
+                "top_tags.txt",
+                "tags.txt",
+                "labels.txt",
+                "tag_names.txt"
+            ]
             
-            # Check if there's a labels file
-            labels_file = os.path.join(JOYTAG_MODEL_DIR, "tags.txt")
-            if os.path.exists(labels_file):
-                with open(labels_file, 'r', encoding='utf-8') as f:
-                    self.labels = [line.strip() for line in f if line.strip()]
+            labels_loaded = False
+            
+            for filename in possible_label_files:
+                labels_file = os.path.join(JOYTAG_MODEL_DIR, filename)
+                if os.path.exists(labels_file):
+                    print(f"\033[33m📋 Loading labels from:\033[0m {filename}")
+                    with open(labels_file, 'r', encoding='utf-8') as f:
+                        self.labels = [line.strip() for line in f if line.strip()]
+                    labels_loaded = True
+                    break
+            
+            if not labels_loaded:
+                print("⚠️  \033[33mNo label files found, checking downloaded files...\033[0m")
+                # List what files we actually have
+                files = os.listdir(JOYTAG_MODEL_DIR)
+                print(f"Available files: {files}")
+                self.labels = None
             else:
-                # Fallback - try to get from model config
-                config_file = os.path.join(JOYTAG_MODEL_DIR, "config.json")
-                if os.path.exists(config_file):
-                    with open(config_file, 'r', encoding='utf-8') as f:
-                        config = json.load(f)
-                        self.labels = config.get('id2label', {})
-                        if isinstance(self.labels, dict):
-                            self.labels = list(self.labels.values())
-                else:
-                    print("⚠️  \033[33mCould not find labels, using indices\033[0m")
-                    self.labels = None
+                print(f"\033[32m✅ Loaded {len(self.labels)} labels\033[0m")
                     
         except Exception as e:
             print(f"⚠️  \033[33mFailed to load labels:\033[0m {e}")
@@ -256,8 +255,6 @@ class JoyTagProcessor:
         """Unload model to free memory"""
         if self.model is not None:
             del self.model
-            if hasattr(self, 'processor'):
-                del self.processor
             self.model = None
             
             import torch
@@ -269,34 +266,38 @@ class JoyTagProcessor:
         """Process a single image and return tags with confidence scores"""
         try:
             from PIL import Image
-            import torch
             import numpy as np
             
             # Load and preprocess image
             image = Image.open(image_path).convert("RGB")
             
-            if self.model_type == "onnx":
-                # ONNX processing
-                inputs = self.processor(images=image, return_tensors="np")
-                
-                # Run inference
-                outputs = self.model.run(None, {"pixel_values": inputs["pixel_values"]})
-                logits = outputs[0]
-                
-                # Apply sigmoid for multi-label classification
-                probs = 1 / (1 + np.exp(-logits[0]))  # Sigmoid
-                
-            else:
-                # PyTorch processing
-                inputs = self.processor(images=image, return_tensors="pt")
-                inputs = {k: v.to(self.device) for k, v in inputs.items()}
-                
-                with torch.no_grad():
-                    outputs = self.model(**inputs)
-                    logits = outputs.logits
-                    
-                    # Apply sigmoid for multi-label classification
-                    probs = torch.sigmoid(logits).squeeze().cpu().numpy()
+            # Manual preprocessing for JoyTag ONNX model
+            # Resize and normalize like JoyTag expects
+            image = image.resize((self.input_size, self.input_size), Image.LANCZOS)
+            
+            # Convert to numpy array and ensure float32 throughout
+            img_array = np.array(image, dtype=np.float32) / 255.0
+            
+            # Normalize with ImageNet stats (common for vision models)
+            # CRITICAL FIX: Ensure all operations maintain float32 precision
+            mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+            std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+            img_array = (img_array - mean) / std
+            
+            # Add batch dimension and transpose to NCHW format
+            img_array = img_array.transpose(2, 0, 1)  # HWC -> CHW
+            img_array = np.expand_dims(img_array, axis=0)  # Add batch dim
+            
+            # CRITICAL FIX: Ensure final array is float32 before ONNX inference
+            img_array = img_array.astype(np.float32)
+            
+            # Run ONNX inference
+            input_name = self.model.get_inputs()[0].name
+            outputs = self.model.run(None, {input_name: img_array})
+            logits = outputs[0][0]  # Remove batch dimension
+            
+            # Apply sigmoid for multi-label classification
+            probs = 1 / (1 + np.exp(-logits))  # Sigmoid
             
             # Extract high-confidence tags
             tags = []
@@ -511,6 +512,46 @@ def export_xmp_sidecar_files(db_path: str, merge_mode: bool, logger):
     logger.info(f"Created {xmp_files_created} XMP sidecar files")
     conn.close()
     return xmp_files_created
+    
+def export_txt_per_image(db_path: str, logger):
+    """Export a plain .txt file per image with tags and confidence"""
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    cursor.execute('''
+        SELECT i.file_path, t.tag_name, t.confidence_score
+        FROM images i
+        LEFT JOIN tags t ON i.id = t.image_id
+        WHERE t.tag_name IS NOT NULL
+        ORDER BY i.file_path, t.confidence_score DESC
+    ''')
+
+    results = cursor.fetchall()
+    images_dict = {}
+
+    # Group tags by image
+    for file_path, tag_name, confidence in results:
+        if file_path not in images_dict:
+            images_dict[file_path] = []
+        images_dict[file_path].append((tag_name, confidence))
+
+    txt_files_created = 0
+
+    for file_path, tag_list in images_dict.items():
+        if not tag_list:
+            continue
+        txt_path = f"{file_path}.txt"
+        try:
+            with open(txt_path, 'w', encoding='utf-8') as f:
+                for tag, conf in tag_list:
+                    f.write(f"{tag} {int(conf * 100)}%\n")
+            txt_files_created += 1
+        except Exception as e:
+            logger.error(f"Failed to write TXT for {file_path}: {e}")
+
+    conn.close()
+    logger.info(f"Created {txt_files_created} TXT tag files")
+    return txt_files_created
 
 def export_csv_results(db_path: str, output_path: str, logger):
     """Export results to CSV"""
@@ -543,11 +584,11 @@ def export_csv_results(db_path: str, output_path: str, logger):
 def main():
     while True:
         print()
-        print("\033[92m==================================================\033[0m")
-        print("\033[1;33mJoyTag Image Tagger for DJJTB\033[0m")
+        print("\033[92m======================================================================\033[0m")
+        print("\033[1;33mJoyTag Image Tagger for DJJTB - WITH XMP DETECTION\033[0m")
         print("Comprehensive image tagging using Danbooru schema")
         print("Optimized for M2 MacBook Air 8GB RAM")
-        print("\033[92m==================================================\033[0m")
+        print("\033[92m======================================================================\033[0m")
         print()
         
         # Check if setup is needed - look for any model files
@@ -592,15 +633,44 @@ def main():
         
         # Collect images
         print("Scanning for images...")
-        images = collect_images_from_folder(folder_path, include_sub)
+        all_images = collect_images_from_folder(folder_path, include_sub)
         print()
         
-        if not images:
+        if not all_images:
             print("❌ \033[93mNo valid image files found. Try again.\033[0m\n")
             continue
             
-        print(f"✅ \033[93m{len(images)} images found\033[0m")
+        print(f"✅ \033[93m{len(all_images)} images found\033[0m")
         print()
+        
+        # NEW: Get XMP handling configuration
+        xmp_config = djj.prompt_xmp_handling_mode()
+        
+        # NEW: Filter images based on XMP handling mode
+        if xmp_config['skip_existing']:
+            images_to_process, images_with_xmp, xmp_stats = djj.filter_images_without_xmp(all_images, show_stats=True)
+            
+            if not images_to_process:
+                print("🎉 \033[92mAll images already have XMP files! Nothing to process.\033[0m")
+                
+                # Offer to continue anyway
+                continue_anyway = djj.prompt_choice(
+                    "Process all images anyway (overwrite XMP files)?\n1. Yes, process all\n2. No, skip this folder\n",
+                    ['1', '2'],
+                    default='2'
+                )
+                
+                if continue_anyway == '2':
+                    continue
+                else:
+                    images_to_process = all_images
+                    xmp_config['skip_existing'] = False
+                    xmp_config['overwrite_existing'] = True
+            
+        else:
+            images_to_process = all_images
+            # Still show stats for user awareness
+            djj.filter_images_without_xmp(all_images, show_stats=True)
         
         # Get confidence threshold
         confidence_input = input("\033[93mConfidence threshold [0.1-0.9, default: 0.4]:\n\033[0m -> ").strip()
@@ -619,13 +689,11 @@ def main():
         ) == '1'
         print()
         
-        merge_existing = False
-        if export_xmp:
-            merge_existing = djj.prompt_choice(
-                "\033[93mMerge with existing XMP files?\033[0m\n1. No, overwrite\n2. Yes, merge tags\n",
-                ['1', '2'],
-                default='2'
-            ) == '2'
+        export_txt = djj.prompt_choice(
+            "\033[93mAlso export TXT file per image?\033[0m\n1. Yes,  2. No\n",
+            ['1', '2'],
+            default='1'
+        ) == '1'
         print()
         
         # Processing options
@@ -647,6 +715,9 @@ def main():
         processing_start_time = time.time()
         
         print("\n\033[1;33mProcessing images with JoyTag...\033[0m")
+        if xmp_config['skip_existing'] and len(images_to_process) < len(all_images):
+            skipped_count = len(all_images) - len(images_to_process)
+            print(f"\033[92m⏭️  Skipping {skipped_count} images that already have XMP files\033[0m")
         print("\n" * 2)
         
         # Setup database
@@ -654,14 +725,14 @@ def main():
         conn = setup_database(db_path)
         
         # Process images in batches
-        total_batches = (len(images) + batch_size - 1) // batch_size
+        total_batches = (len(images_to_process) + batch_size - 1) // batch_size
         processed_count = 0
         total_tags = 0
         
         for batch_idx in range(total_batches):
             start_idx = batch_idx * batch_size
-            end_idx = min(start_idx + batch_size, len(images))
-            batch_images = images[start_idx:end_idx]
+            end_idx = min(start_idx + batch_size, len(images_to_process))
+            batch_images = images_to_process[start_idx:end_idx]
             
             # Process batch
             results = process_image_batch(batch_images, processor, confidence_threshold, logger)
@@ -674,17 +745,17 @@ def main():
             save_results_to_db(results, conn, "JoyTag", logger)
             
             processed_count += len(batch_images)
-            progress = int((processed_count / len(images)) * 100)
+            progress = int((processed_count / len(images_to_process)) * 100)
             
             # Calculate elapsed time
             current_elapsed = time.time() - processing_start_time
-            sys.stdout.write(f"\r\033[93mProcessing batch\033[0m {batch_idx + 1}\033[93m/\033[0m{total_batches} ({progress}%) - {processed_count}\033[93m/\033[0m{len(images)} \033[93mimages...\033[0m \033[36m[Elapsed: {format_elapsed_time(current_elapsed)}]\033[0m")
+            sys.stdout.write(f"\r\033[93mProcessing batch\033[0m {batch_idx + 1}\033[93m/\033[0m{total_batches} ({progress}%) - {processed_count}\033[93m/\033[0m{len(images_to_process)} \033[93mimages...\033[0m \033[36m[Elapsed: {format_elapsed_time(current_elapsed)}]\033[0m")
             
             if batch_tags > 0:
                 sys.stdout.write(f" [\033[32m{batch_tags} tags\033[0m]")
             sys.stdout.flush()
 
-        sys.stdout.write("\r" + " " * 100 + "\r")
+        sys.stdout.write("\r" + " " * 98 + "\r")
         
         conn.close()
         processor.unload_model()
@@ -703,18 +774,30 @@ def main():
         xmp_count = 0
         if export_xmp:
             print("\033[93mCreating XMP sidecar files...\033[0m")
-            xmp_count = export_xmp_sidecar_files(db_path, merge_existing, logger)
+            # Use the merge setting from xmp_config
+            xmp_count = export_xmp_sidecar_files(db_path, xmp_config['merge_existing'], logger)
 
         export_time = time.time() - export_start_time
         total_time = time.time() - processing_start_time
         
+        # Create TXT files if requested
+        txt_count = 0
+        if export_txt:
+            print("\033[93mCreating TXT tag files...\033[0m")
+            txt_count = export_txt_per_image(db_path, logger)
+        
         print()
         print("\033[1;93m 🚀 JoyTag Processing Complete! 💥\033[0m")
         print("\033[92m--------------------\033[0m")
-        print(f"\033[93mImages processed:\033[0m {len(images)}")
+        print(f"\033[93mTotal images found:\033[0m {len(all_images)}")
+        if xmp_config['skip_existing'] and len(images_to_process) < len(all_images):
+            print(f"\033[93mImages skipped (had XMP):\033[0m {len(all_images) - len(images_to_process)}")
+        print(f"\033[93mImages processed:\033[0m {len(images_to_process)}")
         print(f"\033[93mTotal tags found:\033[0m {total_tags}")
-        print(f"\033[93mAvg tags per image:\033[0m {total_tags/len(images):.1f}")
+        if images_to_process:
+            print(f"\033[93mAvg tags per image:\033[0m {total_tags/len(images_to_process):.1f}")
         print(f"\033[93mConfidence threshold:\033[0m {confidence_threshold}")
+        print(f"\033[93mXMP handling:\033[0m {xmp_config['mode_description']}")
         print(f"\033[93mProcessing time:\033[0m {format_elapsed_time(processing_time)}")
         print(f"\033[93mExport time:\033[0m {format_elapsed_time(export_time)}")
         print(f"\033[93mTotal time:\033[0m {format_elapsed_time(total_time)}")
@@ -722,10 +805,21 @@ def main():
         print(f"\033[93mResults CSV:\033[0m {csv_path}")
         if export_xmp and xmp_count > 0:
             print(f"\033[93mXMP files created:\033[0m {xmp_count}")
+        if export_txt and txt_count > 0:
+            print(f"\033[93mTXT files created:\033[0m {txt_count}")
         print(f"\033[93mOutput folder:\033[0m {output_dir}")
         print()
         
-        logger.info(f"JoyTag processing complete: {len(images)} images, {total_tags} total tags, avg {total_tags/len(images):.1f} tags/image, total time: {format_elapsed_time(total_time)}")
+        # Log the session
+        log_message = f"JoyTag processing complete: {len(all_images)} total images"
+        if xmp_config['skip_existing'] and len(images_to_process) < len(all_images):
+            log_message += f", {len(all_images) - len(images_to_process)} skipped (had XMP)"
+        log_message += f", {len(images_to_process)} processed, {total_tags} total tags"
+        if images_to_process:
+            log_message += f", avg {total_tags/len(images_to_process):.1f} tags/image"
+        log_message += f", {xmp_config['mode_description']}, total time: {format_elapsed_time(total_time)}"
+        
+        logger.info(log_message)
         
         djj.prompt_open_folder(output_dir)
         

@@ -8,7 +8,154 @@ import time
 import json
 import tempfile
 
+# Enhanced XMP detection functions for djjtb/utils.py
+# Add these functions to your utils.py file
 
+def has_xmp_file(image_path):
+    """
+    Check if an XMP sidecar file exists for the given image.
+    
+    Args:
+        image_path: Path to the image file (str or pathlib.Path)
+        
+    Returns:
+        bool: True if XMP file exists, False otherwise
+    """
+    import os
+    import pathlib
+    
+    # Handle both string and pathlib.Path inputs
+    if isinstance(image_path, pathlib.Path):
+        image_path = str(image_path)
+    
+    xmp_path = f"{image_path}.xmp"
+    return os.path.exists(xmp_path)
+
+
+def filter_images_without_xmp(image_paths, show_stats=True):
+    """
+    Filter out images that already have XMP sidecar files.
+    
+    Args:
+        image_paths: List of image file paths
+        show_stats: Whether to print filtering statistics
+        
+    Returns:
+        tuple: (images_without_xmp, images_with_xmp, stats_dict)
+    """
+    import os
+    
+    images_without_xmp = []
+    images_with_xmp = []
+    
+    for img_path in image_paths:
+        if has_xmp_file(img_path):
+            images_with_xmp.append(img_path)
+        else:
+            images_without_xmp.append(img_path)
+    
+    stats = {
+        'total_images': len(image_paths),
+        'with_xmp': len(images_with_xmp),
+        'without_xmp': len(images_without_xmp),
+        'skip_percentage': (len(images_with_xmp) / len(image_paths) * 100) if image_paths else 0
+    }
+    
+    if show_stats and image_paths:
+        print(f"\033[93m📊 XMP Detection Results:\033[0m")
+        print(f"   Total images: {stats['total_images']}")
+        print(f"   Already tagged (with XMP): \033[92m{stats['with_xmp']}\033[0m")
+        print(f"   Need tagging: \033[93m{stats['without_xmp']}\033[0m")
+        if stats['with_xmp'] > 0:
+            print(f"   Skipping: \033[92m{stats['skip_percentage']:.1f}%\033[0m")
+        print()
+    
+    return images_without_xmp, images_with_xmp, stats
+
+
+def check_xmp_files_in_folder(folder_path, extensions=('.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tiff'), include_subfolders=False):
+    """
+    Check XMP file status for all images in a folder.
+    Useful for getting an overview before processing.
+    
+    Args:
+        folder_path: Path to folder to check
+        extensions: Image file extensions to check
+        include_subfolders: Whether to scan subfolders
+        
+    Returns:
+        dict: Summary statistics and file lists
+    """
+    import pathlib
+    import os
+    
+    folder_path = pathlib.Path(folder_path)
+    
+    # Collect all images
+    if include_subfolders:
+        images = []
+        for ext in extensions:
+            images.extend(folder_path.rglob(f'*{ext}'))
+            images.extend(folder_path.rglob(f'*{ext.upper()}'))
+    else:
+        images = []
+        for ext in extensions:
+            images.extend(folder_path.glob(f'*{ext}'))
+            images.extend(folder_path.glob(f'*{ext.upper()}'))
+    
+    images = [str(img) for img in images]
+    
+    # Filter by XMP status
+    without_xmp, with_xmp, stats = filter_images_without_xmp(images, show_stats=False)
+    
+    result = {
+        'folder_path': str(folder_path),
+        'include_subfolders': include_subfolders,
+        'stats': stats,
+        'images_without_xmp': without_xmp,
+        'images_with_xmp': with_xmp,
+        'sample_with_xmp': with_xmp[:5] if with_xmp else [],
+        'sample_without_xmp': without_xmp[:5] if without_xmp else []
+    }
+    
+    return result
+
+
+def prompt_xmp_handling_mode():
+    """
+    Prompt user for how to handle existing XMP files.
+    Returns the chosen mode and relevant settings.
+    
+    Returns:
+        dict: Configuration for XMP handling
+    """
+    print("\033[93m🏷️  XMP File Handling:\033[0m")
+    
+    mode = prompt_choice(
+        "How should existing XMP files be handled?\n"
+        "1. Skip images that already have XMP files (recommended)\n"
+        "2. Process all images (overwrite existing XMP)\n"
+        "3. Process all images (merge with existing XMP)\n",
+        ['1', '2', '3'],
+        default='1'
+    )
+    
+    config = {
+        'skip_existing': mode == '1',
+        'overwrite_existing': mode == '2',
+        'merge_existing': mode == '3',
+        'mode_description': {
+            '1': 'Skip existing XMP files',
+            '2': 'Overwrite existing XMP files',
+            '3': 'Merge with existing XMP files'
+        }[mode]
+    }
+    
+    print(f"✅ \033[93mSelected:\033[0m {config['mode_description']}")
+    print()
+    
+    return config
+    
 # Add these functions to your djjtb/utils.py file
 
 def get_multifile_input(prompt_text="📁 Enter file paths", extensions=None, max_display=5):
@@ -235,7 +382,7 @@ def open_multiple_folders(folder_paths, max_open=3):
         for folder in unique_folders[max_open:]:
             print(f"  📁 {folder}")
 
-def prompt_open_folder(folder_path, initial_wait=60, countdown_seconds=10):
+def prompt_open_folder(folder_path, initial_wait=240,   countdown_seconds=10):
     """
     Prompt user to open folder with countdown option
     """
@@ -344,14 +491,14 @@ def show_app_menu(title, apps_dict, back_options=None):
     os.system('clear')
     print()
     print(f"\033[1;33m{title}\033[0m")
-    print("\033[92m-------------------------------\033[0m")
+    print("\033[92m--------------------------------------------------\033[0m")
     
     # Display apps
     for key, app_name in apps_dict.items():
         print(f"{key}. {app_name}")
     
     print()
-    print("\033[92m-------------------------------\033[0m")
+    print("\033[92m--------------------------------------------------\033[0m")
     
     # Display back options
     if back_options:
@@ -361,7 +508,7 @@ def show_app_menu(title, apps_dict, back_options=None):
             elif key == '00':
                 print(f"{key}. ⏮️  {description}")
     
-    print("\033[92m-------------------------------\033[0m")
+    print("\033[92m--------------------------------------------------\033[0m")
 
 def handle_app_menu(title, apps_dict, back_options=None):
     """
@@ -395,121 +542,6 @@ def handle_app_menu(title, apps_dict, back_options=None):
                 return 'back'
         else:
             continue
-
-def run_app_launcher():
-    """
-    Integrated app launcher function that runs the full app launcher
-    This replaces the external script call
-    """
-    # Daily Apps
-    daily_apps = {
-        '1': 'Telegram Lite',
-        '2': 'Orion',
-        '3': 'JDownloader2',
-        '4': 'CotEditor',
-        '5': 'ChatGPT',
-        '6': 'Grok',
-        '7': 'VLC'
-    }
-    
-    # Tools & Utilities
-    tools_utilities = {
-        '1': 'A Better Finder Rename 12',
-        '2': 'dupeguru',
-        '3': 'Keka',
-        '4': 'BetterZip',
-        '5': 'Gray'
-    }
-    
-    # Web Tools
-    web_tools = {
-        '1': 'NordVPN',
-        '2': 'Transmit',
-        '3': 'Motrix',
-        '4': '迅雷',
-        '5': 'BaiduNetdisk'
-    }
-    
-    # System Utilities
-    system_utilities = {
-        '1': 'System Settings',
-        '2': 'Disk Utility',
-        '3': 'Activity Monitor',
-        '4': 'Automator',
-        '5': 'NordPass',
-        '6': 'DriveDx',
-        '7': 'Logi Options+'
-    }
-    
-    # Quick Launch apps
-    quick_launch = {
-        '5': 'Orion',
-        '6': 'VLC',
-        '7': 'JDownloader2',
-        '8': 'Photomator'
-    }
-    
-    back_options = {'0': 'Back to App Launcher', '00': 'Back to DJJTB'}
-    
-    while True:
-        os.system('clear')
-        print()
-        print("\033[92m==================================================\033[0m")
-        print("\033[1;33m📱 APP LAUNCHER 🚀\033[0m")
-        print("\033[92m==================================================\033[0m")
-        print("\033[1;33mAPP CATEGORIES\033[0m")
-        print("\033[92m--------------------------------------------------\033[0m")
-        print("1.📱 Daily Apps 🌟")
-        print("2.🔧 Tools & Utilities 🛠️")
-        print("3.🌐 Web Tools 🌍")
-        print("4.⚙️  System Utilities 🖥️")
-        print()
-        print("\033[1;33mQUICK LAUNCH\033[0m")
-        print("\033[92m--------------------------------------------------\033[0m")
-        print("5. Orion")
-        print("6. VLC")
-        print("7. JDownloader2")
-        print("8. Photomator")
-        print()
-        print("\033[92m--------------------------------------------------\033[0m")
-        print(" 0|00. ⏪ Back to DJJTB")
-        print("\033[92m==================================================\033[0m")
-        
-        choice = prompt_choice(
-            "\033[93mChoose an option: \033[0m",
-            ['1', '2', '3', '4', '5', '6', '7', '8', '0', '00']
-        )
-        
-        if choice == '1':
-            result = handle_app_menu("📱 DAILY APPS 🌟", daily_apps, back_options)
-            if result == 'exit':
-                break
-        elif choice == '2':
-            result = handle_app_menu("🔧 TOOLS & UTILITIES 🛠️", tools_utilities, back_options)
-            if result == 'exit':
-                break
-        elif choice == '3':
-            result = handle_app_menu("🌐 WEB TOOLS 🌍", web_tools, back_options)
-            if result == 'exit':
-                break
-        elif choice == '4':
-            result = handle_app_menu("⚙️  SYSTEM UTILITIES 🖥️", system_utilities, back_options)
-            if result == 'exit':
-                break
-        elif choice in quick_launch:
-            launch_app(quick_launch[choice])
-            wait_with_skip(3, "Continuing")
-        elif choice in ['0', '00']:
-            os.system('clear')
-            return_to_djjtb()
-            break
-    def __init__(self, base_input=None):
-        self.base_input = pathlib.Path(base_input) if base_input else None
-
-    def subfolder_from_input(self, tool_name):
-        output = self.base_input.parent / "Output" / tool_name
-        output.mkdir(parents=True, exist_ok=True)
-        return str(output.resolve())
 
 class PathManager:
     """Centralized path management for DJJTB scripts"""
@@ -927,7 +959,7 @@ def setup_logging(output_path, script_name="script"):
 def prompt_choice(prompt, choices, default=None):
     """Prompt user for input with validation and default value."""
     while True:
-        display_prompt = f"{prompt} [default: {default}]: " if default else f"\033[93m{prompt}:\033[0m "
+        display_prompt = f"{prompt} [default: {default}]: " if default else f"{prompt}\033[5m ⟫\033[0m"
         user_input = input(display_prompt).strip()
         if user_input == '' and default:
             return default

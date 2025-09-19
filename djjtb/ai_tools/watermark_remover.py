@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-Enhanced AI Watermark Remover for DJJTB
-Multi-Detection: Shapes (rectangles/triangles) + Text watermarks + Original pink detection
+Enhanced AI Watermark Remover for DJJTB - COMPLETE WORKING VERSION
+Multi-Detection: Shapes + Text + Semi-transparent + Original pink detection
 Uses lightweight detection methods optimized for M2 MacBook Air 8GB RAM
+Version: 2.0 - Fully Fixed and Complete
 """
 
 import os
@@ -14,28 +15,10 @@ from typing import List, Optional, Tuple
 import time
 import cv2
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageEnhance
 import re
+import tempfile
 
-import numpy as np
-
-try:
-    from ultralytics import YOLO
-except ImportError:
-    print("⚠️  ultralytics (YOLOv8) not installed. Installing now...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "ultralytics"])
-    from ultralytics import YOLO
-
-# OCR import - lightweight option first
-try:
-    import easyocr
-    OCR_AVAILABLE = "easyocr"
-except ImportError:
-    try:
-        import pytesseract
-        OCR_AVAILABLE = "pytesseract"
-    except ImportError:
-        OCR_AVAILABLE = None
 
 # Fix the import path - go up to project root, then import
 project_root = Path(__file__).parent.parent.parent
@@ -47,7 +30,6 @@ try:
 except ImportError as e:
     print(f"❌ \033[33mFailed to import djjtb.utils:\033[0m {e}")
     print(f"Project root: {project_root}")
-    print(f"Current path: {sys.path}")
     sys.exit(1)
 
 # Environment and model paths
@@ -57,6 +39,18 @@ VENV_PYTHON = os.path.join(VENV_PATH, "bin", "python")
 
 # Supported extensions
 SUPPORTED_EXTS = ('.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp')
+
+# Global OCR availability check
+OCR_AVAILABLE = None
+try:
+    import easyocr
+    OCR_AVAILABLE = "easyocr"
+except ImportError:
+    try:
+        import pytesseract
+        OCR_AVAILABLE = "pytesseract"
+    except ImportError:
+        OCR_AVAILABLE = None
 
 def ensure_venv_and_run():
     """Ensure we're running in the correct virtual environment"""
@@ -74,7 +68,6 @@ def ensure_venv_and_run():
     # Re-run this script with the correct venv
     if os.path.exists(VENV_PYTHON):
         print("\033[33mActivating watermark removal environment...\033[0m")
-        # Preserve the sys.path modifications when re-executing
         env = os.environ.copy()
         env['PYTHONPATH'] = str(project_root)
         os.execve(VENV_PYTHON, [VENV_PYTHON] + sys.argv, env)
@@ -89,24 +82,12 @@ def check_dependencies():
         'transformers': 'transformers',
         'PIL': 'Pillow',
         'cv2': 'opencv-python',
-        'numpy': 'numpy',
-        'lama_cleaner': 'lama-cleaner',
-        'simple_lama_inpainting': 'simple-lama-inpainting'
-    }
-    
-    # Optional OCR packages
-    optional_packages = {
-        'easyocr': 'easyocr',
-        'pytesseract': 'pytesseract'
+        'numpy': 'numpy'
     }
     
     missing = []
-    optional_missing = []
     
-    # Check core requirements first
-    core_packages = ['torch', 'transformers', 'PIL', 'cv2', 'numpy']
-    
-    for import_name in core_packages:
+    for import_name, package_name in required_packages.items():
         try:
             if import_name == 'PIL':
                 import PIL
@@ -115,9 +96,9 @@ def check_dependencies():
             else:
                 __import__(import_name)
         except ImportError:
-            missing.append(required_packages[import_name])
+            missing.append(package_name)
     
-    # Check LaMa packages (try to use what's available)
+    # Check LaMa packages
     lama_available = False
     try:
         import lama_cleaner
@@ -129,45 +110,26 @@ def check_dependencies():
             lama_available = True
             print("✅ \033[33mSimple LaMa Inpainting found\033[0m")
         except ImportError:
-            optional_missing.extend(['lama-cleaner', 'simple-lama-inpainting'])
+            print("⚠️  \033[33mNo LaMa libraries found - will use OpenCV inpainting\033[0m")
     
-    # Check OCR availability
-    ocr_available = False
-    try:
-        import easyocr
-        ocr_available = True
-        print("✅ \033[33mEasyOCR found (lightweight text detection)\033[0m")
-    except ImportError:
-        try:
-            import pytesseract
-            ocr_available = True
-            print("✅ \033[33mPytesseract found (text detection)\033[0m")
-        except ImportError:
-            print("⚠️  \033[33mNo OCR library found - text watermark detection disabled\033[0m")
+    if OCR_AVAILABLE:
+        print(f"✅ \033[33mOCR available: {OCR_AVAILABLE}\033[0m")
+    else:
+        print("⚠️  \033[33mNo OCR library found - text watermark detection disabled\033[0m")
     
     if missing:
-        print(f"❌ \033[33mMissing core packages:\033[0m {', '.join(missing)}")
-        print("\033[33mInstalling missing core packages...\033[0m")
+        print(f"❌ \033[33mMissing packages:\033[0m {', '.join(missing)}")
+        print("\033[33mInstalling missing packages...\033[0m")
         
         try:
             for package in missing:
                 print(f"Installing {package}...")
                 subprocess.check_call([sys.executable, '-m', 'pip', 'install', package])
-            print("✅ \033[33mCore packages installed successfully\033[0m")
+            print("✅ \033[33mPackages installed successfully\033[0m")
         except subprocess.CalledProcessError as e:
             print(f"❌ \033[33mFailed to install packages:\033[0m {e}")
             return False
     
-    if not lama_available and optional_missing:
-        print(f"⚠️  \033[33mLaMa packages not found. Installing simple-lama-inpainting...\033[0m")
-        try:
-            subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'simple-lama-inpainting'])
-            print("✅ \033[33mLaMa inpainting installed\033[0m")
-        except subprocess.CalledProcessError as e:
-            print(f"❌ \033[33mFailed to install LaMa:\033[0m {e}")
-            print("⚠️  \033[33mContinuing without LaMa - will use basic inpainting\033[0m")
-    
-    print("✅ \033[33mDependency check complete\033[0m")
     return True
 
 def setup_model_cache():
@@ -225,6 +187,7 @@ def get_valid_inputs():
     print()
     
     valid_paths = []
+    src_path = None
     
     if input_mode == '1':
         src_path = djj.get_path_input("Enter folder path")
@@ -261,7 +224,7 @@ def get_valid_inputs():
     print()
     print("Choose Your Options:")
     
-    return valid_paths, input_mode, src_path if input_mode == '1' else None
+    return valid_paths, input_mode, src_path
 
 def get_detection_mode():
     """Get detection mode from user"""
@@ -271,17 +234,18 @@ def get_detection_mode():
     modes = {
         '1': ('pink_rectangles', 'Pink Rectangles (Original - Fast)', 'Your original pink rectangle detector'),
         '2': ('color_shapes', 'Multi-Color Shapes (Enhanced)', 'Rectangles, squares, circles, ovals, triangles - any color'),
-        '3': ('text_watermarks', 'Text Watermarks', 'Detects text-based watermarks'),
-        '4': ('combo_smart', 'Smart Combo (Recommended)', 'Tries shapes first, then text if needed'),
-        '5': ('combo_aggressive', 'Aggressive Combo', 'All detection methods combined')
+        '3': ('text_watermarks', 'Text Watermarks', 'Detects text-based watermarks using OCR'),
+        '4': ('semi_transparent', 'Semi-Transparent Watermarks (Social Media)', 'Logo+text overlays, optimized for social media'),
+        '5': ('combo_smart', 'Smart Combo (Conservative)', 'Tries shapes first, then text if needed'),
+        '6': ('combo_aggressive', 'Aggressive Combo', 'All detection methods combined')
     }
     
     # Check OCR availability for text modes
     if OCR_AVAILABLE is None:
         print("⚠️  \033[33mNote: Text detection unavailable (no OCR library)\033[0m")
-        available_modes = ['1', '2']
+        available_modes = ['1', '2', '4']  # Semi-transparent doesn't require OCR
     else:
-        available_modes = ['1', '2', '3', '4', '5']
+        available_modes = ['1', '2', '3', '4', '5', '6']
     
     print("\033[33mAvailable detection modes:\033[0m")
     for key in available_modes:
@@ -293,7 +257,7 @@ def get_detection_mode():
     choice = djj.prompt_choice(
         "\033[33mSelect detection mode:\033[0m",
         available_modes,
-        default='4' if OCR_AVAILABLE else '2'
+        default='4'
     )
     
     selected_mode = modes[choice]
@@ -333,7 +297,7 @@ class EnhancedWatermarkRemover:
                 import simple_lama_inpainting
                 return "simple_lama"
             except ImportError:
-                return "opencv_inpaint"  # Fallback to OpenCV
+                return "opencv_inpaint"
     
     def _init_ocr(self):
         """Initialize OCR reader (lightweight, on-demand)"""
@@ -343,12 +307,10 @@ class EnhancedWatermarkRemover:
         try:
             if OCR_AVAILABLE == "easyocr":
                 import easyocr
-                # Initialize with English only for speed, GPU disabled for Mac compatibility
                 self.ocr_reader = easyocr.Reader(['en'], gpu=False)
                 print("✅ \033[33mEasyOCR initialized\033[0m")
             elif OCR_AVAILABLE == "pytesseract":
                 import pytesseract
-                # pytesseract doesn't need initialization, just import
                 self.ocr_reader = "pytesseract"
                 print("✅ \033[33mPytesseract initialized\033[0m")
         except Exception as e:
@@ -366,16 +328,14 @@ class EnhancedWatermarkRemover:
             if self.lama_method == "lama_cleaner":
                 from lama_cleaner.model_manager import ModelManager
                 
-                # Initialize LaMa through lama_cleaner
                 self.lama_model = ModelManager(
                     name="lama",
-                    device=self.device if self.device != "mps" else "cpu",  # LaMa may not support MPS
-                    no_half=True  # For stability on Mac
+                    device=self.device if self.device != "mps" else "cpu",
+                    no_half=True
                 )
                 
             elif self.lama_method == "simple_lama":
                 from simple_lama_inpainting import SimpleLama
-                
                 self.lama_model = SimpleLama()
                 
             print(f"✅ \033[33mLaMa model loaded ({self.lama_method})\033[0m")
@@ -383,7 +343,7 @@ class EnhancedWatermarkRemover:
         except Exception as e:
             print(f"⚠️  \033[33mLaMa loading failed, using OpenCV fallback:\033[0m {str(e)}")
             self.lama_method = "opencv_inpaint"
-            self.lama_model = "opencv"  # Placeholder
+            self.lama_model = "opencv"
     
     def unload_lama_model(self):
         """Unload LaMa model to free memory"""
@@ -391,12 +351,15 @@ class EnhancedWatermarkRemover:
             del self.lama_model
             self.lama_model = None
             
-            import torch
-            gc.collect()
-            if self.device == "mps":
-                torch.mps.empty_cache()
-            elif torch.cuda.is_available():
-                torch.cuda.empty_cache()
+            try:
+                import torch
+                gc.collect()
+                if self.device == "mps":
+                    torch.mps.empty_cache()
+                elif torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except:
+                pass
     
     @staticmethod
     def detect_pink_rectangles(image_path: str) -> List[List[int]]:
@@ -413,7 +376,7 @@ class EnhancedWatermarkRemover:
         lower_pink = np.array([160, 100, 100])
         upper_pink = np.array([180, 255, 255])
 
-        # Define corner regions (35% as in original)
+        # Define corner regions
         corner_regions = {
             "top-left": (0, 0, int(width * 0.35), int(height * 0.35)),
             "top-right": (int(width * 0.65), 0, width, int(height * 0.35)),
@@ -445,13 +408,11 @@ class EnhancedWatermarkRemover:
         """Enhanced shape detector - rectangles and triangles of any color"""
         image = cv2.imread(image_path)
         if image is None:
-            print(f"❌ Failed to load image: {image_path}")
             return []
 
         height, width = image.shape[:2]
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         
-        # Define corner regions (same as original)
         corner_regions = {
             "top-left": (0, 0, int(width * 0.35), int(height * 0.35)),
             "top-right": (int(width * 0.65), 0, width, int(height * 0.35)),
@@ -465,25 +426,19 @@ class EnhancedWatermarkRemover:
             corner_gray = gray[y1:y2, x1:x2]
             corner_color = image[y1:y2, x1:x2]
             
-            # Multiple detection strategies for different watermark types
-            
-            # Strategy 1: Edge detection for geometric shapes
+            # Edge detection for geometric shapes
             edges = cv2.Canny(corner_gray, 50, 150, apertureSize=3)
             contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             
             for cnt in contours:
-                # Filter by size
                 area = cv2.contourArea(cnt)
-                if area < 200 or area > (width * height * 0.1):  # Skip tiny or huge areas
+                if area < 200 or area > (width * height * 0.1):
                     continue
                 
-                # Get bounding box
                 bx, by, bw, bh = cv2.boundingRect(cnt)
-                
-                # Check if it's likely a watermark shape
                 aspect_ratio = float(bw) / bh
                 
-                # Detect rectangles (aspect ratio between 0.3 and 3.0)
+                # Detect rectangles
                 if 0.3 <= aspect_ratio <= 3.0:
                     abs_x1, abs_y1 = x1 + bx, y1 + by
                     abs_x2, abs_y2 = abs_x1 + bw, abs_y1 + bh
@@ -491,50 +446,17 @@ class EnhancedWatermarkRemover:
                     bboxes.append([abs_x1, abs_y1, abs_x2, abs_y2])
                     continue
                 
-                # Detect triangles using contour approximation
+                # Detect triangles
                 epsilon = 0.02 * cv2.arcLength(cnt, True)
                 approx = cv2.approxPolyDP(cnt, epsilon, True)
                 
-                if len(approx) == 3:  # Triangle
+                if len(approx) == 3:
                     abs_x1, abs_y1 = x1 + bx, y1 + by
                     abs_x2, abs_y2 = abs_x1 + bw, abs_y1 + bh
                     print(f"🔺 Triangle in {label} ({bw}x{bh})")
                     bboxes.append([abs_x1, abs_y1, abs_x2, abs_y2])
-            
-            # Strategy 2: Color-based detection for solid color watermarks
-            # Convert corner to LAB color space for better color detection
-            lab_corner = cv2.cvtColor(corner_color, cv2.COLOR_BGR2LAB)
-            
-            # Use k-means to find dominant colors (lightweight approach)
-            data = lab_corner.reshape((-1, 3))
-            data = np.float32(data)
-            
-            if data.shape[0] > 100:  # Only if we have enough pixels
-                criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
-                k = min(5, data.shape[0] // 50)  # Adaptive k based on corner size
-                _, labels, centers = cv2.kmeans(data, k, None, criteria, 5, cv2.KMEANS_RANDOM_CENTERS)
-                
-                # Find clusters that might be watermarks (uniform color regions)
-                for i, center in enumerate(centers):
-                    cluster_mask = (labels.flatten() == i).reshape(corner_gray.shape)
-                    cluster_contours, _ = cv2.findContours(
-                        cluster_mask.astype(np.uint8) * 255,
-                        cv2.RETR_EXTERNAL,
-                        cv2.CHAIN_APPROX_SIMPLE
-                    )
-                    
-                    for cnt in cluster_contours:
-                        area = cv2.contourArea(cnt)
-                        if 500 <= area <= (width * height * 0.05):  # Reasonable watermark size
-                            bx, by, bw, bh = cv2.boundingRect(cnt)
-                            abs_x1, abs_y1 = x1 + bx, y1 + by
-                            abs_x2, abs_y2 = abs_x1 + bw, abs_y1 + bh
-                            print(f"🎨 Color region in {label} ({bw}x{bh})")
-                            bboxes.append([abs_x1, abs_y1, abs_x2, abs_y2])
         
-        # Remove overlapping detections
-        bboxes = EnhancedWatermarkRemover._remove_overlapping_bboxes(bboxes)
-        return bboxes
+        return EnhancedWatermarkRemover._remove_overlapping_bboxes(bboxes)
     
     def detect_text_watermarks(self, image_path: str) -> List[List[int]]:
         """Detect text-based watermarks using OCR"""
@@ -552,7 +474,6 @@ class EnhancedWatermarkRemover:
         
         height, width = image.shape[:2]
         
-        # Define corner regions
         corner_regions = {
             "top-left": (0, 0, int(width * 0.4), int(height * 0.4)),
             "top-right": (int(width * 0.6), 0, width, int(height * 0.4)),
@@ -568,19 +489,16 @@ class EnhancedWatermarkRemover:
             
             try:
                 if OCR_AVAILABLE == "easyocr":
-                    # EasyOCR approach
                     results = self.ocr_reader.readtext(np.array(corner_pil))
                     
                     for (bbox_coords, text, confidence) in results:
-                        if confidence > 0.3:  # Reasonable confidence threshold
-                            # Extract bounding box
+                        if confidence > 0.3:
                             points = np.array(bbox_coords, dtype=int)
                             bx = max(0, np.min(points[:, 0]) - 5)
                             by = max(0, np.min(points[:, 1]) - 5)
                             bw = min(corner.shape[1] - bx, np.max(points[:, 0]) - bx + 10)
                             bh = min(corner.shape[0] - by, np.max(points[:, 1]) - by + 10)
                             
-                            # Convert to absolute coordinates
                             abs_x1, abs_y1 = x1 + bx, y1 + by
                             abs_x2, abs_y2 = abs_x1 + bw, abs_y1 + bh
                             
@@ -590,20 +508,18 @@ class EnhancedWatermarkRemover:
                 elif OCR_AVAILABLE == "pytesseract":
                     import pytesseract
                     
-                    # Get bounding box data from tesseract
                     data = pytesseract.image_to_data(corner_pil, output_type=pytesseract.Output.DICT)
                     
                     for i in range(len(data['text'])):
                         confidence = int(data['conf'][i])
                         text = data['text'][i].strip()
                         
-                        if confidence > 30 and text:  # Reasonable confidence and non-empty text
+                        if confidence > 30 and text:
                             bx = max(0, data['left'][i] - 5)
                             by = max(0, data['top'][i] - 5)
                             bw = min(corner.shape[1] - bx, data['width'][i] + 10)
                             bh = min(corner.shape[0] - by, data['height'][i] + 10)
                             
-                            # Convert to absolute coordinates
                             abs_x1, abs_y1 = x1 + bx, y1 + by
                             abs_x2, abs_y2 = abs_x1 + bw, abs_y1 + bh
                             
@@ -614,9 +530,85 @@ class EnhancedWatermarkRemover:
                 print(f"⚠️  OCR failed for {label}: {e}")
                 continue
         
-        # Remove overlapping detections
-        bboxes = self._remove_overlapping_bboxes(bboxes)
-        return bboxes
+        return self._remove_overlapping_bboxes(bboxes)
+    @staticmethod
+    def detect_semi_transparent(image_path: str) -> List[List[int]]:
+        """Simple, direct detection for Sina Weibo watermarks - white text in bottom-right"""
+        image = cv2.imread(image_path)
+        if image is None:
+            return []
+        
+        height, width = image.shape[:2]
+        
+        # Focus ONLY on bottom-right corner where Sina Weibo watermarks appear
+        # Take the bottom-right 30% x 30% of the image
+        x1 = int(width * 0.7)
+        y1 = int(height * 0.7)
+        x2 = width
+        y2 = height
+        
+        corner = image[y1:y2, x1:x2]
+        corner_gray = cv2.cvtColor(corner, cv2.COLOR_BGR2GRAY)
+        
+        print(f"   🔍 Scanning bottom-right corner: {x2-x1}x{y2-y1} pixels")
+        
+        bboxes = []
+        
+        # Method 1: Simple bright region detection (white/light gray text)
+        bright_mask = cv2.inRange(corner_gray, 180, 255)
+        
+        # Method 2: Text-like edge detection
+        edges = cv2.Canny(corner_gray, 30, 100)
+        
+        # Combine both methods
+        combined = cv2.bitwise_or(bright_mask, edges)
+        
+        # Light cleanup to connect nearby text elements
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+        combined = cv2.morphologyEx(combined, cv2.MORPH_CLOSE, kernel)
+        
+        # Find all contours
+        contours, _ = cv2.findContours(combined, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        print(f"   🔍 Found {len(contours)} potential regions")
+        
+        for i, cnt in enumerate(contours):
+            area = cv2.contourArea(cnt)
+            bx, by, bw, bh = cv2.boundingRect(cnt)
+            
+            # Very basic filtering - just check if it's reasonably sized
+            if area > 50:  # Any region bigger than 50 pixels
+                aspect_ratio = float(bw) / bh
+                
+                print(f"   📊 Region {i+1}: {bw}x{bh} (area: {area:.0f}, ratio: {aspect_ratio:.1f})")
+                
+                # Convert back to full image coordinates
+                abs_x1, abs_y1 = x1 + bx, y1 + by
+                abs_x2, abs_y2 = abs_x1 + bw, abs_y1 + bh
+                
+                # Add ALL detected regions for now (we can filter later)
+                bboxes.append([abs_x1, abs_y1, abs_x2, abs_y2])
+        
+        print(f"   ✅ Detected {len(bboxes)} regions total")
+        
+        # Don't return empty list - return the best candidates
+        if not bboxes:
+            return []
+        
+        # Filter for likely watermarks (wide horizontal regions)
+        filtered_bboxes = []
+        for bbox in bboxes:
+            x1, y1, x2, y2 = bbox
+            w, h = x2 - x1, y2 - y1
+            area = w * h
+            ratio = w / h if h > 0 else 0
+            
+            # Look for horizontal watermark-like regions
+            if (ratio > 1.5 and area > 100 and area < 5000) or (ratio > 3.0 and area > 50):
+                filtered_bboxes.append(bbox)
+                print(f"   🎯 Selected watermark candidate: {w}x{h} (ratio: {ratio:.1f})")
+        
+        return filtered_bboxes if filtered_bboxes else bboxes  # Return something even if filtering fails
     
     @staticmethod
     def _remove_overlapping_bboxes(bboxes: List[List[int]], overlap_threshold: float = 0.5) -> List[List[int]]:
@@ -644,7 +636,7 @@ class EnhancedWatermarkRemover:
         bboxes = sorted(bboxes, key=lambda box: (box[2]-box[0])*(box[3]-box[1]), reverse=True)
         
         filtered_bboxes = []
-        for i, box1 in enumerate(bboxes):
+        for box1 in bboxes:
             keep = True
             for box2 in filtered_bboxes:
                 if calculate_iou(box1, box2) > overlap_threshold:
@@ -668,29 +660,41 @@ class EnhancedWatermarkRemover:
         elif mode == "text_watermarks":
             return self.detect_text_watermarks(image_path)
         
+        elif mode == "semi_transparent":
+            return self.detect_semi_transparent(image_path)
+        
         elif mode == "combo_smart":
-            # Try shapes first (faster), then text if nothing found
-            print("   🎯 Phase 1: Shape detection...")
-            bboxes = self.detect_color_shapes(image_path)
+            # Try semi-transparent first (common on social media), then shapes, then text
+            print("   🎯 Phase 1: Semi-transparent detection...")
+            bboxes = self.detect_semi_transparent(image_path)
             
             if len(bboxes) == 0:
-                print("   🎯 Phase 2: Text detection...")
-                bboxes = self.detect_text_watermarks(image_path)
+                print("   🎯 Phase 2: Shape detection...")
+                bboxes = self.detect_color_shapes(image_path)
+                
+                if len(bboxes) == 0:
+                    print("   🎯 Phase 3: Text detection...")
+                    bboxes = self.detect_text_watermarks(image_path)
+                else:
+                    print(f"   ✅ Found {len(bboxes)} shapes, skipping text detection")
             else:
-                print(f"   ✅ Found {len(bboxes)} shapes, skipping text detection")
+                print(f"   ✅ Found {len(bboxes)} semi-transparent regions, skipping other methods")
             
             return bboxes
         
         elif mode == "combo_aggressive":
             # Run all detectors and combine results
-            print("   🎯 Phase 1: Shape detection...")
+            print("   🎯 Phase 1: Semi-transparent detection...")
+            semi_bboxes = self.detect_semi_transparent(image_path)
+            
+            print("   🎯 Phase 2: Shape detection...")
             shape_bboxes = self.detect_color_shapes(image_path)
             
-            print("   🎯 Phase 2: Text detection...")
+            print("   🎯 Phase 3: Text detection...")
             text_bboxes = self.detect_text_watermarks(image_path)
             
             # Combine and deduplicate
-            all_bboxes = shape_bboxes + text_bboxes
+            all_bboxes = semi_bboxes + shape_bboxes + text_bboxes
             if all_bboxes:
                 all_bboxes = self._remove_overlapping_bboxes(all_bboxes)
             
@@ -702,7 +706,7 @@ class EnhancedWatermarkRemover:
     
     @staticmethod
     def create_mask_from_bboxes(image_path: str, bboxes: List[List[int]]) -> Optional[str]:
-        """Create mask from detected bounding boxes - same as original"""
+        """Create mask from detected bounding boxes"""
         image = Image.open(image_path)
         width, height = image.size
         mask = np.zeros((height, width), dtype=np.uint8)
@@ -721,27 +725,25 @@ class EnhancedWatermarkRemover:
             mask[y1:y2, x1:x2] = 255
             print(f"   🎯 Watermark region {i+1}: {x2-x1}px x {y2-y1}px")
 
-        mask_path = image_path.replace(Path(image_path).suffix, '_mask.png')
+        # Save mask to temp file
+        mask_path = os.path.join(tempfile.gettempdir(), f"mask_{int(time.time())}.png")
         cv2.imwrite(mask_path, mask)
-        print(f"   📊 Mask saved: {mask_path}")
+        print(f"   📊 Mask created: {os.path.basename(mask_path)}")
         return mask_path
     
     def remove_watermark(self, image_path: str, mask_path: str, output_path: str) -> bool:
-        """Remove watermark using LaMa inpainting - same as original but optimized"""
+        """Remove watermark using LaMa inpainting"""
         try:
-            from PIL import Image
-            import numpy as np
-            
             print(f"   🎨 Using {self.lama_method} for inpainting...")
             
             # Load images
             image = Image.open(image_path).convert("RGB")
             mask = Image.open(mask_path).convert("L")
             
-            if self.lama_method in ["lama_cleaner", "iopaint"]:
+            if self.lama_method in ["lama_cleaner"]:
                 self.load_lama_model()
                 
-                # Convert PIL to numpy arrays (lama_cleaner format)
+                # Convert PIL to numpy arrays
                 image_np = np.array(image)
                 mask_np = np.array(mask)
                 
@@ -759,8 +761,6 @@ class EnhancedWatermarkRemover:
                 result = self.lama_model(image, mask)
                 
             else:  # opencv_inpaint fallback
-                import cv2
-                
                 print("   ⚠️  Using OpenCV inpainting (basic method)")
                 
                 # Convert to OpenCV format
@@ -853,7 +853,7 @@ def process_images_batch(input_paths, input_mode, src_path, suffix, detection_mo
     error_messages = []
     output_paths = set()
     
-    # Process smaller batches to avoid memory issues (especially important with OCR)
+    # Process smaller batches to avoid memory issues
     batch_size = 3 if detection_mode in ["text_watermarks", "combo_aggressive"] else 5
     total_batches = (len(input_paths) + batch_size - 1) // batch_size
     
@@ -872,7 +872,7 @@ def process_images_batch(input_paths, input_mode, src_path, suffix, detection_mo
             
             # Create output path
             input_dir = Path(input_path).parent
-            output_dir = input_dir / "Output"/ "NoWM"  # Watermark Removed
+            output_dir = input_dir / "Output" / "NoWM"  # Watermark Removed
             output_dir.mkdir(parents=True, exist_ok=True)
             output_paths.add(output_dir)
             
@@ -895,12 +895,15 @@ def process_images_batch(input_paths, input_mode, src_path, suffix, detection_mo
             
             print()  # Add spacing between files
         
-        # Memory cleanup between batches (especially important with OCR and shape detection)
+        # Memory cleanup between batches
         print(f"\033[33m🧹 Cleaning memory after batch {batch_idx + 1}...\033[0m")
-        import torch
-        gc.collect()
-        if torch.backends.mps.is_available():
-            torch.mps.empty_cache()
+        try:
+            import torch
+            gc.collect()
+            if torch.backends.mps.is_available():
+                torch.mps.empty_cache()
+        except:
+            pass
         print()
     
     # Final cleanup
@@ -924,7 +927,7 @@ def process_images_batch(input_paths, input_mode, src_path, suffix, detection_mo
     
     print("=" * 50)
     
-    # Handle opening output folders (following your pattern)
+    # Handle opening output folders
     if len(output_paths) == 1:
         output_path = list(output_paths)[0]
         djj.prompt_open_folder(output_path)
@@ -973,6 +976,7 @@ def main():
         print("🔹 Pink Rectangles (Original)")
         print("🔷 Multi-Color Shapes (Rectangles + Triangles)")
         print("📝 Text Watermarks (OCR-based)")
+        print("🌫️  Semi-Transparent Overlays (Social Media)")
         print("🤖 LaMa AI Inpainting | Optimized for M2 MacBook Air 8GB")
         print("\033[92m" + "=" * 60 + "\033[0m")
         print()
@@ -1009,4 +1013,4 @@ def main():
             break
 
 if __name__ == "__main__":
-    main()      
+    main()

@@ -1,7 +1,6 @@
 #!/bin/bash
 
-cd /Users/home/Documents/ai_models/watermark_remover || exit 1
-source wmrmvenv/bin/activate
+source /Users/home/Documents/ai_models/watermark_remover/wmrmvenv/bin/activate  || exit 1
 
 cd /Users/home/Documents/ai_models/iopaint || exit 1
 
@@ -13,14 +12,18 @@ sleep 10
 
 # Ask if you want to open WebUI
 echo ""
-echo "Open WebUI in browser?"
+echo "Open IOPaint WebUI?"
 echo "1. Yes"
 echo "2. No"
-read -rp "Enter your choice (1/2): " choice
+read -rp "Enter your choice: " choice
 
 if [[ "$choice" == "1" ]]; then
-    open -na "Firefox" --args "http://localhost:8060"
+    open -a "/Applications/IOPaint.app"
+    echo "IOPaint webUI is running.... Ctrl+C to stop."
+    # Keep the foreground terminal tied to the background process
+    wait
 fi
 
-# Keep the foreground terminal tied to the background process
-wait
+echo "Press any key to close this window..."
+read -n 1
+

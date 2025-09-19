@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import os
 import shutil
 import subprocess
@@ -298,7 +299,7 @@ def process_media(files_to_process, root_folder, mode, move_files, move_only=Fal
     total = len(files_to_process)
     for i, file_path in enumerate(files_to_process):
         percent = (i + 1) / total * 100
-        print(f"\rSorting files {i+1}/{total} ({percent:.1f}%)...    ", end="", flush=True)
+        print(f"\rSorting files {i+1}/{total}  ({percent:.1f}%)...    ", end="", flush=True)
 
         try:
             ext = file_path.suffix.lower()
@@ -335,7 +336,7 @@ def process_media(files_to_process, root_folder, mode, move_files, move_only=Fal
                 # Tag only mode - just tag the file without moving or renaming
                 if suffix in SUFFIX_TO_TAG:
                     tagged_count += 1
-                    print(f"\rTagging files {tagged_count}...    ", end="", flush=True)
+                    print(f"\rTagging files {tagged_count} {percent:.1f}%)......    ", end="", flush=True)
                     tag_file(file_path, SUFFIX_TO_TAG[suffix])
                 final_path = file_path
             elif move_files:
@@ -392,11 +393,11 @@ def process_media(files_to_process, root_folder, mode, move_files, move_only=Fal
 def main():
     print()
     print()
-    print("\033[92m===================================\033[0m")
-    print("            \033[1;33mMedia Sorter\033[0m")
+    print("\033[92m==================================================\033[0m")
+    print("            \033[1;93mMedia Sorter\033[0m")
     print("   Sorts media files by tagging,")
     print("       subfolders, renaming")
-    print("\033[92m===================================\033[0m")
+    print("\033[92m==================================================\033[0m")
     
     while True:
         # Get media files using the new input method
@@ -424,7 +425,7 @@ def main():
         if action == '5':
             # Reverse suffix mode
             os.system('clear')
-            print(f"\n\033[1;33m🔄 Removing suffixes from {len(files_to_process)} file(s)...\033[0m")
+            print(f"\n\033[1;93m🔄 Removing suffixes from {len(files_to_process)} file(s)...\033[0m")
             reverse_suffix_files(files_to_process)
             
             # Use the reference script's open folder handling
@@ -454,7 +455,7 @@ def main():
             add_finder_tags = True  # Always tag in tag-only mode
 
         os.system('clear')
-        print(f"\n\033[1;33m📁 Processing {len(files_to_process)} file(s)...\033[0m")
+        print(f"\n\033[1;93m📁 Processing {len(files_to_process)} file(s)...\033[0m")
         
         process_media(files_to_process, root_folder, mode, move_files, move_only, add_finder_tags, tag_only)
 

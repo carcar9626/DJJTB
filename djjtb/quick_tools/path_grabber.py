@@ -98,9 +98,8 @@ def log_path(path_str):
 
 def main():
     os.system('clear')
-    print()
-    last_clipboard = ""
     print("📁 PathGrabber is running... (press Ctrl+C to stop)")
+    last_clipboard = ""
     while True:
         try:
             clipboard = pyperclip.paste()

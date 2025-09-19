@@ -90,7 +90,7 @@ def get_default_csv_path():
 
 def get_csv_folder_path():
     """Get the default CSV folder path for folder mode."""
-    return os.path.expanduser("/Users/home/Documents/Scripts/image_tagger_data/csv_batches/")
+    return os.path.expanduser("/Users/home/Documents/Scripts/DJJTB_output/image_tagger/image_tagger_data/folder_mode_csv/")
 
 def prompt_processing_mode():
     """Prompt user to choose between single CSV or folder mode."""
@@ -794,7 +794,7 @@ def export_xmp_sidecar_files(db_path: str, merge_mode: bool, include_nsfw: bool,
         logger.info(f"NSFW content detected in {nsfw_count} images")
     conn.close()
     return xmp_files_created, nsfw_count
-
+    
 def export_digikam_tags(db_path: str, output_path: str, include_nsfw: bool, logger):
     """Export tags in DigiKam-compatible format with NSFW filtering (merged from all batches)."""
     conn = sqlite3.connect(db_path)
@@ -859,7 +859,7 @@ def export_digikam_tags(db_path: str, output_path: str, include_nsfw: bool, logg
     conn.close()
     return csv_path
 
-def process_folder_mode(images: List[str], csv_confidence, model, processor, output_dir: str,
+def process_folder_mode(images_to_process: List[str], all_images: List[str], csv_confidence, model, processor, output_dir: str,
                        batch_size: int, include_nsfw: bool,
                        export_xmp: bool, merge_existing: bool, logger):
     """Process multiple CSV files in sequence, merging results with per-CSV confidence."""
@@ -891,14 +891,14 @@ def process_folder_mode(images: List[str], csv_confidence, model, processor, out
             continue
         
         # Process images in batches for this CSV
-        total_batches = (len(images) + batch_size - 1) // batch_size
+        total_batches = (len(images_to_process) + batch_size - 1) // batch_size
         processed_count = 0
         csv_nsfw_detected = 0
         
         for batch_idx in range(total_batches):
             start_idx = batch_idx * batch_size
-            end_idx = min(start_idx + batch_size, len(images))
-            batch_images = images[start_idx:end_idx]
+            end_idx = min(start_idx + batch_size, len(images_to_process))
+            batch_images = images_to_process[start_idx:end_idx]
             
             # Process batch
             results = process_image_batch(batch_images, model, processor, tag_queries,
@@ -914,18 +914,18 @@ def process_folder_mode(images: List[str], csv_confidence, model, processor, out
             save_results_to_db(results, conn, f"Round {csv_round}", csv_round, logger)
             
             processed_count += len(batch_images)
-            progress = int((processed_count / len(images)) * 100)
+            progress = int((processed_count / len(images_to_process)) * 100)
             
             # Calculate elapsed times for live display
             current_time = time.time()
             round_elapsed = current_time - round_start_time
             total_elapsed = current_time - overall_start_time
-            overall_total_images = len(images) * total_csv_files
-            overall_processed_images = (csv_round - 1) * len(images) + processed_count
+            overall_total_images = len(images_to_process) * total_csv_files
+            overall_processed_images = (csv_round - 1) * len(images_to_process) + processed_count
             overall_percent = overall_processed_images / overall_total_images * 100
 
             # First line: batch info
-            line1 = f"Batch \033[92m{batch_idx + 1}/{total_batches} ({progress}%) \033[93m{processed_count}/{len(images)\033[0m}\033[0m images... \033[36m[{format_elapsed_time(round_elapsed)}]\033[0m"
+            line1 = f"Batch \033[92m{batch_idx + 1}/{total_batches} ({progress}%)\033[0m \033[93m{processed_count}/{len(images_to_process)} images...\033[0m \033[36m[{format_elapsed_time(round_elapsed)}]\033[0m"
             # Second line: stats
             line2 = (
                 f" \033[93m[Total:{format_elapsed_time(total_elapsed)}] "
@@ -947,7 +947,7 @@ def process_folder_mode(images: List[str], csv_confidence, model, processor, out
         total_elapsed = current_time - overall_start_time
         
         total_nsfw_detected += csv_nsfw_detected
-        print(f"\n\033[32m✅Round\033[0m \033[93m{csv_round}/{total_csv_files} \033[0m\033[32mcomplete\033[0m\n  \033[36mImages processed:\033[0m {len(images)} \n  \033[36mCSV:\033[0m {csv_name}")
+        print(f"\n\033[32m✅Round\033[0m \033[93m{csv_round}/{total_csv_files} \033[0m\033[32mcomplete\033[0m\n  \033[36mImages processed:\033[0m {len(images_to_process)} \n  \033[36mCSV:\033[0m {csv_name}")
         
         print(f"  \033[36mRound time:\033[0m {format_elapsed_time(round_elapsed)}")
         print(f"  \033[36mTotal time:\033[0m {format_elapsed_time(total_elapsed)}")
@@ -966,11 +966,11 @@ def process_folder_mode(images: List[str], csv_confidence, model, processor, out
 def main():
     while True:
         print()
-        print("\033[92m==================================================\033[0m")
-        print("\033[1;33mImage Auto Tagger (AI) - Privacy Optimized\033[0m")
+        print("\033[92m======================================================================\033[0m")
+        print("\033[1;33mImage Auto Tagger (AI) - Privacy Optimized - WITH XMP DETECTION\033[0m")
         print("Batch tag images for poses, clothing & NSFW detection")
         print("\033[93m+ NEW: Folder Mode for Multi-CSV Processing\033[0m")
-        print("\033[92m==================================================\033[0m")
+        print("\033[92m======================================================================\033[0m")
         print()
 
         # Initialize CLIP model with offline support
@@ -1041,7 +1041,16 @@ def main():
             csv_path = prompt_csv_dataset()
             tag_queries = load_tag_queries_from_csv(csv_path)
             csv_files = [csv_path]  # For consistency
+            
+            # Get confidence threshold for single CSV mode
+            confidence_input = input("\033[93mConfidence threshold [0.1-0.9, default: 0.45]:\n\033[0m -> ").strip()
+            try:
+                confidence_threshold = float(confidence_input) if confidence_input else 0.45
+                confidence_threshold = max(0.1, min(0.9, confidence_threshold))
+            except ValueError:
+                confidence_threshold = 0.45
             print()
+            
         # Input path
         folder_path = djj.get_path_input("Enter folder path")
         print()
@@ -1055,14 +1064,44 @@ def main():
 
         # Collect images
         print("Scanning for images...")
-        images = collect_images_from_folder(folder_path, include_sub)
+        all_images = collect_images_from_folder(folder_path, include_sub)
         print()
-        if not images:
+        
+        if not all_images:
             print("❌ \033[93mNo valid image files found. Try again.\033[0m\n")
             continue
             
-        print(f"✅ \033[93m{len(images)} images found\033[0m")
+        print(f"✅ \033[93m{len(all_images)} images found\033[0m")
         print()
+
+        # NEW: Get XMP handling configuration
+        xmp_config = djj.prompt_xmp_handling_mode()
+        
+        # NEW: Filter images based on XMP handling mode
+        if xmp_config['skip_existing']:
+            images_to_process, images_with_xmp, xmp_stats = djj.filter_images_without_xmp(all_images, show_stats=True)
+            
+            if not images_to_process:
+                print("🎉 \033[92mAll images already have XMP files! Nothing to process.\033[0m")
+                
+                # Offer to continue anyway
+                continue_anyway = djj.prompt_choice(
+                    "Process all images anyway (overwrite XMP files)?\n1. Yes, process all\n2. No, skip this folder\n",
+                    ['1', '2'],
+                    default='2'
+                )
+                
+                if continue_anyway == '2':
+                    continue
+                else:
+                    images_to_process = all_images
+                    xmp_config['skip_existing'] = False
+                    xmp_config['overwrite_existing'] = True
+            
+        else:
+            images_to_process = all_images
+            # Still show stats for user awareness
+            djj.filter_images_without_xmp(all_images, show_stats=True)
 
         # NSFW handling options
         include_nsfw_in_export = djj.prompt_choice(
@@ -1080,20 +1119,14 @@ def main():
         ) == '1'
         print()
         
-        merge_existing = False
-        if export_xmp:
-            merge_existing = djj.prompt_choice(
-                "\033[93mMerge with existing XMP files?\033[0m\n1. No, overwrite (default)\n2. Yes, merge tags (default)\n",
-                ['1', '2'],
-                default='2'
-            ) == '2'
-        print()
+        # Use XMP merge setting from configuration
+        merge_existing = xmp_config['merge_existing']
 
         # Processing options
         batch_size = BATCH_SIZE
         batch_input = input(f"\033[93mBatch size [default: {BATCH_SIZE}]:\n\033[0m -> ").strip()
         if batch_input.isdigit():
-            batch_size = min(int(batch_input), 30)  # Max 50 for M2 MBA
+            batch_size = min(int(batch_input), 30)  # Max 30 for M2 MBA
         print()
 
         # Setup output directory
@@ -1113,8 +1146,14 @@ def main():
         
         if folder_mode:
             print(f"\n\033[1;33mFolder Mode: Processing {len(csv_files)} CSV files...\033[0m")
+            if xmp_config['skip_existing'] and len(images_to_process) < len(all_images):
+                skipped_count = len(all_images) - len(images_to_process)
+                print(f"\033[92m⏭️  Skipping {skipped_count} images that already have XMP files\033[0m")
         else:
             print("\n\033[1;33mProcessing images...\033[0m")
+            if xmp_config['skip_existing'] and len(images_to_process) < len(all_images):
+                skipped_count = len(all_images) - len(images_to_process)
+                print(f"\033[92m⏭️  Skipping {skipped_count} images that already have XMP files\033[0m")
         print("\n" * 2)
         
         include_nsfw = include_nsfw_in_export == '1'
@@ -1122,7 +1161,7 @@ def main():
         if folder_mode:
             # Process multiple CSV files
             db_path, total_nsfw_detected, total_processing_time = process_folder_mode(
-                images, csv_confidence, model, processor, output_dir,
+                images_to_process, all_images, csv_confidence, model, processor, output_dir,
                 batch_size, include_nsfw,
                 export_xmp, merge_existing, logger
                 )
@@ -1135,14 +1174,14 @@ def main():
             single_start_time = time.time()
                         
             # Process images in batches
-            total_batches = (len(images) + batch_size - 1) // batch_size
+            total_batches = (len(images_to_process) + batch_size - 1) // batch_size
             processed_count = 0
             total_nsfw_detected = 0
             
             for batch_idx in range(total_batches):
                 start_idx = batch_idx * batch_size
-                end_idx = min(start_idx + batch_size, len(images))
-                batch_images = images[start_idx:end_idx]
+                end_idx = min(start_idx + batch_size, len(images_to_process))
+                batch_images = images_to_process[start_idx:end_idx]
                 
                 # Process batch
                 results = process_image_batch(batch_images, model, processor, tag_queries,
@@ -1158,15 +1197,15 @@ def main():
                 save_results_to_db(results, conn, model_name, 1, logger)
                 
                 processed_count += len(batch_images)
-                progress = int((processed_count / len(images)) * 100)
+                progress = int((processed_count / len(images_to_process)) * 100)
 
                 # Calculate elapsed time for live display
                 current_elapsed = time.time() - single_start_time
-                sys.stdout.write(f"\r\033[93mProcessing batch\033[0m {batch_idx + 1}\033[93m/\033[0m{total_batches} ({progress}%) - {processed_count}\033[93m/\033[0m{len(images)} \033[93mimages...\033[0m \033[36m[Elapsed: {format_elapsed_time(current_elapsed)}]\033[0m")
+                sys.stdout.write(f"\r\033[93mProcessing batch\033[0m {batch_idx + 1}\033[93m/\033[0m{total_batches} ({progress}%) - {processed_count}\033[93m/\033[0m{len(images_to_process)} \033[93mimages...\033[0m \033[36m[Elapsed: {format_elapsed_time(current_elapsed)}]\033[0m")
                 
                 if batch_nsfw > 0:
                     sys.stdout.write(f" [\033[31m{batch_nsfw} NSFW\033[0m]")
-                print()
+                sys.stdout.flush()
                 
 
             sys.stdout.write("\r" + " " * 100 + "\r")
@@ -1198,7 +1237,11 @@ def main():
         print("\033[1;93m 🚀 Processing Complete! 💥\033[0m")
         print("\033[92m--------------------\033[0m")
         print(f"\033[93mProcessing Mode:\033[0m {'Folder Mode (' + str(len(csv_files)) + ' CSVs)' if folder_mode else 'Single CSV'}")
-        print(f"\033[93mImages processed:\033[0m {len(images)}")
+        print(f"\033[93mTotal images found:\033[0m {len(all_images)}")
+        if xmp_config['skip_existing'] and len(images_to_process) < len(all_images):
+            print(f"\033[93mImages skipped (had XMP):\033[0m {len(all_images) - len(images_to_process)}")
+        print(f"\033[93mImages processed:\033[0m {len(images_to_process)}")
+        print(f"\033[93mXMP handling:\033[0m {xmp_config['mode_description']}")
         print(f"\033[93mNSFW detected:\033[0m {total_nsfw_detected}")
         print(f"\033[93mProcessing time:\033[0m {format_elapsed_time(total_processing_time)}")
         print(f"\033[93mExport time:\033[0m {format_elapsed_time(export_time)}")
@@ -1212,10 +1255,16 @@ def main():
         print(f"\033[93mOutput folder:\033[0m {output_dir}")
         print()
         
+        # Updated logging
+        log_message = f"{'Folder mode' if folder_mode else 'Single CSV mode'} complete: {len(all_images)} total images"
+        if xmp_config['skip_existing'] and len(images_to_process) < len(all_images):
+            log_message += f", {len(all_images) - len(images_to_process)} skipped (had XMP)"
+        log_message += f", {len(images_to_process)} processed"
         if folder_mode:
-            logger.info(f"Folder mode complete: {len(csv_files)} CSVs processed, {len(images)} images, {total_nsfw_detected} NSFW detected, total time: {format_elapsed_time(total_time)}")
-        else:
-            logger.info(f"Processing complete: {len(images)} images, {total_nsfw_detected} NSFW detected, total time: {format_elapsed_time(total_time)}")
+            log_message += f", {len(csv_files)} CSVs"
+        log_message += f", {total_nsfw_detected} NSFW detected, {xmp_config['mode_description']}, total time: {format_elapsed_time(total_time)}"
+        
+        logger.info(log_message)
         
         djj.prompt_open_folder(output_dir)
         
@@ -1224,5 +1273,4 @@ def main():
             break
 
 if __name__ == '__main__':
-    main()
     main()

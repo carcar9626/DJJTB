@@ -224,32 +224,41 @@ def get_output_path_and_suffix(source_files, target_files, mode):
     """Determine output path and get suffix preference based on inputs"""
     
     output_choice = djj.prompt_choice(
-        "\033[93mOutput location:\033[0m\n1. Same folder as sources (creates 'Output/FF' subfolder)\n2. Same folder as targets (creates 'Output/FF' subfolder)\n3. Custom path\n",
-        ['1', '2', '3'],
-        default='1' if mode in ['2', '3'] else '2'  # Default to source for single/multi-to-single, target for single-to-multi
+        "\033[33mOutput location:\033[0m\n1. Same folder as sources (creates 'Output/FF' subfolder)\n2. Same folder as targets (creates 'Output/FF' subfolder)\n3. Default Path\n4. Custom Path\n",
+        ['1', '2', '3', '4'],
+        default='3'  # Default to option 3 (Default Path)
     )
     print()
     
     if output_choice == '1':
         # Same as source folder
         base_path = pathlib.Path(source_files[0]).parent
+        # Create Output/FF structure
+        output_path = base_path / "Output" / "FF"
         
     elif output_choice == '2':
         # Same as target folder
         base_path = pathlib.Path(target_files[0]).parent
+        # Create Output/FF structure
+        output_path = base_path / "Output" / "FF"
         
-    else:
+    elif output_choice == '3':
+        # Default path - /Volumes/Movies_2SSD/UD_Gens/Characters/UD/FF_outputs/Runner/first_source_parent
+        first_target_parent = pathlib.Path(target_files[0]).parent.name
+        default_base = pathlib.Path("/Volumes/Movies_2SSD/UD_Gens/Characters/UD/FF_outputs/Runner")
+        output_path = default_base / first_target_parent
+        
+    else:  # output_choice == '4'
         # Custom path
         custom_path = djj.get_path_input("Enter custom output folder path")
-        base_path = pathlib.Path(custom_path)
+        output_path = pathlib.Path(custom_path)
     
-    # Create Output/FF structure
-    output_path = base_path / "Output" / "FF"
+    # Create the output directory
     output_path.mkdir(parents=True, exist_ok=True)
     
     # Get suffix preference
     suffix_choice = djj.prompt_choice(
-        "\033[93mAdd '_FF' suffix to filenames?\033[0m\n1. Yes\n2. No",
+        "\033[33mAdd '_FF' suffix to filenames?\033[0m\n1. Yes\n2. No",
         ['1', '2'],
         default='1'
     ) == '1'
@@ -269,7 +278,7 @@ def generate_output_filename(source_file, target_file, output_path, add_suffix=T
     
     return str(pathlib.Path(output_path) / output_filename)
 
-def process_single_headless(source_file, target_file, output_file):
+def process_single_headless(source_file, target_file, output_file,use_enhanced_mode=False):
     """Process single source to single target using headless-run"""
     cmd = [
         FACEFUSION_VENV_PYTHON, FACEFUSION_SCRIPT_PATH, "headless-run",
@@ -291,7 +300,7 @@ def process_single_headless(source_file, target_file, output_file):
     except Exception as e:
         return False, str(e)
 
-def process_batch_job(source_file, target_files, output_path, add_suffix=True):
+def process_batch_job(source_file, target_files, output_path, add_suffix=True, use_enhanced_mode=False):
     """Process single source to multiple targets using job system"""
     
     # Generate unique job ID
@@ -423,7 +432,7 @@ def process_batch_job(source_file, target_files, output_path, add_suffix=True):
     
     return success_count, error_count, error_messages
 
-def process_face_swap(mode, source_files, target_files, output_path, add_suffix, tag_source):
+def process_face_swap(mode, source_files, target_files, output_path, add_suffix, tag_source, use_enhanced_mode):
     """Main processing function that routes to appropriate method"""
     
     print("\n" * 2)
@@ -462,7 +471,7 @@ def process_face_swap(mode, source_files, target_files, output_path, add_suffix,
         
         print(f"\033[93mProcessing:\033[0m {os.path.basename(source_file)} → {os.path.basename(target_file)}")
         
-        success, error_msg = process_single_headless(source_file, target_file, output_file)
+        success, error_msg = process_single_headless(source_file, target_file, output_file, use_enhanced_mode)
         
         if success:
             print(f"\033[92m✅ Success:\033[0m Face swap completed!")
@@ -475,7 +484,7 @@ def process_face_swap(mode, source_files, target_files, output_path, add_suffix,
     elif mode == '1':
         # Single source to multiple targets - use job system
         source_file = source_files[0]
-        success_count, error_count, error_messages = process_batch_job(source_file, target_files, output_path, add_suffix)
+        success_count, error_count, error_messages = process_batch_job(source_file, target_files, output_path, add_suffix, use_enhanced_mode)
     
     else:  # mode == '3'
         # Multiple sources to single target - process each source individually
@@ -497,7 +506,7 @@ def process_face_swap(mode, source_files, target_files, output_path, add_suffix,
             
             output_file = str(pathlib.Path(output_path) / output_filename)
             
-            success, error_msg = process_single_headless(source_file, target_file, output_file)
+            success, error_msg = process_single_headless(source_file, target_file, output_file, use_enhanced_mode)
             
             if success:
                 print(f"\033[92m✅ Success:\033[0m {source_name}")
@@ -568,6 +577,13 @@ def main():
         if not target_files:
             print("❌ \033[1;93mNo valid target files found.\033[0m")
             sys.exit(1)
+            
+        use_enhanced_mode = djj.prompt_choice(
+            "\033[93m🎚️  Use Enhanced Quality Mode?\033[0m\n1. Yes (better results, slower)\n2. No (faster, default)",
+            ['1', '2'],
+            default='1'
+        ) == '1'
+        print()
         
         os.system('clear')
         print("\n" * 2)
@@ -591,7 +607,7 @@ def main():
         os.system('clear')
         
         # Process face swaps using appropriate method
-        process_face_swap(mode, source_files, target_files, output_path, add_suffix, tag_source)
+        process_face_swap(mode, source_files, target_files, output_path, add_suffix, tag_source,use_enhanced_mode)
         
         print()
         action = djj.what_next()

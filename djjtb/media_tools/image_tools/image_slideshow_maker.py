@@ -77,7 +77,7 @@ def prepare_slides(images, folder_path, orientation, duration_per_slide, backgro
     print(f"{len(images)} \033[93mimages found\033[0m")
     print()
     
-    # Calculate total duration and warn if over 15 minutes
+    # Calculate total duration
     total_duration = len(images) * duration_per_slide
     if total_duration > 900:  # 15 minutes in seconds
         print(f"\n\033[93mWarning: The resulting video will be \033[0m{total_duration // 60} \033[93mminutes and\033[0m {total_duration % 60} \033[93mseconds long, exceeding 15 minutes.\033[0m")
@@ -167,14 +167,13 @@ def prepare_slides(images, folder_path, orientation, duration_per_slide, backgro
         output_file = f"{os.path.splitext(base_output_file)[0]}_{timestamp}_{counter}.mp4"
         counter += 1
     
-    # Create video using ffmpeg with explicit total duration
+    # Create video using ffmpeg - FIXED TIMING
     ffmpeg_cmd = [
-        'ffmpeg', '-y',  # Overwrite temporary files if they exist
-        '-framerate', '1',  # Initial framerate (for image sequence)
-        '-i', os.path.join(temp_dir, 'slide_%04d.png'),  # Input pattern
-        '-c:v', 'libx264',  # Video codec
-        '-pix_fmt', 'yuv420p',  # Pixel format for compatibility
-        '-t', str(total_duration),  # Total duration in seconds
+        'ffmpeg', '-y',
+        '-framerate', f'1/{duration_per_slide}',
+        '-i', os.path.join(temp_dir, 'slide_%04d.png'),
+        '-c:v', 'libx264',
+        '-pix_fmt', 'yuv420p',
         output_file
     ]
     
@@ -269,18 +268,18 @@ if __name__ == '__main__':
         
         background_type = 'blurred'
         background_color = (0, 0, 0)
-        background_opacity = 0.25
+        background_opacity = 0.8
         background_blur_radius = 8
         
         if background_choice == '1':
             # Blurred background options
-            bg_opacity_input = input("\033[93mBackground opacity [0.0-1.0, default: 0.25]:\n\033[0m -> ").strip()
+            bg_opacity_input = input("\033[93mBackground opacity [0.0-1.0, default: 0.8]:\n\033[0m -> ").strip()
             try:
-                background_opacity = float(bg_opacity_input) if bg_opacity_input else 0.25
+                background_opacity = float(bg_opacity_input) if bg_opacity_input else 0.8
                 background_opacity = max(0.0, min(1.0, background_opacity))
             except ValueError:
-                background_opacity = 0.25
-                print("\033[93mUsing default opacity: 0.25\033[0m")
+                background_opacity = 0.8
+                print("\033[93mUsing default opacity: 0.8\033[0m")
             print()
 
             bg_blur_input = input("\033[93mBackground blur radius [1-50, default: 8]:\n\033[0m -> ").strip()
@@ -318,9 +317,9 @@ if __name__ == '__main__':
         # Prompt for duration per slide
         while True:
             try:
-                duration_input = input("\033[93mEnter slide duration in seconds [default: 3]:\n\033[0m -> ").strip()
+                duration_input = input("\033[93mEnter slide duration in seconds [default: 4]:\n\033[0m -> ").strip()
                 if not duration_input:
-                    duration_per_slide = 3
+                    duration_per_slide = 4
                     break
                 duration_per_slide = int(duration_input)
                 if duration_per_slide > 0:

@@ -10,7 +10,7 @@ import djjtb.utils as djj
 os.system('clear')
 MEDIA_EXTENSIONS = ('.mp4', '.mov', '.webm', '.mkv', '.mp3', '.aac', '.flac', '.wav', '.m4a')
 
-def collect_media_files(input_path):
+def collect_media_files(input_path):    
     input_path = Path(input_path)
     if input_path.is_file():
         return [str(input_path)] if input_path.suffix.lower() in MEDIA_EXTENSIONS else []
@@ -90,10 +90,10 @@ def get_playlist_path(custom_name=None):
 def generate_playlist():
     os.system('clear')
     print()
-    print("\033[92m===================================\033[0m")
+    print("\033[92m==================================================\033[0m")
     print("         \033[1;33mPlaylist Generator\033[0m")
     print("       Create M3U8 Playlists")
-    print("\033[92m===================================\033[0m")
+    print("\033[92m==================================================\033[0m")
     print()
     
     media_files = djj.get_media_input("📁 Enter folder or media file path(s)", extensions=MEDIA_EXTENSIONS)

@@ -19,7 +19,7 @@ def daily_apps_menu():
         os.system('clear')
         print()
         print("\033[1;33m📱 DAILY APPS 🌟\033[0m")
-        print("\033[92m-------------------------------\033[0m")
+        print("\033[92m--------------------------------------------------\033[0m")
         print("1. Telegram")
         print("2. Orion")
         print("3. JDownloader2")
@@ -28,10 +28,10 @@ def daily_apps_menu():
         print("6. Grok")
         print("7. IINA")
         print()
-        print("\033[92m-------------------------------\033[0m")
+        print("\033[92m--------------------------------------------------\033[0m")
         print(" 0. ⏪ Back to App Categories")
         print("00. ⏮️  Back to DJJTB")
-        print("\033[92m-------------------------------\033[0m")
+        print("\033[92m--------------------------------------------------\033[0m")
         
         choice = djj.prompt_choice(
             "\033[93mChoose app\033[0m",
@@ -63,17 +63,17 @@ def tools_utilities_menu():
         os.system('clear')
         print()
         print("\033[1;33m🔧 TOOLS & UTILITIES 🛠️\033[0m")
-        print("\033[92m-------------------------------\033[0m")
+        print("\033[92m--------------------------------------------------\033[0m")
         print("1. A Better Finder Rename 12")
         print("2. dupeguru")
         print("3. Keka")
         print("4. BetterZip")
         print("5. Gray")
         print()
-        print("\033[92m-------------------------------\033[0m")
+        print("\033[92m--------------------------------------------------\033[0m")
         print(" 0. ⏪ Back to App Categories")
         print("00. ⏮️  Back to DJJTB")
-        print("\033[92m-------------------------------\033[0m")
+        print("\033[92m--------------------------------------------------\033[0m")
         
         choice = djj.prompt_choice(
             "\033[93mChoose a tool\033[0m",
@@ -103,17 +103,17 @@ def web_tools_menu():
         os.system('clear')
         print()
         print("\033[1;33m🌐 WEB TOOLS 🌍\033[0m")
-        print("\033[92m-------------------------------\033[0m")
+        print("\033[92m--------------------------------------------------\033[0m")
         print("1. NordVPN")
         print("2. Transmit")
         print("3. Motrix")
         print("4. Thunder (迅雷)")
         print("5. BaiduNetdisk")
         print()
-        print("\033[92m-------------------------------\033[0m")
+        print("\033[92m--------------------------------------------------\033[0m")
         print(" 0. ⏪ Back to App Categories")
         print("00. ⏮️  Back to DJJTB")
-        print("\033[92m-------------------------------\033[0m")
+        print("\033[92m--------------------------------------------------\033[0m")
         
         choice = djj.prompt_choice(
             "\033[93mChoose a tool\033[0m",
@@ -143,7 +143,7 @@ def system_utilities_menu():
         os.system('clear')
         print()
         print("\033[1;33m⚙️  SYSTEM UTILITIES 🖥️\033[0m")
-        print("\033[92m-------------------------------\033[0m")
+        print("\033[92m--------------------------------------------------\033[0m")
         print("1. System Settings")
         print("2. Disk Utility")
         print("3. Activity Monitor")
@@ -152,10 +152,10 @@ def system_utilities_menu():
         print("6. DriveDx")
         print("7. Logitech Options+")
         print()
-        print("\033[92m-------------------------------\033[0m")
+        print("\033[92m--------------------------------------------------\033[0m")
         print(" 0. ⏪ Back to App Categories")
         print("00. ⏮️  Back to DJJTB")
-        print("\033[92m-------------------------------\033[0m")
+        print("\033[92m--------------------------------------------------\033[0m")
         
         choice = djj.prompt_choice(
             "\033[93mChoose a system utility\033[0m",
@@ -186,26 +186,26 @@ def app_launcher_main():
     while True:
         os.system('clear')
         print()
-        print("\033[92m===================================\033[0m")
+        print("\033[92m==================================================\033[0m")
         print("        \033[1;33m📱 APP LAUNCHER 🚀\033[0m")
-        print("\033[92m===================================\033[0m")
+        print("\033[92m==================================================\033[0m")
         print("\033[1;33mAPP CATEGORIES\033[0m")
-        print("\033[92m-----------------------------------\033[0m")
+        print("\033[92m--------------------------------------------------\033[0m")
         print("1.📱 Daily Apps 🌟")
         print("2.🔧 Tools & Utilities 🛠️")
         print("3.🌐 Web Tools 🌍")
         print("4.⚙️  System Utilities 🖥️")
         print()
         print("\033[1;33mQUICK LAUNCH\033[0m")
-        print("\033[92m-----------------------------------\033[0m")
+        print("\033[92m--------------------------------------------------\033[0m")
         print("5. Orion")
         print("6. VLC")
         print("7. JDownloader2")
         print("8. Photomator")
         print()
-        print("\033[92m-----------------------------------\033[0m")
+        print("\033[92m--------------------------------------------------\033[0m")
         print(" 0|00. ⏪ Back to DJJTB")
-        print("\033[92m===================================\033[0m")
+        print("\033[92m==================================================\033[0m")
         
         choice = djj.prompt_choice(
             "\033[93mChoose an option\033[0m",
