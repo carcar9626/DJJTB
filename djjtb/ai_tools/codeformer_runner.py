@@ -5,7 +5,6 @@ import pathlib
 import logging
 import shutil
 import time
-import select
 import djjtb.utils as djj
 
 # Supported extensions
@@ -58,72 +57,6 @@ def verify_models_exist():
     
     print("✅ \033[93mAll required models found\033[0m")
     return True
-
-def run_process_with_live_output(cmd, cwd, timeout_seconds=600):
-    """
-    Run subprocess with live output streaming while also capturing for error reporting.
-    Returns success, captured_output, elapsed_time
-    """
-    import subprocess
-    import time
-    import select
-    import sys
-    
-    start_time = time.time()
-    captured_output = []
-    
-    try:
-        process = subprocess.Popen(
-            cmd,
-            cwd=cwd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,  # Line buffered
-            universal_newlines=True
-        )
-        
-        # Live stream output while capturing it
-        while True:
-            # Check if process is still running
-            if process.poll() is not None:
-                break
-                
-            # Check for timeout
-            if time.time() - start_time > timeout_seconds:
-                process.kill()
-                elapsed = time.time() - start_time
-                return False, "Processing timeout", elapsed
-            
-            # Read available output
-            try:
-                ready, _, _ = select.select([process.stdout], [], [], 0.1)
-                if ready:
-                    line = process.stdout.readline()
-                    if line:
-                        print(line.rstrip())  # Show live output
-                        captured_output.append(line.rstrip())
-            except:
-                pass
-        
-        # Get any remaining output
-        remaining_output, _ = process.communicate()
-        if remaining_output:
-            remaining_lines = remaining_output.strip().split('\n')
-            for line in remaining_lines:
-                if line.strip():
-                    print(line)
-                    captured_output.append(line)
-        
-        elapsed = time.time() - start_time
-        success = process.returncode == 0
-        full_output = '\n'.join(captured_output)
-        
-        return success, full_output, elapsed
-        
-    except Exception as e:
-        elapsed = time.time() - start_time
-        return False, str(e), elapsed
 
 def clean_path(path_str):
     """Clean path string by removing quotes and whitespace"""
@@ -261,7 +194,8 @@ def categorize_files(file_paths):
     return images, videos
 
 def process_folder_images(src_path, output_path, weight, suffix, upscale, save_faces, save_restored_faces):
-    """Process all images in a folder using folder mode with live output and timing"""
+    """Process all images in a folder using folder mode (more efficient) with timing"""
+    folder_start_time = time.time()
     
     cmd = [
         CODEFORMER_VENV_PYTHON, CODEFORMER_SCRIPT_PATH,
@@ -273,26 +207,21 @@ def process_folder_images(src_path, output_path, weight, suffix, upscale, save_f
         "--no-open"
     ]
     
-    # Add some visual separation for the processing output
-    print("   " + "=" * 60)
-    print("   \033[36mFolder Processing - Live Output:\033[0m")
-    print("   " + "=" * 60)
+    result = subprocess.run(cmd, cwd=CODEFORMER_DIR)
     
-    success, output_msg, folder_elapsed = run_process_with_live_output(cmd, CODEFORMER_DIR, 1200)  # 20 min timeout for folders
+    folder_elapsed = time.time() - folder_start_time
     
-    print("   " + "=" * 60)
-    
-    if success:
+    if result.returncode == 0:
         if not save_faces:
             cleanup_cropped_faces(output_path)
         if not save_restored_faces:
             cleanup_restored_faces(output_path)
-    
-    return success, folder_elapsed
-
+        return True, folder_elapsed
+    return False, folder_elapsed
 
 def process_individual_file(input_path, output_path, weight, suffix, upscale, timeout_seconds=600):
-    """Process a single file (video or image) with live output streaming and timing"""
+    """Process a single file (video or image) with timing"""
+    file_start_time = time.time()
     
     cmd = [
         CODEFORMER_VENV_PYTHON, CODEFORMER_SCRIPT_PATH,
@@ -304,15 +233,22 @@ def process_individual_file(input_path, output_path, weight, suffix, upscale, ti
         "--no-open"
     ]
     
-    # Show what's being processed with some spacing for readability
-    print(f"   \033[36mProcessing:\033[0m {os.path.basename(input_path)}")
-    print("   " + "-" * 50)
-    
-    success, output_msg, file_elapsed = run_process_with_live_output(cmd, CODEFORMER_DIR, timeout_seconds)
-    
-    print("   " + "-" * 50)
-    
-    return success, output_msg, file_elapsed
+    try:
+        result = subprocess.run(cmd, cwd=CODEFORMER_DIR,
+                              stdout=subprocess.PIPE,
+                              stderr=subprocess.STDOUT,
+                              text=True,
+                              timeout=timeout_seconds)
+        
+        file_elapsed = time.time() - file_start_time
+        return result.returncode == 0, result.stdout, file_elapsed
+        
+    except subprocess.TimeoutExpired:
+        file_elapsed = time.time() - file_start_time
+        return False, "Processing timeout", file_elapsed
+    except Exception as e:
+        file_elapsed = time.time() - file_start_time
+        return False, str(e), file_elapsed
 
 def process_files_batch_mode(input_paths, weight, suffix, upscale, save_faces, save_restored_faces, tag_source):
     """Process multiple files in batch mode with consolidated output"""
@@ -358,8 +294,8 @@ def process_files_batch_mode(input_paths, weight, suffix, upscale, save_faces, s
         
         if success:
             print(f"\033[92m✅ Success:\033[0m {file_name}")
-            print(f"   \033[36mFile time:\033[0m {format_elapsed_time(file_elapsed)}")
-            print(f"   \033[36mTotal time:\033[0m {format_elapsed_time(total_elapsed)}")
+            print(f"  \033[36mFile time:\033[0m {format_elapsed_time(file_elapsed)}")
+            print(f"  \033[36mTotal time:\033[0m {format_elapsed_time(total_elapsed)}")
             success_count += 1
             
             # Clean up unwanted folders
@@ -370,8 +306,8 @@ def process_files_batch_mode(input_paths, weight, suffix, upscale, save_faces, s
                 
         else:
             print(f"\033[93m❌ Failed:\033[0m {file_name}")
-            print(f"   \033[36mFile time:\033[0m {format_elapsed_time(file_elapsed)}")
-            print(f"   \033[36mTotal time:\033[0m {format_elapsed_time(total_elapsed)}")
+            print(f"  \033[36mFile time:\033[0m {format_elapsed_time(file_elapsed)}")
+            print(f"  \033[36mTotal time:\033[0m {format_elapsed_time(total_elapsed)}")
             if "timeout" in output_msg.lower():
                 print(f"   \033[93mTimeout:\033[0m Processing took too long")
             else:
@@ -722,9 +658,9 @@ def main():
         )
         
         # Get upscale with manual default handling
-        upscale_input = input("\033[93mEnter upscale factor (default 2):\033[0m\n > ").strip()
+        upscale_input = input("\033[93mEnter upscale factor (default 1):\033[0m\n > ").strip()
         try:
-            upscale = int(upscale_input) if upscale_input else 2
+            upscale = int(upscale_input) if upscale_input else 1
             if not 1 <= upscale <= 10:
                 raise ValueError("Upscale must be between 1 and 10")
         except ValueError:

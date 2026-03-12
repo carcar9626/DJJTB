@@ -8,9 +8,9 @@ from datetime import datetime
 import djjtb.utils as djj
 
 os.system('clear')
-MEDIA_EXTENSIONS = ('.mp4', '.mov', '.webm', '.mkv', '.mp3', '.aac', '.flac', '.wav', '.m4a')
+MEDIA_EXTENSIONS = ('.mp4', '.mov', '.webm', '.mkv', '.wmv', '.ts', '.avi', '.mpg', 'avi' )
 
-def collect_media_files(input_path):    
+def collect_media_files(input_path):
     input_path = Path(input_path)
     if input_path.is_file():
         return [str(input_path)] if input_path.suffix.lower() in MEDIA_EXTENSIONS else []

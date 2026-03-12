@@ -64,7 +64,7 @@ def log_link(url):
     domain = get_domain(url)
     
     # Print to Terminal
-    print(f"🆕 Caught: {domain} | {url}")
+    print(f"🆕 \033[1;93mCaught:\033[0m \033[1;97m{domain}\033[0m | {url}")
     
     # Write CSV
     with open(csv_file, "a", newline='', encoding="utf-8") as f_csv:

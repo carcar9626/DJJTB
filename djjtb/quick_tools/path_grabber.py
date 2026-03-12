@@ -89,7 +89,7 @@ def log_path(path_str):
     path_info = get_path_info(path_str)
     csv_file, txt_file = get_today_filenames()
     status = "✅" if path_info['exists'] else "❌"
-    print(f"🆕 {status} Caught: {path_info['filename']} | {path_info['full_path']}")
+    print(f"🆕 {status} \033[1;93mCaught:\033[0m \033[1;97m{path_info['filename']}\033[0m | {path_info['full_path']}")
     with open(csv_file, "a", newline='', encoding="utf-8") as f_csv:
         writer = csv.writer(f_csv)
         writer.writerow([path_info['full_path'], date_str, time_str])
@@ -98,8 +98,9 @@ def log_path(path_str):
 
 def main():
     os.system('clear')
-    print("📁 PathGrabber is running... (press Ctrl+C to stop)")
+    print()
     last_clipboard = ""
+    print("📁 PathGrabber is running... (press Ctrl+C to stop)")
     while True:
         try:
             clipboard = pyperclip.paste()

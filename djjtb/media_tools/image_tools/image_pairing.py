@@ -1,11 +1,11 @@
 import os
 import subprocess
 import sys
-import time
-from PIL import Image
 import pathlib
 import logging
 import djjtb.utils as djj
+from PIL import Image, ImageFilter
+from collections import defaultdict
 
 def clear_screen():
     """Clear the terminal screen."""
@@ -20,12 +20,6 @@ def setup_logging(output_path):
         format='%(asctime)s - %(levelname)s - %(message)s'
     )
 
-
-def clean_path(path_str):
-    """Clean input path by removing quotes and extra spaces."""
-    return path_str.strip().strip('\'"')
-
-
 def is_valid_image(file_path):
     """Check if a file is a valid image."""
     try:
@@ -36,110 +30,342 @@ def is_valid_image(file_path):
         logging.error(f"Invalid image {file_path}: {e}")
         return False
 
-def get_max_size(img1_path, img2_path):
-    """Get maximum dimensions of two images, ensuring even numbers."""
+def collect_images_from_folder(input_path, include_subfolders=False):
+    """Collect images from folder(s)."""
+    input_path_obj = pathlib.Path(input_path)
+    image_extensions = ('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp')
+    
+    images = []
+    if input_path_obj.is_dir():
+        if include_subfolders:
+            for root, _, files in os.walk(input_path):
+                images.extend(pathlib.Path(root) / f for f in files if pathlib.Path(f).suffix.lower() in image_extensions)
+        else:
+            images = [f for f in input_path_obj.glob('*') if f.suffix.lower() in image_extensions and f.is_file()]
+    
+    return sorted([str(v) for v in images], key=str.lower)
+
+def collect_images_from_paths(file_paths):
+    """Collect images from space-separated file paths."""
+    images = []
+    paths = file_paths.strip().split()
+    
+    for path in paths:
+        path = path.strip('\'"')
+        path_obj = pathlib.Path(path)
+        
+        if path_obj.is_file() and path_obj.suffix.lower() in ('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp'):
+            images.append(str(path_obj))
+        elif path_obj.is_dir():
+            images.extend(collect_images_from_folder(str(path_obj), include_subfolders=False))
+    
+    return sorted(images, key=str.lower)
+
+def collect_images_from_txt():
+    """Collect images from txt file (files and folders)."""
+    image_extensions = ('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp')
+    paths = djj.get_paths_from_txt("Enter txt file path")
+    
+    if not paths:
+        return []
+    
+    images = []
+    for path in paths:
+        path_obj = pathlib.Path(path)
+        if path_obj.is_file():
+            if path_obj.suffix.lower() in image_extensions:
+                images.append(str(path))
+        elif path_obj.is_dir():
+            images.extend(collect_images_from_folder(str(path), include_subfolders=False))
+    
+    return sorted(set(images), key=str.lower)
+
+def group_images_by_parent_folder(image_paths):
+    """
+    Group images by their immediate parent folder.
+    Returns dict: {parent_folder_path: [image_paths]}
+    """
+    grouped = {}
+    for img_path in image_paths:
+        parent = str(pathlib.Path(img_path).parent)
+        if parent not in grouped:
+            grouped[parent] = []
+        grouped[parent].append(img_path)
+    return grouped
+
+def get_match_key(filename, match_type, num_chars):
+    """
+    Extract match key from filename based on prefix/suffix.
+    
+    Args:
+        filename: Full filename with extension
+        match_type: 'prefix' or 'suffix'
+        num_chars: Number of characters to use for matching
+    
+    Returns:
+        Match key string
+    """
+    # Remove extension first
+    name_no_ext = os.path.splitext(filename)[0]
+    
+    if match_type == 'prefix':
+        return name_no_ext[:num_chars] if len(name_no_ext) >= num_chars else name_no_ext
+    else:  # suffix
+        return name_no_ext[-num_chars:] if len(name_no_ext) >= num_chars else name_no_ext
+
+def group_images_by_match(images, match_type, num_chars):
+    """
+    Group images by their prefix/suffix match key.
+    
+    Returns:
+        dict: {match_key: [image_paths]}
+    """
+    groups = defaultdict(list)
+    
+    for img_path in images:
+        filename = os.path.basename(img_path)
+        match_key = get_match_key(filename, match_type, num_chars)
+        groups[match_key].append(img_path)
+    
+    return dict(groups)
+
+def create_sequential_groups(images, group_size):
+    """
+    Create sequential groups of images.
+    
+    Args:
+        images: List of image paths
+        group_size: Number of images per group
+    
+    Returns:
+        List of groups (each group is a list of image paths)
+    """
+    groups = []
+    for i in range(0, len(images), group_size):
+        group = images[i:i + group_size]
+        if len(group) == group_size:  # Only include complete groups
+            groups.append(group)
+    return groups
+
+def get_max_dimensions(image_paths):
+    """Get maximum dimensions from a list of images, ensuring even numbers."""
     try:
-        size1 = Image.open(img1_path).size
-        size2 = Image.open(img2_path).size
-        width = max(size1[0], size2[0])
-        height = max(size1[1], size2[1])
-        width = width if width % 2 == 0 else width + 1
-        height = height if height % 2 == 0 else height + 1
-        return width, height
+        max_width = 0
+        max_height = 0
+        
+        for img_path in image_paths:
+            with Image.open(img_path) as img:
+                max_width = max(max_width, img.width)
+                max_height = max(max_height, img.height)
+        
+        # Ensure even numbers for video encoding
+        max_width = max_width if max_width % 2 == 0 else max_width + 1
+        max_height = max_height if max_height % 2 == 0 else max_height + 1
+        
+        return max_width, max_height
     except Exception as e:
-        logging.error(f"Error getting image sizes for {img1_path} or {img2_path}: {e}")
+        logging.error(f"Error getting image dimensions: {e}")
         return None
 
-def process_pairs(input_path, pic1_duration, pic2_duration, transition_duration, include_sub):
-    """Process image pairs into videos with transitions."""
-    input_path = pathlib.Path(input_path).resolve()
-    if not input_path.exists():
-        print("Error: Input path does not exist.", file=sys.stderr)
-        return 0, 0
+def prepare_image_with_background(img_path, canvas_width, canvas_height, bg_opacity=0.8, bg_blur=8):
+    """
+    Prepare an image with blurred background to fit canvas dimensions.
+    Returns path to temporary processed image.
+    """
+    try:
+        canvas = Image.new('RGBA', (canvas_width, canvas_height), (0, 0, 0, 0))
+        img = Image.open(img_path)
+        if img.mode != 'RGBA':
+            img = img.convert('RGBA')
+        
+        # Create blurred background
+        bg_img = img.copy()
+        bg_img = bg_img.resize((canvas_width, canvas_height), Image.Resampling.LANCZOS)
+        bg_img = bg_img.filter(ImageFilter.GaussianBlur(radius=bg_blur))
+        alpha = Image.new('L', bg_img.size, int(255 * bg_opacity))
+        bg_img.putalpha(alpha)
+        canvas.paste(bg_img, (0, 0), bg_img)
+        
+        # Scale and center foreground
+        img_ratio = img.width / img.height
+        target_width = canvas_width
+        target_height = int(target_width / img_ratio)
+        if target_height > canvas_height:
+            target_height = canvas_height
+            target_width = int(target_height * img_ratio)
+        
+        img = img.resize((target_width, target_height), Image.Resampling.LANCZOS)
+        paste_x = (canvas_width - target_width) // 2
+        paste_y = (canvas_height - target_height) // 2
+        canvas.paste(img, (paste_x, paste_y), img)
+        
+        return canvas
+    except Exception as e:
+        logging.error(f"Error preparing image {img_path}: {e}")
+        return None
 
-    output_base = os.path.join(str(input_path), "Output", "Paired")
-    os.makedirs(output_base, exist_ok=True)
-    setup_logging(output_base)
+def process_image_group(image_group, output_path, durations, transition_duration, base_output_name):
+    """
+    Process a group of images into a video with transitions.
+    
+    Args:
+        image_group: List of image paths to combine
+        output_path: Directory for output video
+        durations: List of durations for each image
+        transition_duration: Duration of transition between images
+        base_output_name: Base name for output file
+    
+    Returns:
+        True if successful, False otherwise
+    """
+    # Get max dimensions
+    resolution = get_max_dimensions(image_group)
+    if not resolution:
+        return False
+    
+    canvas_width, canvas_height = resolution
+    
+    # Create temp directory for preprocessed images
+    temp_dir = os.path.join(output_path, "temp_pairing")
+    os.makedirs(temp_dir, exist_ok=True)
+    
+    # Preprocess all images with backgrounds
+    processed_images = []
+    for i, img_path in enumerate(image_group):
+        canvas = prepare_image_with_background(img_path, canvas_width, canvas_height)
+        if canvas is None:
+            return False
+        
+        temp_path = os.path.join(temp_dir, f"prep_{i:04d}.png")
+        canvas.convert('RGB').save(temp_path, 'PNG')
+        processed_images.append(temp_path)
+    
+    # Build ffmpeg command
+    cmd = ["ffmpeg", "-y"]
+    
+    # Add all images as inputs with their durations
+    for i, (img_path, duration) in enumerate(zip(processed_images, durations)):
+        cmd.extend(["-loop", "1", "-t", str(duration), "-i", img_path])
+    
+    # Build filter complex
+    filter_parts = []
+    overlay_chain = []
+    
+    for i in range(len(processed_images)):
+        scale_filter = f"[{i}:v]scale={canvas_width}:{canvas_height}:force_original_aspect_ratio=decrease,pad={canvas_width}:{canvas_height}:(ow-iw)/2:(oh-ih)/2,format=yuva420p"
+        
+        if i == 0:
+            # First image: fade out at the end
+            fade_filter = f"{scale_filter},fade=t=out:st={durations[i]-transition_duration}:d={transition_duration}:alpha=1,setpts=PTS-STARTPTS[va{i}]"
+            filter_parts.append(fade_filter)
+            overlay_chain.append(f"va{i}")
+        else:
+            # Subsequent images: fade in, offset by cumulative duration
+            offset_time = sum(durations[:i]) - i * transition_duration
+            fade_filter = f"{scale_filter},fade=t=in:st=0:d={transition_duration}:alpha=1,setpts=PTS-STARTPTS+{offset_time}/TB[va{i}]"
+            filter_parts.append(fade_filter)
+            overlay_chain.append(f"va{i}")
+    
+    # Chain overlays
+    if len(processed_images) == 1:
+        final_output = overlay_chain[0]
+    else:
+        current_base = overlay_chain[0]
+        for i in range(1, len(overlay_chain)):
+            overlay_filter = f"[{current_base}][{overlay_chain[i]}]overlay[ov{i}]"
+            filter_parts.append(overlay_filter)
+            current_base = f"ov{i}"
+        final_output = current_base
+    
+    # Calculate total duration
+    total_duration = sum(durations) - (len(durations) - 1) * transition_duration
+    filter_parts.append(f"[{final_output}]trim=duration={total_duration}")
+    
+    filter_complex = ";".join(filter_parts)
+    
+    # Output file
+    output_file = os.path.join(output_path, f"{base_output_name}_paired.mp4")
+    
+    cmd.extend([
+        "-filter_complex", filter_complex,
+        "-c:v", "libx264",
+        "-crf", "18",
+        "-preset", "veryfast",
+        "-r", "30",
+        "-t", str(total_duration),
+        "-fps_mode", "cfr",
+        output_file
+    ])
+    
+    try:
+        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        
+        # Clean up temp files
+        for temp_file in processed_images:
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+        if os.path.exists(temp_dir):
+            os.rmdir(temp_dir)
+        
+        return True
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Error creating video: {e.stderr}")
+        return False
 
-    image_extensions = ('.jpg', '.jpeg', '.png')
-    images = []
-    if input_path.is_file() and input_path.suffix.lower() in image_extensions:
-        images = [input_path]
-    elif input_path.is_dir():
-        pattern = '**/*' if include_sub else '*'
-        images = sorted(
-            [f for f in input_path.glob(pattern) if f.suffix.lower() in image_extensions and f.is_file()],
-            key=lambda x: str(x).lower()
-        )
-
-    print("Scanning for Images...")
-    print(f"{len(images)} images found")
-    print()
-    print("Processing Pairs...")
-
-    if len(images) % 2 != 0:
-        print("WARNING: Odd number of files. The last file will be skipped.", file=sys.stderr)
-
-    total_duration = pic1_duration + pic2_duration - transition_duration
+def process_all_groups(groups, durations, transition_duration, use_parent_output=False):
+    """
+    Process all image groups into videos.
+    
+    Args:
+        groups: List of image groups to process
+        durations: List of durations for each image in group
+        transition_duration: Transition duration between images
+        use_parent_output: If True, output to each image's parent/Output/Paired
+    
+    Returns:
+        (success_count, error_count, output_folders)
+    """
     success_count = 0
     error_count = 0
-    total_pairs = len(images) // 2
-
-    for i in range(0, len(images) - 1, 2):
-        img1_path = images[i]
-        img2_path = images[i + 1]
-        pair_num = i // 2 + 1
-
-        sys.stdout.write(f"\rProcessing {pair_num}/{total_pairs} pairs ({pair_num/total_pairs*100:.1f}%)...")
+    total_groups = len(groups)
+    output_folders = set()
+    
+    for idx, group in enumerate(groups, 1):
+        sys.stdout.write(f"\r\033[93mProcessing \033[0m{idx}/{total_groups} \033[93mgroups\033[0m ({idx/total_groups*100:.1f}%)...")
         sys.stdout.flush()
-
-        if not (is_valid_image(img1_path) and is_valid_image(img2_path)):
+        
+        # Validate all images in group
+        if not all(is_valid_image(img) for img in group):
             error_count += 1
             continue
-
-        resolution = get_max_size(img1_path, img2_path)
-        if not resolution:
-            error_count += 1
-            continue
-        width, height = resolution
-
-        relative_path = os.path.relpath(img1_path.parent, input_path)
-        output_dir = os.path.join(output_base, relative_path) if relative_path != '.' else output_base
+        
+        # Determine output location based on mode
+        first_img = pathlib.Path(group[0])
+        
+        if use_parent_output:
+            # Output to the parent folder of the first image
+            parent_folder = str(first_img.parent)
+            output_dir = os.path.join(parent_folder, "Output", "Paired")
+        else:
+            # Legacy behavior - not used in new workflow
+            output_dir = os.path.join(str(first_img.parent), "Output", "Paired")
+        
         os.makedirs(output_dir, exist_ok=True)
-
-        filename_noext = img1_path.stem.split('_', 1)[1] if '_' in img1_path.stem else img1_path.stem
-        out_file = os.path.join(output_dir, f"{filename_noext}_paired.mp4")
-
-        transition_start = pic1_duration - transition_duration
-        cmd = [
-            "ffmpeg", "-y",
-            "-loop", "1", "-t", str(pic1_duration), "-i", str(img1_path),
-            "-loop", "1", "-t", str(pic2_duration), "-i", str(img2_path),
-            "-filter_complex",
-            (
-                f"[0:v]scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,format=yuva420p,fade=t=out:st={transition_start}:d={transition_duration}:alpha=1,setpts=PTS-STARTPTS[va0];"
-                f"[1:v]scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,format=yuva420p,fade=t=in:st=0:d={transition_duration}:alpha=1,setpts=PTS-STARTPTS+{transition_start}/TB[va1];"
-                f"[va0][va1]overlay,settb=1/30,trim=duration={total_duration}"
-            ),
-            "-c:v", "libx264",
-            "-crf", "18",
-            "-preset", "veryfast",
-            "-r", "30",
-            "-t", str(total_duration),
-            "-fps_mode", "cfr",
-            str(out_file)
-        ]
-
-        try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True)
+        output_folders.add(output_dir)
+        
+        # Create base output name from first image
+        filename_noext = first_img.stem.split('_', 1)[1] if '_' in first_img.stem else first_img.stem
+        
+        # Process the group
+        if process_image_group(group, output_dir, durations, transition_duration, filename_noext):
             success_count += 1
-        except subprocess.CalledProcessError as e:
-            logging.error(f"Error processing pair {img1_path.name} + {img2_path.name}: {e.stderr}")
+        else:
             error_count += 1
-
-    sys.stdout.write("\r" + " " * 50 + "\r")
+    
+    sys.stdout.write("\r" + " " * 80 + "\r")
     sys.stdout.flush()
-    return success_count, error_count, output_base
+    
+    return success_count, error_count, list(output_folders)
 
 if __name__ == "__main__":
     while True:
@@ -150,97 +376,259 @@ if __name__ == "__main__":
         print("\033[92m==================================================\033[0m")
         print()
 
-        max_attempts = 5
-        attempt = 0
+        # Input mode selection
+        input_mode = djj.prompt_choice(
+            "\033[93mInput mode:\033[0m\n"
+            "1. Folder path\n"
+            "2. Space-separated file paths\n"
+            "3. Path list from txt file\n",
+            ['1', '2', '3'],
+            default='1'
+        )
+        print()
+
+        images = []
         input_path = None
-        while attempt < max_attempts:
-            input_path = input("\033[93mEnter path:\033[0m \n -> ").strip()
-            input_path = clean_path(input_path)
-            try:
-                normalized_path = str(pathlib.Path(input_path).resolve())
-                if os.path.exists(normalized_path):
-                    input_path = normalized_path
-                    break
-                print(f"\033[93mError:\033[0m '{normalized_path}' \033[93mdoes not exist. Ensure the path is correct and the external drive (if any) is mounted.\033[0m", file=sys.stderr)
-            except Exception as e:
-                print(f"\033[93mError resolving path\033[0m '{input_path}': {e}. \033[93mPlease try again.\033[0m", file=sys.stderr)
-            attempt += 1
-            if attempt == max_attempts:
-                print("\033[93mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
-                sys.exit(1)
-        print()
+        include_subfolders = False
 
-        include_sub = djj.prompt_choice("Include subfolders?\n1. Yes, 2. No ", ['1', '2'], default='2') == '1'
-        print()
+        if input_mode == '1':
+            # Folder mode
+            input_path = djj.get_path_input("Enter folder path")
+            print()
+            
+            include_subfolders = djj.prompt_choice(
+                "\033[93mInclude subfolders?\033[0m\n1. Yes\n2. No\n",
+                ['1', '2'],
+                default='2'
+            ) == '1'
+            print()
+            
+            images = collect_images_from_folder(input_path, include_subfolders)
+            
+        elif input_mode == '2':
+            # File paths mode
+            file_paths = input("📁 \033[93mEnter image paths (space-separated):\033[0m\n -> ").strip()
+            
+            if not file_paths:
+                print("❌ \033[1;5;93mNo file paths provided.\033[0m")
+                continue
+            
+            images = collect_images_from_paths(file_paths)
+            if images:
+                input_path = str(pathlib.Path(images[0]).parent)
+            print()
+        
+        else:  # input_mode == '3'
+            # Txt file mode
+            images = collect_images_from_txt()
+            
+            if not images:
+                print("❌ \033[93mNo valid images found.\033[0m")
+                continue
+            
+            if images:
+                input_path = str(pathlib.Path(images[0]).parent)
+            print()
 
-        attempt = 0
-        pic1_duration = None
-        while attempt < max_attempts:
+        if not images:
+            print("❌ \033[93mNo valid image files found. Try again.\033[0m\n")
+            continue
+
+        print("Scanning for images...")
+        print(f"✅ {len(images)} \033[93mimages found\033[0m")
+        print()
+        
+        # Pairing mode
+        pairing_mode = djj.prompt_choice(
+            "\033[93mPairing mode:\033[0m\n"
+            "1. Manual (sequential groups)\n"
+            "2. Auto-match (by prefix/suffix)\n",
+            ['1', '2'],
+            default='1'
+        )
+        print()
+        
+        # Number of images per group
+        while True:
             try:
-                pic1_duration = float(input("\033[93mDuration for first image (seconds)\033[0m [default: 5]: ").strip() or 5)
-                if pic1_duration > 0:
+                group_size_input = input("\033[93mImages per group\033[0m [default: 2]:\n -> ").strip()
+                if not group_size_input:
+                    group_size = 2
                     break
-                print("\033[93mPlease enter a positive number.\033[0m", file=sys.stderr)
+                group_size = int(group_size_input)
+                if group_size > 0:
+                    break
+                else:
+                    print("\033[93mPlease enter a positive number.\033[0m")
             except ValueError:
-                print("\033[93mPlease enter a valid number.\033[0m", file=sys.stderr)
-            attempt += 1
-            if attempt == max_attempts:
-                print("\033[93mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
-                sys.exit(1)
+                print("\033[93mPlease enter a valid number.\033[0m")
         print()
-
-        attempt = 0
-        pic2_duration = None
-        while attempt < max_attempts:
+        
+        # Auto-match settings
+        match_type = None
+        num_chars = None
+        if pairing_mode == '2':
+            match_type_choice = djj.prompt_choice(
+                "\033[93mMatch by:\033[0m\n1. Prefix\n2. Suffix\n",
+                ['1', '2'],
+                default='1'
+            )
+            match_type = 'prefix' if match_type_choice == '1' else 'suffix'
+            print()
+            
+            while True:
+                try:
+                    num_chars_input = input(f"\033[93mNumber of characters for {match_type} match\033[0m [default: 4]:\n -> ").strip()
+                    if not num_chars_input:
+                        num_chars = 4
+                        break
+                    num_chars = int(num_chars_input)
+                    if num_chars > 0:
+                        break
+                    else:
+                        print("\033[93mPlease enter a positive number.\033[0m")
+                except ValueError:
+                    print("\033[93mPlease enter a valid number.\033[0m")
+            print()
+        
+        # Duration settings
+        durations = []
+        for i in range(group_size):
+            while True:
+                try:
+                    duration_input = input(f"\033[93mDuration for image {i+1} (seconds)\033[0m [default: 5]:\n -> ").strip()
+                    if not duration_input:
+                        duration = 5
+                        break
+                    duration = float(duration_input)
+                    if duration > 0:
+                        break
+                    else:
+                        print("\033[93mPlease enter a positive number.\033[0m")
+                except ValueError:
+                    print("\033[93mPlease enter a valid number.\033[0m")
+            durations.append(duration)
+            print()
+        
+        # Transition duration
+        while True:
             try:
-                pic2_duration = float(input("\033[93mDuration for second image (seconds)\033[0m\n [default: 5]: ").strip() or 5)
-                if pic2_duration > 0:
+                transition_input = input("\033[93mTransition duration (seconds)\033[0m [default: 1]:\n -> ").strip()
+                if not transition_input:
+                    transition_duration = 1
                     break
-                print("Please enter a positive number.", file=sys.stderr)
-            except ValueError:
-                print("\033[93mPlease enter a valid number.\033[0m", file=sys.stderr)
-            attempt += 1
-            if attempt == max_attempts:
-                print("\033[93mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
-                sys.exit(1)
-        print()
-
-        attempt = 0
-        transition_duration = None
-        while attempt < max_attempts:
-            try:
-                transition_duration = float(input("Transition duration (seconds) /n[default: 1]:  ").strip() or 1)
-                print()
+                transition_duration = float(transition_input)
                 if transition_duration >= 0:
                     break
-                print("\033[93mPlease enter a non-negative number.\033[0m", file=sys.stderr)
+                else:
+                    print("\033[93mPlease enter a non-negative number.\033[0m")
             except ValueError:
-                print("\033[93mPlease enter a valid number.\033[0m", file=sys.stderr)
-            attempt += 1
-            if attempt == max_attempts:
-                print("\033[93mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
-                sys.exit(1)
+                print("\033[93mPlease enter a valid number.\033[0m")
         print()
-
-        total_duration = pic1_duration + pic2_duration - transition_duration
-        print(f"\033[93mTotal video duration: \033[0m{total_duration} seconds")
+        
+        total_duration = sum(durations) - (len(durations) - 1) * transition_duration
+        print(f"\033[93mTotal video duration:\033[0m {total_duration} \033[93mseconds\033[0m")
         print("-------------")
-
-        success_count, error_count, output_base = process_pairs(
-            input_path, pic1_duration, pic2_duration, transition_duration, include_sub
-        )
-
-        print("\n" * 1)
+        print()
+        
+        # Process images based on mode
+        # Setup logging in a common location for error tracking
+        if input_mode == '1':
+            # Folder mode - use traditional output location
+            log_output = os.path.join(input_path, "Output", "Paired")
+        else:
+            # Multi-path mode - use first folder for logs
+            log_output = os.path.join(str(pathlib.Path(images[0]).parent), "Output", "Paired")
+        
+        os.makedirs(log_output, exist_ok=True)
+        setup_logging(log_output)
+        
+        # Determine if we should process by parent folder
+        # This applies to: folder mode with subfolders OR multi-path modes (txt/space-separated)
+        process_by_folder = (include_subfolders and input_mode == '1') or (input_mode in ['2', '3'])
+        
+        if process_by_folder:
+            # Group images by parent folder first
+            folder_groups = group_images_by_parent_folder(images)
+            print(f"\033[93mProcessing {len(folder_groups)} folders separately...\033[0m")
+            print()
+            
+            total_success = 0
+            total_error = 0
+            all_output_folders = []
+            
+            for folder_path, folder_images in folder_groups.items():
+                # Create groups within this folder
+                if pairing_mode == '1':
+                    # Manual sequential
+                    groups = create_sequential_groups(folder_images, group_size)
+                else:
+                    # Auto-match
+                    matched = group_images_by_match(folder_images, match_type, num_chars)
+                    groups = []
+                    for match_key, matched_images in matched.items():
+                        if len(matched_images) >= group_size:
+                            # Take first group_size images
+                            groups.append(matched_images[:group_size])
+                
+                if groups:
+                    success, error, outputs = process_all_groups(groups, durations, transition_duration, use_parent_output=True)
+                    total_success += success
+                    total_error += error
+                    all_output_folders.extend(outputs)
+            
+            success_count = total_success
+            error_count = total_error
+            output_folders = all_output_folders
+        else:
+            # Single folder processing (no subfolders, folder mode only)
+            if pairing_mode == '1':
+                # Manual sequential
+                groups = create_sequential_groups(images, group_size)
+            else:
+                # Auto-match
+                matched = group_images_by_match(images, match_type, num_chars)
+                groups = []
+                for match_key, matched_images in matched.items():
+                    if len(matched_images) >= group_size:
+                        # Take first group_size images
+                        groups.append(matched_images[:group_size])
+            
+            if not groups:
+                print("\033[93mNo complete groups found with the specified settings.\033[0m")
+                continue
+            
+            print(f"\033[93mFound {len(groups)} complete groups\033[0m")
+            print()
+            
+            # Single folder mode - use parent output (but all images are from same folder anyway)
+            success_count, error_count, output_folders = process_all_groups(groups, durations, transition_duration, use_parent_output=True)
+        
+        # Display summary
+        print()
         print("\033[93mPairing Summary\033[0m")
         print("-------------")
-        print(f"✅ \033[93mSuccessfully processed:\033[0m {success_count} \033[93mpairs\033[0m")
+        print(f"✅ \033[93mSuccessfully processed:\033[0m {success_count} \033[93mgroups\033[0m")
         if error_count:
-            print(f"\033[93mFailed pairs:\033[0m {error_count} \033[93m(see pairing_errors.log in output folder)\033[0m")
-        print(f"\033[93mOutput folder: \033[0m\n{output_base}")
-        print("\n" * 2)
-
-        djj.prompt_open_folder(output_base)
-
+            print(f"\033[93mFailed groups:\033[0m {error_count} \033[93m(see pairing_errors.log in output folder)\033[0m")
+        
+        # Display output folder(s)
+        if len(output_folders) == 1:
+            print(f"\033[93mOutput folder:\033[0m {output_folders[0]}")
+        else:
+            print(f"\033[93mOutput folders:\033[0m {len(output_folders)} folders")
+            for folder in output_folders[:3]:  # Show first 3
+                print(f"  - {folder}")
+            if len(output_folders) > 3:
+                print(f"  ... and {len(output_folders) - 3} more")
+        print()
+        
+        # Open first output folder
+        if output_folders:
+            djj.prompt_open_folder(output_folders[0])
+        
         action = djj.what_next()
         if action == 'exit':
             break
+    
+    clear_screen()

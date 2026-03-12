@@ -17,6 +17,21 @@ def setup_logging(output_path, prefix):
     logger = djj.setup_logging(output_path, f"collage_{prefix.lower()}")
     return logger
 
+def should_exclude_image(img_path):
+    """Check if an image should be excluded from collage generation."""
+    filename = os.path.basename(img_path)
+    
+    # Exclude files with these patterns
+    if filename.startswith('collage_') or filename.startswith('CLG_') or '_CLG_' in filename:
+        return True
+    
+    # Exclude files in Output/Collages folders
+    path_parts = pathlib.Path(img_path).parts
+    if 'Output' in path_parts and 'Collages' in path_parts:
+        return True
+    
+    return False
+
 def load_images(folder_path, output_path):
     """Load and categorize images by aspect ratio, excluding output folder."""
     image_extensions = ('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp')
@@ -32,8 +47,13 @@ def load_images(folder_path, output_path):
         if root_resolved.startswith(base_output_path):
             continue
         for f in files:
-            if f.lower().endswith(image_extensions) and not f.startswith('collage_') and not f.startswith('CLG_'):
+            if f.lower().endswith(image_extensions):
                 img_path = os.path.join(root, f)
+                
+                # Additional exclusion check
+                if should_exclude_image(img_path):
+                    continue
+                
                 rel_path = os.path.relpath(img_path, folder_path)
                 try:
                     with Image.open(img_path) as img:
@@ -48,6 +68,31 @@ def load_images(folder_path, output_path):
                 except Exception as e:
                     logging.error(f"Error reading {rel_path}: {e}")
 
+    return landscape, square, portrait
+
+def load_images_from_list(image_paths, output_path):
+    """Load and categorize images from a list of paths."""
+    landscape, square, portrait = [], [], []
+    image_extensions = ('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp')
+    
+    for img_path in image_paths:
+        # Skip excluded images
+        if should_exclude_image(img_path):
+            continue
+        
+        try:
+            with Image.open(img_path) as img:
+                width, height = img.size
+                aspect_ratio = width / height
+                if aspect_ratio > 1.2:
+                    landscape.append(img_path)
+                elif aspect_ratio < 0.8:
+                    portrait.append(img_path)
+                else:
+                    square.append(img_path)
+        except Exception as e:
+            logging.error(f"Error reading {img_path}: {e}")
+    
     return landscape, square, portrait
 
 def load_used_images(used_file):
@@ -83,9 +128,15 @@ def collect_images_from_folder(input_path, include_subfolders=False):
     if input_path_obj.is_dir():
         if include_subfolders:
             for root, _, files in os.walk(input_path):
-                images.extend(pathlib.Path(root) / f for f in files if pathlib.Path(f).suffix.lower() in image_extensions)
+                for f in files:
+                    if pathlib.Path(f).suffix.lower() in image_extensions:
+                        img_path = pathlib.Path(root) / f
+                        if not should_exclude_image(str(img_path)):
+                            images.append(img_path)
         else:
-            images = [f for f in input_path_obj.glob('*') if f.suffix.lower() in image_extensions and f.is_file()]
+            images = [f for f in input_path_obj.glob('*')
+                     if f.suffix.lower() in image_extensions and f.is_file()
+                     and not should_exclude_image(str(f))]
     
     return sorted([str(v) for v in images], key=str.lower)
 
@@ -99,66 +150,146 @@ def collect_images_from_paths(file_paths):
         path_obj = pathlib.Path(path)
         
         if path_obj.is_file() and path_obj.suffix.lower() in ('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp'):
-            images.append(str(path_obj))
+            if not should_exclude_image(str(path_obj)):
+                images.append(str(path_obj))
         elif path_obj.is_dir():
             images.extend(collect_images_from_folder(str(path_obj), include_subfolders=False))
     
     return sorted(images, key=str.lower)
 
-def create_collage(folder_path, output_path, num_collages, orientation, include_subfolders, log_used_images=False, fixed_grid=None, fixed_num_images=None, background_opacity=0.25, background_blur_radius=8):
+def collect_images_from_txt():
+    """Collect images from txt file (files and folders)."""
+    image_extensions = ('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp')
+    paths = djj.get_paths_from_txt("Enter txt file path")
+    
+    if not paths:
+        return []
+    
+    images = []
+    for path in paths:
+        path_obj = pathlib.Path(path)
+        if path_obj.is_file():
+            if path_obj.suffix.lower() in image_extensions and not should_exclude_image(str(path_obj)):
+                images.append(str(path))
+        elif path_obj.is_dir():
+            images.extend(collect_images_from_folder(str(path), include_subfolders=False))
+    
+    return sorted(set(images), key=str.lower)
+
+def calculate_auto_grid(canvas_width, canvas_height, category):
+    """
+    Calculate optimal grid layout based on canvas aspect ratio and image category.
+    
+    Args:
+        canvas_width: Canvas width in pixels
+        canvas_height: Canvas height in pixels
+        category: 'landscape', 'square', or 'portrait'
+    
+    Returns:
+        tuple: (rows, cols, num_images)
+    """
+    canvas_ratio = canvas_width / canvas_height
+    
+    # Determine base grid size based on canvas aspect ratio
+    if canvas_ratio > 1.5:  # Wide canvas (e.g., 1920x1080)
+        if category == 'landscape':
+            return (2, 2), 4
+        elif category == 'square':
+            return (2, 3), 6
+        else:  # portrait
+            return (1, 3), 3
+    
+    elif canvas_ratio < 0.7:  # Tall canvas (e.g., 1080x1920)
+        if category == 'landscape':
+            return (3, 1), 3
+        elif category == 'square':
+            return (3, 2), 6
+        else:  # portrait
+            return (2, 2), 4
+    
+    else:  # Square-ish canvas (e.g., 1080x1080, 1280x1080)
+        if category == 'landscape':
+            return (2, 1), 2
+        elif category == 'square':
+            return (2, 2), 4
+        else:  # portrait
+            return (1, 2), 2
+
+def create_collage(folder_path, image_list, output_path, num_collages, orientation,
+                  canvas_dims, include_subfolders, log_used_images=False,
+                  fixed_grid=None, fixed_num_images=None, background_opacity=0.25,
+                  background_blur_radius=8, is_folder_mode=True):
     """Create tiled collages with category-specific grids and individual backgrounds."""
     os.makedirs(output_path, exist_ok=True)
     
-    # Define orientation configurations
-    orientation_configs = {
-        'horizontal': {
-            'name': 'Horizontal',
-            'canvas': (1920, 1080),
-            'categories': [
-                ('landscape', (2, 2), 4),
-                ('square', (2, 3), 6),
-                ('portrait', (1, 3), 3)
-            ]
-        },
-        'vertical': {
-            'name': 'Vertical',
-            'canvas': (1080, 1920),
-            'categories': [
-                ('landscape', (3, 1), 3),
-                ('square', (3, 2), 6),
-                ('portrait', (2, 2), 4)
-            ]
-        },
-        'square': {
-            'name': 'Square',
-            'canvas': (1080, 1080),
-            'categories': [
-                ('landscape', (2, 1), 2),  # if source is landscape then 1x2
-                ('square', (2, 2), 4),     # if source is square then 2x2
-                ('portrait', (1, 2), 2)    # if source is portrait then 2x1
-            ]
-        },
-        '1280x1080': {
-            'name': '1280x1080',
-            'canvas': (1280, 1080),
-            'categories': [
-                ('landscape', (2, 1), 2),  # if source is landscape then 1x3
-                ('square', (2, 2), 4),     # if source is square then 1x2
-                ('portrait', (1, 2), 2)    # if source is portrait then 2x2
-            ]
-        },
-        '900x1920': {
-            'name': '900x1920',
-            'canvas': (900, 1920),
-            'categories': [
-                ('landscape', (3, 1), 3),  # following portrait layout pattern
-                ('square', (3, 2), 6),     # following portrait layout pattern
-                ('portrait', (2, 2), 4)    # following portrait layout pattern
-            ]
+    # Handle custom dimensions
+    if orientation == 'custom':
+        canvas_width, canvas_height = canvas_dims
+        subfolder = f'{canvas_width}x{canvas_height}'
+        
+        # Auto-calculate grid layouts
+        orientation_config = {
+            'name': subfolder,
+            'canvas': (canvas_width, canvas_height),
+            'categories': []
         }
-    }
+        
+        for category in ['landscape', 'square', 'portrait']:
+            grid, num_images = calculate_auto_grid(canvas_width, canvas_height, category)
+            orientation_config['categories'].append((category, grid, num_images))
     
-    config = orientation_configs[orientation]
+    else:
+        # Use predefined orientation configs
+        orientation_configs = {
+            'horizontal': {
+                'name': 'Horizontal',
+                'canvas': (1920, 1080),
+                'categories': [
+                    ('landscape', (2, 2), 4),
+                    ('square', (2, 3), 6),
+                    ('portrait', (1, 3), 3)
+                ]
+            },
+            'vertical': {
+                'name': 'Vertical',
+                'canvas': (1080, 1920),
+                'categories': [
+                    ('landscape', (3, 1), 3),
+                    ('square', (3, 2), 6),
+                    ('portrait', (2, 2), 4)
+                ]
+            },
+            'square': {
+                'name': 'Square',
+                'canvas': (1080, 1080),
+                'categories': [
+                    ('landscape', (2, 1), 2),
+                    ('square', (2, 2), 4),
+                    ('portrait', (1, 2), 2)
+                ]
+            },
+            '1280x1080': {
+                'name': '1280x1080',
+                'canvas': (1280, 1080),
+                'categories': [
+                    ('landscape', (2, 1), 2),
+                    ('square', (2, 2), 4),
+                    ('portrait', (1, 2), 2)
+                ]
+            },
+            '900x1920': {
+                'name': '900x1920',
+                'canvas': (900, 1920),
+                'categories': [
+                    ('landscape', (3, 1), 3),
+                    ('square', (3, 2), 6),
+                    ('portrait', (2, 2), 4)
+                ]
+            }
+        }
+        orientation_config = orientation_configs[orientation]
+    
+    config = orientation_config
     subfolder = config['name']
     logger = setup_logging(output_path, f"Collages_{subfolder}")
     used_file = os.path.join(output_path, f'used_images_{subfolder.lower()}.json')
@@ -167,7 +298,12 @@ def create_collage(folder_path, output_path, num_collages, orientation, include_
         with open(used_file, 'w') as f:
             json.dump([], f)
 
-    landscape, square, portrait = load_images(folder_path, output_path)
+    # Load images based on mode
+    if is_folder_mode:
+        landscape, square, portrait = load_images(folder_path, output_path)
+    else:
+        landscape, square, portrait = load_images_from_list(image_list, output_path)
+    
     used_images = load_used_images(used_file) if log_used_images else set()
 
     available_landscape = [img for img in landscape if img not in used_images]
@@ -199,7 +335,12 @@ def create_collage(folder_path, output_path, num_collages, orientation, include_
     collages_created = 0
     total_images_used = 0
     collage_start_num = get_next_collage_number(output_path)
-    parent_folder = os.path.basename(os.path.normpath(folder_path))
+    
+    # Get parent folder name for output filename
+    if is_folder_mode:
+        parent_folder = os.path.basename(os.path.normpath(folder_path))
+    else:
+        parent_folder = os.path.basename(os.path.dirname(image_list[0]))
 
     for i in range(num_collages):
         collage_used_images = set()
@@ -217,17 +358,23 @@ def create_collage(folder_path, output_path, num_collages, orientation, include_
         rows, cols = grid
         cell_width = canvas_width // cols
         cell_height = canvas_height // rows
+        
+        # FIX: Don't shuffle positions - fill sequentially to avoid gaps
         positions = [(r, c) for r in range(rows) for c in range(cols)]
-        random.shuffle(positions)
         
         # Debug info
-        logger.info(f"Collage {i+1}: Using {category_name} category with {rows}x{cols} grid")
+        logger.info(f"Collage {i+1}: Using {category_name} category with {rows}x{cols} grid, {num_images} images")
 
-        for idx, (row, col) in enumerate(positions):
-            if idx >= len(selected_images):
-                break
+        for idx in range(min(len(selected_images), len(positions))):
+            row, col = positions[idx]
             img_name = selected_images[idx]
-            img_path = os.path.join(folder_path, img_name)
+            
+            # Handle both relative and absolute paths
+            if is_folder_mode:
+                img_path = os.path.join(folder_path, img_name)
+            else:
+                img_path = img_name  # Already absolute path
+            
             try:
                 img = Image.open(img_path).convert('RGBA')
 
@@ -315,19 +462,24 @@ def main():
         print("\033[92m==================================================\033[0m")
         print()
 
-        # Input mode selection (like video_reverse_merge reference)
+        # Input mode selection
         input_mode = djj.prompt_choice(
-            "\033[93mInput mode:\033[0m\n1. Folder path\n2. Space-separated file paths\n",
-            ['1', '2'],
+            "\033[93mInput mode:\033[0m\n"
+            "1. Folder path\n"
+            "2. Space-separated file paths\n"
+            "3. Path list from txt file\n",
+            ['1', '2', '3'],
             default='1'
         )
         print()
 
         images = []
         folder_path = None
+        is_folder_mode = False
 
         if input_mode == '1':
             # Folder mode
+            is_folder_mode = True
             folder_path = djj.get_path_input("Enter folder path")
             print()
             
@@ -340,7 +492,7 @@ def main():
             
             images = collect_images_from_folder(folder_path, include_sub)
             
-        else:
+        elif input_mode == '2':
             # File paths mode
             file_paths = input("📁 \033[93mEnter image paths (space-separated):\n\033[0m -> ").strip()
             
@@ -349,6 +501,19 @@ def main():
                 continue
             
             images = collect_images_from_paths(file_paths)
+            # Set folder_path to parent of first image for output folder logic
+            if images:
+                folder_path = str(pathlib.Path(images[0]).parent)
+            print()
+        
+        else:  # input_mode == '3'
+            # Txt file mode
+            images = collect_images_from_txt()
+            
+            if not images:
+                print("❌ \033[93mNo valid images found.\033[0m")
+                continue
+            
             # Set folder_path to parent of first image for output folder logic
             if images:
                 folder_path = str(pathlib.Path(images[0]).parent)
@@ -370,19 +535,54 @@ def main():
         ) == '1'
         print()
 
-        # Updated orientation choices with new 900x1920 option
+        # Updated orientation choices with custom option
         orientation_choice = djj.prompt_choice(
-            "\033[93mCollage format:\033[0m\n1. Horizontal (1920x1080)\n2. Vertical (1080x1920)\n3. Square (1080x1080)\n4. 1280x1080\n5. 900x1920\n",
-            ['1', '2', '3', '4', '5'],
+            "\033[93mCollage format:\033[0m\n"
+            "1. Horizontal (1920x1080)\n"
+            "2. Vertical (1080x1920)\n"
+            "3. Square (1080x1080)\n"
+            "4. 1280x1080\n"
+            "5. 900x1920\n"
+            "6. Custom dimensions\n",
+            ['1', '2', '3', '4', '5', '6'],
             default='1'
         )
         print()
+
+        # Handle custom dimensions
+        custom_dims = None
+        if orientation_choice == '6':
+            while True:
+                try:
+                    width_input = input("\033[93mCanvas width (pixels):\n\033[0m -> ").strip()
+                    canvas_width = int(width_input)
+                    if canvas_width > 0:
+                        break
+                    else:
+                        print("\033[93mPlease enter a positive number.\033[0m")
+                except ValueError:
+                    print("\033[93mPlease enter a valid number.\033[0m")
+            
+            while True:
+                try:
+                    height_input = input("\033[93mCanvas height (pixels):\n\033[0m -> ").strip()
+                    canvas_height = int(height_input)
+                    if canvas_height > 0:
+                        break
+                    else:
+                        print("\033[93mPlease enter a positive number.\033[0m")
+                except ValueError:
+                    print("\033[93mPlease enter a valid number.\033[0m")
+            
+            custom_dims = (canvas_width, canvas_height)
+            print(f"\033[92m✓ Custom dimensions: {canvas_width}x{canvas_height}\033[0m")
+            print()
 
         # Background opacity setting
         bg_opacity_input = input("\033[93mBackground opacity [0.0-1.0, default: 0.25]:\n\033[0m -> ").strip()
         try:
             bg_opacity = float(bg_opacity_input) if bg_opacity_input else 0.25
-            bg_opacity = max(0.0, min(1.0, bg_opacity))  # Clamp between 0 and 1
+            bg_opacity = max(0.0, min(1.0, bg_opacity))
         except ValueError:
             bg_opacity = 0.25
             print("\033[93mUsing default opacity: 0.25\033[0m")
@@ -392,7 +592,7 @@ def main():
         bg_blur_input = input("\033[93mBackground blur radius [1-50, default: 8]:\n\033[0m -> ").strip()
         try:
             bg_blur = int(bg_blur_input) if bg_blur_input else 8
-            bg_blur = max(1, min(50, bg_blur))  # Clamp between 1 and 50
+            bg_blur = max(1, min(50, bg_blur))
         except ValueError:
             bg_blur = 8
             print("\033[93mUsing default blur: 8\033[0m")
@@ -404,11 +604,12 @@ def main():
             '2': 'vertical',
             '3': 'square',
             '4': '1280x1080',
-            '5': '900x1920'
+            '5': '900x1920',
+            '6': 'custom'
         }
         orientation = orientation_map[orientation_choice]
 
-        # Fixed: Get number of collages properly
+        # Get number of collages
         while True:
             try:
                 num_collages_input = input("\033[93mNumber of collages [default: 10]:\n\033[0m -> ").strip()
@@ -427,20 +628,35 @@ def main():
         print("\033[1;93mProcessing...\033[0m")
 
         # Create output path based on orientation
-        orientation_names = {
-            'horizontal': 'Horizontal',
-            'vertical': 'Vertical',
-            'square': 'Square',
-            '1280x1080': '1280x1080',
-            '900x1920': '900x1920'
-        }
-        subfolder = orientation_names[orientation]
+        if orientation == 'custom':
+            subfolder = f'{custom_dims[0]}x{custom_dims[1]}'
+        else:
+            orientation_names = {
+                'horizontal': 'Horizontal',
+                'vertical': 'Vertical',
+                'square': 'Square',
+                '1280x1080': '1280x1080',
+                '900x1920': '900x1920'
+            }
+            subfolder = orientation_names[orientation]
+        
         output = os.path.join(folder_path, "Output", "Collages", subfolder)
         
-        create_collage(folder_path, output, num_collages, orientation, input_mode == '1', log_used_images=log_used, background_opacity=bg_opacity, background_blur_radius=bg_blur)
+        create_collage(
+            folder_path,
+            images,
+            output,
+            num_collages,
+            orientation,
+            custom_dims,
+            input_mode == '1',  # include_subfolders flag
+            log_used_images=log_used,
+            background_opacity=bg_opacity,
+            background_blur_radius=bg_blur,
+            is_folder_mode=is_folder_mode
+        )
                        
         print("\n" * 2)
-
         
         action = djj.what_next()
         if action == 'exit':

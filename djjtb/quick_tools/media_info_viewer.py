@@ -349,7 +349,9 @@ class DropZone(QWidget):
                 "Dimensions": "",
                 "Resolution": "",
                 "Aspect Ratio": "",
-                "Duration": ""
+                "Duration": "",
+                "FPS": "",
+                "Bit Rate": ""
             }
 
             mime, _ = mimetypes.guess_type(file_path)
@@ -367,10 +369,29 @@ class DropZone(QWidget):
                     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
                     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
                     duration = frames / fps if fps else 0
+                    
+                    # Get bit rate
+                    bit_rate = cap.get(cv2.CAP_PROP_BITRATE)
+                    
                     file_info["Duration"] = f"{duration:.2f}s"
                     file_info["Dimensions"] = f"{width}x{height}"
                     file_info["Aspect Ratio"] = f"{width}:{height} ({width/height:.2f})"
                     file_info["Resolution"] = self.classify_resolution(height)
+                    file_info["FPS"] = f"{fps:.2f}" if fps > 0 else "N/A"
+                    
+                    # Format bit rate
+                    if bit_rate > 0:
+                        # Convert to Mbps
+                        file_info["Bit Rate"] = f"{bit_rate / 1000000:.2f} Mbps"
+                    else:
+                        # Calculate approximate bit rate from file size and duration
+                        file_size_bits = file_path.stat().st_size * 8
+                        if duration > 0:
+                            calculated_bitrate = file_size_bits / duration / 1000000
+                            file_info["Bit Rate"] = f"{calculated_bitrate:.2f} Mbps (calculated)"
+                        else:
+                            file_info["Bit Rate"] = "N/A"
+                    
                     cap.release()
             return file_info
         except:
@@ -428,6 +449,12 @@ class DropZone(QWidget):
             block.append(f"<b>Resolution:</b> {f['Resolution']}<br>")
             block.append(f"<b>Aspect Ratio:</b> {f['Aspect Ratio']}<br>")
             block.append(f"<b>Duration:</b> {f['Duration']}<br>")
+            
+            # Only show FPS and Bit Rate for videos (when they have values)
+            if f['FPS']:
+                block.append(f"<b>FPS:</b> {f['FPS']}<br>")
+            if f['Bit Rate']:
+                block.append(f"<b>Bit Rate:</b> {f['Bit Rate']}<br>")
     
             html_blocks.append(''.join(block))
         

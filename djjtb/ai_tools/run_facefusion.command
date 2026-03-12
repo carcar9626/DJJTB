@@ -8,21 +8,9 @@ cd /Users/home/Documents/ai_models/facefusion || exit 1
 python facefusion.py run &
 
 # Give it a few seconds to fully start
-sleep 10
-
-# Ask if you want to open WebUI
-echo ""
-echo "Open Facefusion WebUI?"
-echo "1. Yes"
-echo "2. No"
-read -rp "Enter your choice: " choice
-
-if [[ "$choice" == "1" ]]; then
-    open -a "/Users/home/Applications/Facefusion.app"
-    echo "Facefusion webUI running, Ctrl+C to stop."
-    # Keep the foreground terminal tied to the background process
-    wait
-fi
-
+sleep 5
+open -g -a "/Users/home/Applications/Facefusion.app"
+wait
 echo "Press any key to close this window..."
 read -n 1
+

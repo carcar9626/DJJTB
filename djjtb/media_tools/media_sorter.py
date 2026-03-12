@@ -18,13 +18,15 @@ VIDEO_EXTS = {".mp4", ".mov", ".webm", ".mkv"}
 
 # Aspect ratio categories: (lower_bound, upper_bound, suffix)
 CATEGORIES = {
-    "Landscape_16_9": (1.68, 1.83, "_169"),
-    "Portrait_9_16":  (0.50, 0.64, "_916"),
-    "Landscape_4_3":  (1.28, 1.44, "_L43"),
-    "Portrait_3_4":   (0.70, 0.88, "_P34"),
-    "Landscape_3_2":  (1.45, 1.52, "_L32"),
-    "Portrait_2_3":   (0.65, 0.69, "_P23"),
-    "Square":         (0.98, 1.08, "_SQR"),
+    "169": (1.68, 1.83, "_169"),
+    "916":  (0.50, 0.64, "_916"),
+    "L43":  (1.28, 1.44, "_L43"),
+    "P34":   (0.70, 0.87, "_P34"),
+    "L32":  (1.45, 1.52, "_L32"),
+    "P32":   (0.64, 0.69, "_P23"),
+    "Phf":   (0.87, 0.97, "_Phf"),
+    "Lhf":   (1.08, 1.22, "_Lhf"),
+    "SQR":   (0.97, 1.08, "_SQR"),
 }
 
 SUFFIX_TO_TAG = {
@@ -34,9 +36,11 @@ SUFFIX_TO_TAG = {
     "_P34": "P34",
     "_L32": "L32",
     "_P23": "P23",
+    "_Phf": "Phf",
+    "_Lhf": "Lhf",
     "_SQR": "SQR",
-    "_LX": "LX",
-    "_PX": "PX"
+    "_LXX": "LXX",
+    "_PXX": "PXX"
     # No tagging for USL, USP, and _unsorted
 }
 
@@ -57,9 +61,9 @@ def get_aspect_category(width, height):
 
     # 1) Extreme cases first
     if ratio > 2.1:
-        return "Extreme_Landscape", "_LX"
+        return "Extreme_Landscape", "_LXX"
     elif ratio < 0.48:
-        return "Extreme_Portrait", "_PX"
+        return "Extreme_Portrait", "_PXX"
 
     # 2) Standard categories
     for category, (low, high, suffix) in CATEGORIES.items():
@@ -336,7 +340,7 @@ def process_media(files_to_process, root_folder, mode, move_files, move_only=Fal
                 # Tag only mode - just tag the file without moving or renaming
                 if suffix in SUFFIX_TO_TAG:
                     tagged_count += 1
-                    print(f"\rTagging files {tagged_count} {percent:.1f}%)......    ", end="", flush=True)
+                    print(f"\rTagging files {tagged_count}      {percent:.1f}%)...    ", end="", flush=True)
                     tag_file(file_path, SUFFIX_TO_TAG[suffix])
                 final_path = file_path
             elif move_files:
@@ -419,7 +423,7 @@ def main():
         action = djj.prompt_choice(
             "\033[93mAction:\033[0m\n1. Rename with Suffix Only\n2. Move Subfolders and Rename\n3. Move to Subfolders Only\n4. Tag Only\n5. Remove Suffixes (Reverse)",
             ['1', '2', '3', '4', '5'],
-            default='1'
+            default='4'
         )
         
         if action == '5':
