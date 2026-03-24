@@ -23,7 +23,7 @@ CATEGORIES = {
     "L43":  (1.28, 1.44, "_L43"),
     "P34":   (0.70, 0.87, "_P34"),
     "L32":  (1.45, 1.52, "_L32"),
-    "P32":   (0.64, 0.69, "_P23"),
+    "P23":   (0.64, 0.69, "_P23"),
     "Phf":   (0.87, 0.97, "_Phf"),
     "Lhf":   (1.08, 1.22, "_Lhf"),
     "SQR":   (0.97, 1.08, "_SQR"),
@@ -243,16 +243,29 @@ def get_media_files_from_input():
         ) == '1'
         
         # Collect files from folder
-        for dirpath, _, filenames in os.walk(folder_path):
+        print("\033[93mScanning for files...\033[0m")
+        skip_paths, skip_names = djj.load_skip_list()
+        for dirpath, dirs, filenames in os.walk(folder_path):
             current_folder = Path(dirpath)
+            
+            # Prune skip folders IN-PLACE so os.walk never descends into them
+            dirs[:] = [
+                d for d in dirs
+                if not djj.should_skip(
+                    current_folder / d,
+                    skip_paths, skip_names,
+                    root=folder_path
+                )
+            ]
+            
             for file in filenames:
                 file_path = current_folder / file
                 ext = file_path.suffix.lower()
                 if ext in IMAGE_EXTS or ext in VIDEO_EXTS:
                     media_files.append(file_path)
+            
             if not include_subfolders:
                 break
-                
     else:
         # Multiple file paths
         print(f"\033[93mEnter file paths (space-separated):\033[0m")
@@ -280,6 +293,7 @@ def get_media_files_from_input():
                     print(f"\033[93m Error resolving path '{path_str}': {e}\033[0m")
         
         # For multi-file mode, use the parent of the first file as root folder
+        media_files = djj.apply_skip_list(media_files, root=folder_path)
         if media_files:
             root_folder = media_files[0].parent
     

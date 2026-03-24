@@ -2,7 +2,6 @@
 """
 JoyTag Image Tagger for DJJTB - WITH XMP DETECTION
 Uses JoyTag model for comprehensive image tagging with Danbooru schema
-Optimized for M2 MacBook Air 8GB RAM
 FIXED: ONNX data type mismatch (double -> float)
 NEW: Skip images that already have XMP sidecar files
 """
@@ -40,8 +39,8 @@ os.system('clear')
 # Supported image formats
 SUPPORTED_EXTS = (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff")
 
-# Optimized batch size for M2 MBA 8GB RAM
-BATCH_SIZE = 8
+
+BATCH_SIZE = 20
 
 def format_elapsed_time(seconds):
     """Format elapsed time in a readable format."""
@@ -386,7 +385,7 @@ def collect_images_from_folder(input_path, include_subfolders=False):
                             if pathlib.Path(f).suffix.lower() in SUPPORTED_EXTS)
         else:
             images = [f for f in input_path_obj.glob('*')
-                     if f.suffix.lower() in SUPPORTED_EXTS and f.is_file()]
+                    if f.suffix.lower() in SUPPORTED_EXTS and f.is_file() and f.exists()]
     
     return sorted([str(v) for v in images], key=str.lower)
 
@@ -634,8 +633,9 @@ def main():
         # Collect images
         print("Scanning for images...")
         all_images = collect_images_from_folder(folder_path, include_sub)
+        all_images = djj.apply_skip_list(all_images, root=folder_path)
         print()
-        
+
         if not all_images:
             print("❌ \033[93mNo valid image files found. Try again.\033[0m\n")
             continue

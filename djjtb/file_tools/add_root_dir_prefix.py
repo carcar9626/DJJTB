@@ -32,7 +32,7 @@ def main():
             for filename in filenames:
                 if filename.startswith(prefix):
                     files_skipped += 1
-                       continue  # Skip already-prefixed files
+                    continue  # Skip already-prefixed files
 
                 old_path = os.path.join(dirpath, filename)
                 new_filename = prefix + filename

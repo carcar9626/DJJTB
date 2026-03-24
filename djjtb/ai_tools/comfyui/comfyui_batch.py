@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+    #!/usr/bin/env python3
 """
 ComfyUI Batch Processor - DJJTB Edition
 Processes images through ComfyUI workflows using symlinks
@@ -190,7 +190,7 @@ def prompt_steps_override():
     override = djj.prompt_choice(
         f"\033[93m⚡ Override KSampler steps?\033[0m (node {KSAMPLER_NODE_ID})\n1. Yes\n2. No (use workflow default)",
         ['1', '2'],
-        default='1'
+        default='2'
     )
     print()
     if override == '2':

@@ -8,7 +8,180 @@ import time
 import json
 import tempfile
 
+# ─── Skip List ───────────────────────────────────────────────────────────────
 
+SKIP_LIST_PATH = "/Users/home/Documents/Scripts/DJJTB_output/skip_list.txt"
+# def load_skip_list():
+#     skip_path = pathlib.Path(SKIP_LIST_PATH).expanduser().resolve()
+#
+#     if not skip_path.exists():
+#         print(f"\033[93mDEBUG: skip list file NOT FOUND at {skip_path}\033[0m")
+#         return set(), set()
+#
+#     skip_paths = set()
+#     skip_names = set()
+#
+#     try:
+#         with open(skip_path, 'r', encoding='utf-8') as f:
+#             for line in f:
+#                 line = line.strip()
+#                 if not line or line.startswith('#'):
+#                     continue
+#                 clean = line.strip('\'"').replace('\\ ', ' ')
+#                 if clean.startswith('/') or clean.startswith('~'):
+#                     try:
+#                         skip_paths.add(str(pathlib.Path(clean).expanduser().resolve()))
+#                     except Exception:
+#                         pass
+#                 else:
+#                     skip_names.add(clean.lower())
+#
+#     except Exception as e:
+#         print(f"\033[93mDEBUG: exception reading file: {e}\033[0m")
+#
+#     # DEBUG - remove after confirming
+#     print(f"\033[93mDEBUG skip_names: {skip_names}\033[0m")
+#     print(f"\033[93mDEBUG skip_paths: {skip_paths}\033[0m")
+#
+#     return skip_paths, skip_names
+
+def load_skip_list():
+    """
+    Load the global DJJTB skip list from the default location.
+    Silently returns empty sets if the file doesn't exist.
+    Supports two entry types:
+      - Absolute paths:      /Volumes/Photos/Client Work
+      - Folder name keywords: Output  (matches ANY folder with that name)
+    Lines starting with # are comments and are ignored.
+
+    Returns:
+        tuple: (skip_paths: set of resolved absolute strings,
+                skip_names: set of lowercase folder name keywords)
+    """
+    skip_path = pathlib.Path(SKIP_LIST_PATH).expanduser().resolve()
+    # print(f"\033[93mDEBUG skip_names loaded: {skip_names}\033[0m")
+    # print(f"\033[93mDEBUG skip_paths loaded: {skip_paths}\033[0m")
+    if not skip_path.exists():
+        return set(), set()
+
+    skip_paths = set()
+    skip_names = set()
+
+    try:
+        with open(skip_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                clean = line.strip('\'"').replace('\\ ', ' ')
+
+                if clean.startswith('/') or clean.startswith('~'):
+                    try:
+                        skip_paths.add(str(pathlib.Path(clean).expanduser().resolve()))
+                    except Exception:
+                        pass
+                else:
+                    skip_names.add(clean.lower())
+
+    except Exception:
+        pass
+
+    return skip_paths, skip_names
+    
+
+def should_skip(path, skip_paths, skip_names, root=None):
+    if not skip_paths and not skip_names:
+        return False
+
+    path_obj = pathlib.Path(path)
+    root_obj = pathlib.Path(root).resolve() if root else None
+
+    paths_to_check = [path_obj]
+    try:
+        resolved = path_obj.resolve()
+        if resolved != path_obj:
+            paths_to_check.append(resolved)
+    except Exception:
+        pass
+
+    for check_path in paths_to_check:
+        check = check_path
+        while True:
+            if skip_paths and str(check) in skip_paths:
+                return True
+            if skip_names and check.name.lower() in skip_names:
+                return True
+            parent = check.parent
+            # Stop walking up at the root input folder
+            if root_obj and check == root_obj:
+                break
+            if parent == check:
+                break
+            check = parent
+
+    return False
+
+
+# def should_skip(path, skip_paths, skip_names):
+#     """
+#     Check if a file or folder should be skipped.
+#     Matches against:
+#       - skip_paths: exact absolute path or any parent folder
+#       - skip_names: any folder name component anywhere in the path
+#
+#     Args:
+#         path: File or folder path to check (str or pathlib.Path)
+#         skip_paths: set of resolved absolute path strings (from load_skip_list)
+#         skip_names: set of lowercase folder name keywords (from load_skip_list)
+#
+#     Returns:
+#         bool: True if the path should be skipped, False otherwise
+#     """
+#     if not skip_paths and not skip_names:
+#         return False
+#
+#     resolved = pathlib.Path(path).expanduser().resolve()
+#
+#     # Walk up the path checking both absolute matches and name keywords
+#     check = resolved
+#     while True:
+#         if skip_paths and str(check) in skip_paths:
+#             return True
+#         if skip_names and check.name.lower() in skip_names:
+#             return True
+#         parent = check.parent
+#         if parent == check:  # hit filesystem root
+#             break
+#         check = parent
+#
+#     return False
+    
+# def apply_skip_list(file_list):
+#     skip_paths, skip_names = load_skip_list()
+#     if not skip_paths and not skip_names:
+#         return file_list
+#
+#     filtered = []
+#     skipped = 0
+#     for p in file_list:
+#         if should_skip(p, skip_paths, skip_names):
+#             skipped += 1
+#         else:
+#             filtered.append(p)
+#
+#     if skipped > 0:
+#         print(f"\033[92m⏭️  Skip list: {skipped} image(s) silently omitted\033[0m")
+#
+#     return filtered
+
+
+def apply_skip_list(file_list, root=None):
+    skip_paths, skip_names = load_skip_list()
+    if not skip_paths and not skip_names:
+        return file_list
+    return [p for p in file_list if not should_skip(p, skip_paths, skip_names, root=root)]
+    
+    
 def get_paths_from_txt(prompt_text="📁 Enter txt file path"):
     """
     Read file/folder paths from a txt file (one path per line).

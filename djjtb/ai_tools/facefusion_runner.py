@@ -19,7 +19,7 @@ import djjtb.utils as djj
 # Face mask extends the swap area (CRITICAL for chin issues!)
 # Higher = more coverage of chin/jaw area
 # Range: 0-100 | Default: 0 | Recommended for chin fix: 30-40
-FACE_MASK_PADDING = 0
+FACE_MASK_PADDING = 25
 
 # Smooths the edges where face meets background
 # Higher = softer blend (helps hide seams)
@@ -719,24 +719,35 @@ def process_face_swap(mode, source_files, target_files, output_path, add_suffix,
                 print(f"   Error: {error_msg}")
                 error_count += 1
                 error_messages.append(f"{source_name}: {error_msg}")
-    
+                
     else:  # mode == '4' - Multi to Multi
-        # Multiple sources to multiple targets
-        # Process each target with all sources, organized by target subfolder
+    # Multiple sources to multiple targets
+    # Process each source with all targets, organized by source-targetparent subfolder
         
-        for target_idx, target_file in enumerate(target_files):
-            target_name = pathlib.Path(target_file).stem
-            target_output_path = pathlib.Path(output_path) / target_name
-            target_output_path.mkdir(parents=True, exist_ok=True)
+        # Get today's date for folder structure
+        from datetime import datetime
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        
+        # Get target parent folder name (use first target's parent)
+        target_parent_folder = pathlib.Path(target_files[0]).parent.name
+        
+        # Process each source with all targets
+        for source_idx, source_file in enumerate(source_files):
+            source_name = pathlib.Path(source_file).stem
             
-            print(f"\n\033[1;93m🎯 Processing target [{target_idx+1}/{len(target_files)}]:\033[0m {os.path.basename(target_file)}")
-            print(f"\033[93m   Output folder:\033[0m {target_output_path.name}/")
-            print(f"\033[93m   Sources:\033[0m {len(source_files)} file(s)")
+            # Create subfolder: YYYY-MM-DD/sourcename-targetparent/
+            date_folder = pathlib.Path(output_path) / today_str
+            source_output_path = date_folder / f"{source_name}-{target_parent_folder}"
+            source_output_path.mkdir(parents=True, exist_ok=True)
+            
+            print(f"\n\033[1;93m📁 Processing source [{source_idx+1}/{len(source_files)}]:\033[0m {os.path.basename(source_file)}")
+            print(f"\033[93m   Output folder:\033[0m {today_str}/{source_name}-{target_parent_folder}/")
+            print(f"\033[93m   Targets:\033[0m {len(target_files)} file(s)")
             print()
             
-            # Process each source individually for this target
-            for source_idx, source_file in enumerate(source_files):
-                source_name = pathlib.Path(source_file).stem
+            # Process each target with this source
+            for target_idx, target_file in enumerate(target_files):
+                target_name = pathlib.Path(target_file).stem
                 target_ext = pathlib.Path(target_file).suffix
                 
                 # Generate output filename: sourcename_targetname_FF.ext
@@ -745,9 +756,9 @@ def process_face_swap(mode, source_files, target_files, output_path, add_suffix,
                 else:
                     output_filename = f"{source_name}_{target_name}{target_ext}"
                 
-                output_file = str(target_output_path / output_filename)
+                output_file = str(source_output_path / output_filename)
                 
-                print(f"\033[93m  [{source_idx+1}/{len(source_files)}] Processing:\033[0m {source_name} → {target_name}")
+                print(f"\033[93m  [{target_idx+1}/{len(target_files)}] Processing:\033[0m {source_name} → {target_name}")
                 
                 success, error_msg = process_single_headless(source_file, target_file, output_file, use_enhanced_mode)
                 
@@ -758,6 +769,45 @@ def process_face_swap(mode, source_files, target_files, output_path, add_suffix,
                     print(f"\033[93m    ❌ Failed:\033[0m {error_msg[:50]}...")
                     error_count += 1
                     error_messages.append(f"{source_name}→{target_name}: {error_msg}")
+
+    # else:  # mode == '4' - Multi to Multi
+    #     # Multiple sources to multiple targets
+    #     # Process each target with all sources, organized by target subfolder
+    #
+    #     for target_idx, target_file in enumerate(target_files):
+    #         target_name = pathlib.Path(target_file).stem
+    #         target_output_path = pathlib.Path(output_path) / target_name
+    #         target_output_path.mkdir(parents=True, exist_ok=True)
+    #
+    #         print(f"\n\033[1;93m🎯 Processing target [{target_idx+1}/{len(target_files)}]:\033[0m {os.path.basename(target_file)}")
+    #         print(f"\033[93m   Output folder:\033[0m {target_output_path.name}/")
+    #         print(f"\033[93m   Sources:\033[0m {len(source_files)} file(s)")
+    #         print()
+    #
+    #         # Process each source individually for this target
+    #         for source_idx, source_file in enumerate(source_files):
+    #             source_name = pathlib.Path(source_file).stem
+    #             target_ext = pathlib.Path(target_file).suffix
+    #
+    #             # Generate output filename: sourcename_targetname_FF.ext
+    #             if add_suffix:
+    #                 output_filename = f"{source_name}_{target_name}_FF{target_ext}"
+    #             else:
+    #                 output_filename = f"{source_name}_{target_name}{target_ext}"
+    #
+    #             output_file = str(target_output_path / output_filename)
+    #
+    #             print(f"\033[93m  [{source_idx+1}/{len(source_files)}] Processing:\033[0m {source_name} → {target_name}")
+    #
+    #             success, error_msg = process_single_headless(source_file, target_file, output_file, use_enhanced_mode)
+    #
+    #             if success:
+    #                 print(f"\033[92m    ✅ Success\033[0m")
+    #                 success_count += 1
+    #             else:
+    #                 print(f"\033[93m    ❌ Failed:\033[0m {error_msg[:50]}...")
+    #                 error_count += 1
+    #                 error_messages.append(f"{source_name}→{target_name}: {error_msg}")
     
     print()
     print("\033[92m=\033[0m" * 50)

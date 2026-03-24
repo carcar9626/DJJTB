@@ -138,7 +138,7 @@ class DJJTBLauncher:
         #print(" 2. ComfyUI ☀️ 💻")
         #print(" 3. Merge Loras 👫➡︎🧍🏼‍♂️")
         print(" 💰 \033[4;93m1\033[0m  Codeformer 😶‍🌫️➡︎😝")
-        print(" 💰\033[4;93m1B\033[0m  GFPGANv1.4 😶‍🌫️➡︎😝")
+        print(" 💰\033[4;93m1B\033[0m  Image Upscaler (4x_UltraSharp 💓 💗 🩷")
         print(" 💰 \033[4;93m2\033[0m  JoyTag Tagger (AI) 🏷️")
         print(" 💰 \033[4;93m3\033[0m  Image Tagger (AI) 🔖")
         print(" 💰 \033[4;93m4\033[0m  FaceFusion (NSFW Patched) 👿➡︎😇")
@@ -345,8 +345,8 @@ class DJJTBLauncher:
             """
             if choice == "1":  # Codeformer
                 djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path}/; python3 -m djjtb.ai_tools.codeformer_runner")
-            elif choice == "1b":  # GFPGAN
-                djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path}/; python3 -m djjtb.ai_tools.gfpgan_runner")
+            elif choice == "1b":  # Upscaler
+                djj.run_command_in_tab(f"source /Users/home/Documents/ai_models/upscalers/upsvenv/bin/activate; cd {self.project_path}/; python3 -m djjtb.ai_tools.upscaler_runner")
             elif choice == "2":  # Joytag
                 command = f"source /Users/home/Documents/ai_models/joytag/jtvenv/bin/activate; cd {self.project_path}/; python3 -m djjtb.ai_tools.joytag_tagger"
                 djj.open_terminal_with_settings(command, "tagger", "525, 120, 1460, 700")
@@ -359,7 +359,7 @@ class DJJTBLauncher:
                 command = (f"{self.project_path}/djjtb/ai_tools/run_facefusion.command")
                 djj.open_terminal_with_settings(command, "tagger", "525, 120, 1225, 700")
             elif choice == "6":  # Watermark Remover Auto-Detect
-                djj.run_command_in_tab(f"cd {self.project_path}/; python3 -m djjtb.ai_tools.watermark_remover_auto")
+                djj.run_command_in_tab(f"source /Users/home/Documents/ai_models/watermark_remover/wmrmvenv/bin/activate; cd {self.project_path}/; python3 -m djjtb.ai_tools.watermark_remover_auto")
             elif choice == "7":  # Watermark Remover from Reference
                 djj.run_command_in_tab(f"cd {self.project_path}/; python3 -m djjtb.ai_tools.watermark_remover_ref")
             elif choice == "8":  # IOPaint
