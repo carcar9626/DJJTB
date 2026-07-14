@@ -479,7 +479,7 @@ if __name__ == '__main__':
             "3. Square (1440x1440)\n"
             "4. First image dimensions\n",
             ['1', '2', '3', '4'],
-            default='2'
+            default='4'
         )
         
         orientation_map = {
@@ -495,7 +495,7 @@ if __name__ == '__main__':
         use_transitions = djj.prompt_choice(
             "\033[93mAdd dissolve transitions?\033[0m\n1. Yes\n2. No\n",
             ['1', '2'],
-            default='2'
+            default='1'
         ) == '1'
         print()
         

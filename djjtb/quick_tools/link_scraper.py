@@ -26,7 +26,7 @@ import pathlib
 import re
 import csv
 from datetime import datetime
-from urllib.parse import urljoin, urlparse, parse_qs
+from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 import djjtb.utils as djj
 
@@ -37,7 +37,6 @@ try:
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
-    from selenium.common.exceptions import TimeoutException, NoSuchElementException
     SELENIUM_AVAILABLE = True
 except ImportError:
     SELENIUM_AVAILABLE = False
@@ -61,17 +60,12 @@ def get_domain_name(url):
     except:
         return "unknown_domain"
 
-def get_page_title(url):
-    """Try to extract page title from URL or return URL"""
-    try:
-        response = requests.get(url, timeout=5)
-        soup = BeautifulSoup(response.text, "html.parser")
-        title = soup.find('title')
-        if title:
-            return title.string.strip()
-    except:
-        pass
-    return url
+def get_title_from_soup(soup, fallback_url):
+    """Extract page title from an already-parsed soup object."""
+    title = soup.find('title')
+    if title and title.string:
+        return title.string.strip()
+    return fallback_url
 
 def parse_keywords(keyword_input):
     """Parse comma-separated keywords and return list"""
@@ -145,30 +139,34 @@ def export_generated_links(links, domain_name, base_output_path):
         return None
 
 def get_links_with_keywords_requests(url, keywords):
-    """Scrape links from a website that contain ANY of the keywords using requests"""
+    """
+    Scrape links from a website that contain ANY of the keywords using requests.
+    Single fetch — extracts both the links and the page title from one response
+    instead of hitting the site twice.
+    Returns: (matching_links: list, page_title: str)
+    """
     try:
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
-        
-        # Extract all links that contain any of the keywords
+
+        page_title = get_title_from_soup(soup, url)
+
         matching_links = []
         all_links = soup.find_all("a", href=True)
-        
+
         for a in all_links:
             href = a["href"]
-            # Check if any keyword is in the href
             for keyword in keywords:
                 if keyword in href:
-                    # Convert relative URLs to absolute URLs
                     absolute_url = urljoin(url, href)
                     matching_links.append(absolute_url)
-                    break  # Found a match, no need to check other keywords for this link
-        
-        return matching_links
+                    break
+
+        return matching_links, page_title
     except requests.exceptions.RequestException as e:
         print(f"\033[93mError fetching {url}: {e}\033[0m")
-        return []
+        return [], url
 
 def perform_login(driver, login_config):
     """Perform login using provided configuration"""
@@ -219,10 +217,13 @@ def perform_login(driver, login_config):
         return False
 
 def get_links_with_keywords_selenium(url, keywords, use_scroll=True, scroll_delay=2, page_wait=3, login_config=None):
-    """Scrape links using Selenium with optional scrolling, delays, and login"""
+    """
+    Scrape links using Selenium with optional scrolling, delays, and login.
+    Returns: (matching_links: list, page_title: str)
+    """
     if not SELENIUM_AVAILABLE:
         print("\033[93m⚠️  Selenium not available. Install with: pip install selenium\033[0m")
-        return []
+        return [], url
     
     options = Options()
     options.add_argument('--headless')  # Run in background
@@ -272,6 +273,7 @@ def get_links_with_keywords_selenium(url, keywords, use_scroll=True, scroll_dela
         
         # Get page source and parse with BeautifulSoup
         soup = BeautifulSoup(driver.page_source, "html.parser")
+        page_title = get_title_from_soup(soup, url)
         
         # Extract all links that contain any of the keywords
         matching_links = []
@@ -287,26 +289,36 @@ def get_links_with_keywords_selenium(url, keywords, use_scroll=True, scroll_dela
                     matching_links.append(absolute_url)
                     break  # Found a match, no need to check other keywords for this link
         
-        return matching_links
+        return matching_links, page_title
         
     except Exception as e:
         print(f"\033[93mError with Selenium scraping {url}: {e}\033[0m")
-        return []
+        return [], url
     finally:
         if driver:
             driver.quit()
 
 def scrape_links_from_list(websites, keywords, use_selenium=False, use_scroll=True,
-                          scroll_delay=2, page_wait=3, login_config=None):
-    """Scrape links from a list of websites with multiple keyword support and random batch sizes"""
-    # Store results per source for CSV export
+                          scroll_delay=2, page_wait=3, login_config=None, output_filepath=None):
+    """
+    Scrape links from a list of websites with multiple keyword support,
+    within-session de-duplication, and live streaming writes to disk.
+
+    Dedup: exact-string match against everything found so far in this run.
+    Streaming: each new unique link is appended + flushed to output_filepath
+    immediately, so an interrupted run doesn't lose progress.
+
+    Returns: (all_filtered_links: list[str], results_by_source: list[dict])
+    """
     results_by_source = []
     all_filtered_links = []
+    seen = set()
+    duplicate_count = 0
     processed_count = 0
-    
+
     keywords_str = ", ".join(f"'{k}'" for k in keywords)
     print(f"\033[93mScraping {len(websites)} websites for keywords: {keywords_str}\033[0m")
-    
+
     if use_selenium:
         if not SELENIUM_AVAILABLE:
             print("\033[93m⚠️  Selenium not available, falling back to requests method\033[0m")
@@ -316,55 +328,87 @@ def scrape_links_from_list(websites, keywords, use_selenium=False, use_scroll=Tr
             if login_config:
                 selenium_info += f", login=ON"
             print(f"\033[93m{selenium_info}\033[0m")
-    
+
+    if output_filepath:
+        print(f"\033[96mℹ️  Streaming results to:\033[0m {output_filepath}")
+
     print("\033[92m" + "="*50 + "\033[0m")
-    
+
     # Random batch size for this session
     rate_limit_threshold = random.randint(25, 40)
     print(f"\033[96mℹ️  Using batch size: {rate_limit_threshold} sites\033[0m")
-    
-    for i, site in enumerate(websites, 1):
-        print(f"\033[93m[{i}/{len(websites)}] Processing:\033[0m {site}")
-        
-        # Get page title for CSV
-        page_title = get_page_title(site) if not use_selenium else site
-        
-        if use_selenium:
-            links = get_links_with_keywords_selenium(site, keywords, use_scroll, scroll_delay, page_wait, login_config)
-        else:
-            links = get_links_with_keywords_requests(site, keywords)
-        
-        if links:
-            all_filtered_links.extend(links)
-            print(f"\033[92m  ✅ Found {len(links)} links\033[0m")
-            
-            # Store result for this source
-            results_by_source.append({
-                'source_title': page_title,
-                'source_url': site,
-                'keywords': keywords_str,
-                'links': links,
-                'link_count': len(links)
-            })
-        else:
-            print(f"\033[93m  ⚠️  No links found\033[0m")
-        
-        processed_count += 1
-        
-        # Rate limiting with random wait time and random batch size
-        if processed_count >= rate_limit_threshold and i < len(websites):
-            random_pause = random.randint(5, 15)  # Random between 5-15 seconds
-            print(f"\033[93m  ⏸️  Pausing for {random_pause}s (processed {rate_limit_threshold} sites)\033[0m")
-            time.sleep(random_pause)
-            processed_count = 0
-            # Set new random batch size for next round
-            rate_limit_threshold = random.randint(25, 40)
-            print(f"\033[96mℹ️  Next batch size: {rate_limit_threshold} sites\033[0m")
-        elif i < len(websites) and not use_selenium:
-            time.sleep(0.5)  # Small delay between requests (Selenium has built-in delays)
-    
+
+    # Open output file once, append mode — created fresh by resolve_scraped_output_path
+    # so this always starts empty. Kept open for the whole loop; flushed per-write.
+    out_file = open(output_filepath, 'a', encoding='utf-8') if output_filepath else None
+
+    try:
+        for i, site in enumerate(websites, 1):
+            print(f"\033[93m[{i}/{len(websites)}] Processing:\033[0m {site}")
+
+            if use_selenium:
+                links, page_title = get_links_with_keywords_selenium(
+                    site, keywords, use_scroll, scroll_delay, page_wait, login_config
+                )
+            else:
+                links, page_title = get_links_with_keywords_requests(site, keywords)
+
+            # Dedup against everything seen so far this session
+            new_links = []
+            for link in links:
+                if link in seen:
+                    duplicate_count += 1
+                else:
+                    seen.add(link)
+                    new_links.append(link)
+
+            if new_links:
+                all_filtered_links.extend(new_links)
+
+                if out_file:
+                    for link in new_links:
+                        out_file.write(link + "\n")
+                    out_file.flush()  # disk write is microseconds vs the request's hundreds of ms — negligible cost, big safety win
+
+                dupe_note = f" ({len(links) - len(new_links)} dupe(s) skipped)" if len(links) != len(new_links) else ""
+                print(f"\033[92m  ✅ Found {len(new_links)} new link(s)\033[0m{dupe_note}")
+
+                results_by_source.append({
+                    'source_title': page_title,
+                    'source_url': site,
+                    'keywords': keywords_str,
+                    'links': new_links,
+                    'link_count': len(new_links)
+                })
+            elif links:
+                duplicate_count += len(links)
+                print(f"\033[93m  ⚠️  {len(links)} link(s) found, all duplicates — skipped\033[0m")
+            else:
+                print(f"\033[93m  ⚠️  No links found\033[0m")
+
+            processed_count += 1
+
+            # Rate limiting with random wait time and random batch size
+            if processed_count >= rate_limit_threshold and i < len(websites):
+                random_pause = random.randint(5, 15)  # Random between 5-15 seconds
+                print(f"\033[93m  ⏸️  Pausing for {random_pause}s (processed {rate_limit_threshold} sites)\033[0m")
+                time.sleep(random_pause)
+                processed_count = 0
+                # Set new random batch size for next round
+                rate_limit_threshold = random.randint(25, 40)
+                print(f"\033[96mℹ️  Next batch size: {rate_limit_threshold} sites\033[0m")
+            elif i < len(websites) and not use_selenium:
+                time.sleep(0.5)  # Small delay between requests (Selenium has built-in delays)
+    finally:
+        if out_file:
+            out_file.close()
+
     print("\033[92m" + "="*50 + "\033[0m")
-    print(f"\033[92m✅ Scraping complete! Found {len(all_filtered_links)} total links\033[0m")
+    print(f"\033[92m✅ Scraping complete! Found {len(all_filtered_links)} unique link(s)\033[0m", end="")
+    if duplicate_count:
+        print(f" \033[93m({duplicate_count} duplicate(s) skipped)\033[0m")
+    else:
+        print()
     return all_filtered_links, results_by_source
 
 def load_links_from_file(filepath):
@@ -378,40 +422,26 @@ def load_links_from_file(filepath):
         print(f"\033[93m⚠️  Error loading file: {e}\033[0m")
         return []
 
-def export_scraped_links(links, domain_name, base_output_path):
-    """Export scraped links to text file"""
-    if not links:
-        return None
-    
+def resolve_scraped_output_path(domain_name, base_output_path):
+    """
+    Determine the output txt filepath up front (before scraping starts),
+    so scrape_links_from_list can open it immediately and write as it goes.
+    """
     domain_folder = os.path.join(base_output_path, domain_name)
     scraper_folder = os.path.join(domain_folder, "Scraper")
     os.makedirs(scraper_folder, exist_ok=True)
-    
+
     timestamp = datetime.now().strftime("%Y%b%d")
     time_suffix = datetime.now().strftime("%H%M%S")
     filename = f"{timestamp}_{domain_name}.txt"
     filepath = os.path.join(scraper_folder, filename)
-    
-    # Check for duplicates and add time if needed
-    counter = 1
-    original_filepath = filepath
-    while os.path.exists(filepath):
-        base, ext = os.path.splitext(original_filepath)
+
+    # Avoid clobbering an existing file from earlier today
+    if os.path.exists(filepath):
+        base, ext = os.path.splitext(filepath)
         filepath = f"{base}_{time_suffix}{ext}"
-        counter += 1
-        if counter > 10:  # Prevent infinite loop
-            break
-    
-    try:
-        with open(filepath, 'w') as file:
-            for link in links:
-                file.write(link + "\n")
-        
-        print(f"\033[92m✅ Scraped links saved to: {filepath}\033[0m")
-        return filepath
-    except Exception as e:
-        print(f"\033[93m⚠️  Error saving scraped links: {e}\033[0m")
-        return None
+
+    return filepath
 
 def export_scraped_csv(results_by_source, domain_name, base_output_path):
     """Export scraped results to CSV with source tracking"""
@@ -675,34 +705,44 @@ def scraping_workflow(use_generated_links=False, generated_links=None):
         print("\033[96mℹ️  Selenium not available. Using standard requests method.\033[0m")
         print("\033[96m   To enable browser automation: pip install selenium\033[0m")
     
-    # Scrape links
-    scraped_links, results_by_source = scrape_links_from_list(
-        websites, keywords, use_selenium, use_scroll,
-        scroll_delay, page_wait, login_config=login_config
-    )
-    
-    if not scraped_links:
-        print("\033[93m⚠️  No links found with the specified keywords\033[0m")
-        elapsed_time = time.time() - start_time
-        print(f"\033[96m⏱️  Scraping completed in {elapsed_time:.2f} seconds\033[0m")
-        return None, None
-    
-    # Export results
+    # Resolve the output path BEFORE scraping starts, so links can stream to disk live
     base_output_path = create_output_directories()
     domain_name = get_domain_name(websites[0]) if websites else "multi_domain"
-    
+
     # Handle multi-domain case
     unique_domains = set(get_domain_name(url) for url in websites[:5])  # Check first 5
     if len(unique_domains) > 1:
         domain_name = "multi_domain"
-    
-    # Export both formats
-    txt_file = export_scraped_links(scraped_links, domain_name, base_output_path)
+
+    txt_file = resolve_scraped_output_path(domain_name, base_output_path)
+
+    # Scrape links — streams to txt_file live, link by link, with within-session dedup
+    scraped_links, results_by_source = scrape_links_from_list(
+        websites, keywords, use_selenium, use_scroll,
+        scroll_delay, page_wait, login_config=login_config,
+        output_filepath=txt_file
+    )
+
+    if not scraped_links:
+        print("\033[93m⚠️  No links found with the specified keywords\033[0m")
+        elapsed_time = time.time() - start_time
+        print(f"\033[96m⏱️  Scraping completed in {elapsed_time:.2f} seconds\033[0m")
+        # Nothing was written — remove the empty file so we don't leave clutter
+        try:
+            if os.path.exists(txt_file) and os.path.getsize(txt_file) == 0:
+                os.remove(txt_file)
+        except OSError:
+            pass
+        return None, None
+
+    print(f"\033[92m✅ Scraped links saved to: {txt_file}\033[0m")
+
+    # CSV is a summary artifact (per-source breakdown) — fine to write once at the end
     csv_file = export_scraped_csv(results_by_source, domain_name, base_output_path)
-    
+
     elapsed_time = time.time() - start_time
     print(f"\033[96m⏱️  Scraping completed in {elapsed_time:.2f} seconds\033[0m")
-    
+
     return txt_file, csv_file
 
 def main():

@@ -398,7 +398,308 @@ def process_flat_mode(parent, image_duration, scale_ratio, overlay_position):
         print(f"✅ Done: {output_path}")
         print()
 
-# Block 7 – Main Loop
+# Block 7 – Image Join (Mode 3)
+# get_join_dimensions and join_image_video now live in djjtb.media_utils
+# and are imported via djj.get_join_dimensions / djj.join_image_video
+
+
+def process_join_folder(folder, position, audio_choice):
+    """Subfolder mode: expects exactly 1 image + 1 video per subfolder."""
+    valid_exts = (".mp4", ".mov", ".webm")
+    image_exts = (".jpg", ".jpeg", ".png", ".webp")
+
+    videos = [f for f in os.listdir(folder) if f.lower().endswith(valid_exts)]
+    images = [f for f in os.listdir(folder) if f.lower().endswith(image_exts)]
+
+    if len(videos) != 1 or len(images) != 1:
+        print(f"  ⚠️  Skipping {Path(folder).name}: needs exactly 1 image + 1 video "
+              f"(found {len(images)} image(s), {len(videos)} video(s))")
+        return
+
+    video_path = os.path.join(folder, videos[0])
+    image_path = os.path.join(folder, images[0])
+    video_stem = Path(videos[0]).stem
+
+    out_dir = Path(folder).parent / "Joined"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    output_path = out_dir / f"{video_stem}_joined.mp4"
+
+    print(f"  🖼️  Image : {images[0]}")
+    print(f"  🎬 Video : {videos[0]}")
+
+    success = djj.join_image_video(image_path, video_path, output_path, position, audio_choice)
+    if success:
+        print(f"  ✅ Output: {output_path.name}")
+    print()
+
+
+def process_join_flat(parent, position, audio_choice):
+    """Flat mode: pairs image+video by matching stem, like existing flat modes."""
+    valid_exts = (".mp4", ".mov", ".webm")
+    image_exts = (".jpg", ".jpeg", ".png", ".webp")
+
+    videos = sorted([f for f in os.listdir(parent) if f.lower().endswith(valid_exts)])
+    total = len(videos)
+
+    if total == 0:
+        print("⚠️  No videos found in folder.")
+        return
+
+    out_dir = Path(parent) / "Joined"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    for idx, video_file in enumerate(videos, 1):
+        percent = int((idx / total) * 100)
+        print(f"\033[93m🔗 Joining \033[0m{idx}\033[93m/\033[0m{total} ({percent}%)\033[93m...\033[0m")
+
+        video_path = os.path.join(parent, video_file)
+        video_stem = Path(video_file).stem
+
+        matched_images = sorted([
+            os.path.join(parent, f) for f in os.listdir(parent)
+            if f.lower().endswith(image_exts) and Path(f).stem.startswith(video_stem)
+        ])
+
+        if not matched_images:
+            print(f"  ⚠️  No matching image for {video_file}, skipping.")
+            continue
+
+        image_path = matched_images[0]
+        output_path = out_dir / f"{video_stem}_joined.mp4"
+
+        print(f"  🖼️  Image : {Path(image_path).name}")
+        print(f"  🎬 Video : {video_file}")
+
+        success = djj.join_image_video(image_path, video_path, output_path, position, audio_choice)
+        if success:
+            print(f"  ✅ Output: {output_path.name}")
+        print()
+
+
+
+# Block 8 – Slideshow + Join (Mode 4) processors
+def process_slideshow_join_folder(folder, image_duration, position, audio_choice, max_longest_edge=1920):
+    """
+    Subfolder mode for Slideshow + Join.
+    Expects exactly 1 video + 1+ images per subfolder.
+    Builds a slideshow from the images (matching video duration/fps),
+    then joins it to the video.
+    Output: parent/Output/Slideshow_Joined/
+    """
+    valid_exts = (".mp4", ".mov", ".webm")
+    image_exts = (".jpg", ".jpeg", ".png", ".webp")
+
+    videos = [f for f in os.listdir(folder) if f.lower().endswith(valid_exts)]
+    if len(videos) != 1:
+        print(f"  ⚠️  Skipping {Path(folder).name}: needs exactly 1 video (found {len(videos)})")
+        return
+
+    video_path = os.path.join(folder, videos[0])
+    video_stem = Path(video_path).stem
+
+    images = sorted([
+        os.path.join(folder, f) for f in os.listdir(folder)
+        if f.lower().endswith(image_exts)
+    ])
+    if not images:
+        print(f"  ⚠️  No images found in {Path(folder).name}, skipping.")
+        return
+
+    video_duration, _, _, fps = get_video_info(video_path)
+    if not video_duration:
+        print(f"  ❌ Could not get video duration: {video_path}")
+        return
+
+    out_dir = Path(folder).parent / "Output" / "Slideshow_Joined"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Build slideshow to a temp location beside the video
+    suffix = djj.position_suffix(position)
+    temp_slideshow = Path(folder) / f"{video_stem}_temp_slideshow.mp4"
+    build_slideshow_native_size(images, image_duration, video_duration, temp_slideshow, fps=fps)
+
+    if not temp_slideshow.exists() or temp_slideshow.stat().st_size == 0:
+        print(f"  ❌ Slideshow build failed for {video_stem}")
+        return
+
+    output_path = out_dir / f"{video_stem}_sl_joined{suffix}.mp4"
+    print(f"  🔗 Joining slideshow to video...")
+    success = djj.build_slideshow_and_join(video_path, str(temp_slideshow), output_path, position, audio_choice,
+                                           max_longest_edge=max_longest_edge)
+
+    temp_slideshow.unlink(missing_ok=True)
+
+    if success:
+        print(f"  ✅ Output: {output_path.name}")
+    print()
+
+
+def process_slideshow_join_flat(parent, image_duration, position, audio_choice, max_longest_edge=1920):
+    """
+    Flat mode for Slideshow + Join.
+    Pairs video with matching-stem images.
+    Output: parent/Output/Slideshow_Joined/
+    """
+    valid_exts = (".mp4", ".mov", ".webm")
+    image_exts = (".jpg", ".jpeg", ".png", ".webp")
+
+    videos = sorted([f for f in os.listdir(parent) if f.lower().endswith(valid_exts)])
+    total = len(videos)
+    if total == 0:
+        print("⚠️  No videos found in folder.")
+        return
+
+    out_dir = Path(parent) / "Output" / "Slideshow_Joined"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    suffix = djj.position_suffix(position)
+
+    for idx, video_file in enumerate(videos, 1):
+        percent = int((idx / total) * 100)
+        print(f"\033[93m🎞️ Processing \033[0m{idx}\033[93m/\033[0m{total} ({percent}%)\033[93m...\033[0m")
+
+        video_path = os.path.join(parent, video_file)
+        video_stem = Path(video_file).stem
+
+        images = sorted([
+            os.path.join(parent, f) for f in os.listdir(parent)
+            if f.lower().endswith(image_exts) and Path(f).stem.startswith(video_stem)
+        ])
+        if not images:
+            print(f"  ⚠️  No matching images for {video_file}, skipping.")
+            continue
+
+        video_duration, _, _, fps = get_video_info(video_path)
+        if not video_duration:
+            print(f"  ❌ Could not get video duration: {video_path}")
+            continue
+
+        temp_slideshow = Path(parent) / f"{video_stem}_temp_slideshow.mp4"
+        build_slideshow_native_size(images, image_duration, video_duration, temp_slideshow, fps=fps)
+
+        if not temp_slideshow.exists() or temp_slideshow.stat().st_size == 0:
+            print(f"  ❌ Slideshow build failed for {video_stem}")
+            continue
+
+        output_path = out_dir / f"{video_stem}_sl_joined{suffix}.mp4"
+        print(f"  🔗 Joining slideshow to video...")
+        success = djj.build_slideshow_and_join(video_path, str(temp_slideshow), output_path, position, audio_choice,
+                                               max_longest_edge=max_longest_edge)
+
+        temp_slideshow.unlink(missing_ok=True)
+
+        if success:
+            print(f"  ✅ Output: {output_path.name}")
+        print()
+
+
+# Block 9 – Collage + Join (Mode 5) processors
+def process_collage_join_folder(folder, position, audio_choice,
+                                collage_direction, collage_longest_edge):
+    """
+    Subfolder mode for Collage + Join.
+    Expects exactly 1 video + 1+ images per subfolder.
+    Creates a collage from all images, then joins it to the video.
+    Output: parent/Output/Collage_Joined/
+    """
+    valid_exts = (".mp4", ".mov", ".webm")
+    image_exts = (".jpg", ".jpeg", ".png", ".webp")
+
+    videos = [f for f in os.listdir(folder) if f.lower().endswith(valid_exts)]
+    if len(videos) != 1:
+        print(f"  ⚠️  Skipping {Path(folder).name}: needs exactly 1 video (found {len(videos)})")
+        return
+
+    video_path = os.path.join(folder, videos[0])
+    video_stem = Path(video_path).stem
+
+    images = sorted([
+        os.path.join(folder, f) for f in os.listdir(folder)
+        if f.lower().endswith(image_exts)
+    ])
+    if not images:
+        print(f"  ⚠️  No images found in {Path(folder).name}, skipping.")
+        return
+
+    out_dir = Path(folder).parent / "Output" / "Collage_Joined"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    suffix = djj.position_suffix(position)
+    output_path = out_dir / f"{video_stem}_col_joined{suffix}.mp4"
+    temp_dir = Path(folder) / ".djjtb_temp_collage"
+
+    print(f"  🖼️  Building collage from {len(images)} image(s)...")
+    success = djj.build_collage_and_join(
+        video_path, images, output_path, position, audio_choice,
+        collage_direction, collage_longest_edge,
+        collage_group_size=len(images),
+        temp_dir=temp_dir
+    )
+
+    # Clean up temp dir
+    if temp_dir.exists():
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+    if success:
+        print(f"  ✅ Output: {output_path.name}")
+    print()
+
+
+def process_collage_join_flat(parent, position, audio_choice,
+                              collage_direction, collage_longest_edge):
+    """
+    Flat mode for Collage + Join.
+    Pairs video with matching-stem images, collages them, then joins.
+    Output: parent/Output/Collage_Joined/
+    """
+    valid_exts = (".mp4", ".mov", ".webm")
+    image_exts = (".jpg", ".jpeg", ".png", ".webp")
+
+    videos = sorted([f for f in os.listdir(parent) if f.lower().endswith(valid_exts)])
+    total = len(videos)
+    if total == 0:
+        print("⚠️  No videos found in folder.")
+        return
+
+    out_dir = Path(parent) / "Output" / "Collage_Joined"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    suffix = djj.position_suffix(position)
+
+    for idx, video_file in enumerate(videos, 1):
+        percent = int((idx / total) * 100)
+        print(f"\033[93m🖼️ Processing \033[0m{idx}\033[93m/\033[0m{total} ({percent}%)\033[93m...\033[0m")
+
+        video_path = os.path.join(parent, video_file)
+        video_stem = Path(video_file).stem
+
+        images = sorted([
+            os.path.join(parent, f) for f in os.listdir(parent)
+            if f.lower().endswith(image_exts) and Path(f).stem.startswith(video_stem)
+        ])
+        if not images:
+            print(f"  ⚠️  No matching images for {video_file}, skipping.")
+            continue
+
+        output_path = out_dir / f"{video_stem}_col_joined{suffix}.mp4"
+        temp_dir = Path(parent) / f".djjtb_temp_collage_{video_stem}"
+
+        print(f"  🖼️  Building collage from {len(images)} image(s)...")
+        success = djj.build_collage_and_join(
+            video_path, images, output_path, position, audio_choice,
+            collage_direction, collage_longest_edge,
+            collage_group_size=len(images),
+            temp_dir=temp_dir
+        )
+
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+        if success:
+            print(f"  ✅ Output: {output_path.name}")
+        print()
+
+
+# Block 10 – Main Loop
 def main():
     print()
     print()
@@ -415,16 +716,65 @@ def main():
 
         # ── Step 2: top-level mode ──────────────────────────────────────────
         top_mode = djj.prompt_choice(
-            "🎬 What would you like to do?\n1. Slideshow + Watermark\n2. Slideshow Only",
-            ['1', '2'],
+            "🎬 What would you like to do?\n1. Slideshow + Watermark\n2. Slideshow Only\n3. Image Join\n4. Slideshow + Join\n5. Collage + Join",
+            ['1', '2', '3', '4', '5'],
             default='1'
         )
         print()
 
-        # ── SLIDESHOW ONLY branch ───────────────────────────────────────────
-        if top_mode == '2':
+        # ── IMAGE JOIN branch ───────────────────────────────────────────────
+        if top_mode == '3':
 
-            # Folder layout
+            mode = djj.prompt_choice(
+                "📂 Are files in subfolders?\n1. Yes (per-pair subfolders), 2. No (flat folder) ",
+                ['1', '2'],
+                default='1'
+            )
+            is_flat_mode = mode == '2'
+            print()
+
+            print("\033[93m🖼️  Image Position:\033[0m")
+            print("1. Left   (video on right)")
+            print("2. Right  (video on left)")
+            print("3. Top    (video on bottom)")
+            print("4. Bottom (video on top)")
+            position = djj.prompt_choice(
+                "\033[93mChoice\033[0m",
+                ['1', '2', '3', '4'],
+                default='1'
+            )
+            print()
+
+            print("\033[93m🔊 Audio:\033[0m")
+            print("1. Keep video's audio")
+            print("2. Strip audio")
+            print("3. Add silent audio track")
+            audio_choice = djj.prompt_choice(
+                "\033[93mChoice\033[0m",
+                ['1', '2', '3'],
+                default='1'
+            )
+            print()
+
+            if is_flat_mode:
+                process_join_flat(parent, position, audio_choice)
+            else:
+                subdirs = [
+                    os.path.join(parent, d) for d in sorted(os.listdir(parent))
+                    if os.path.isdir(os.path.join(parent, d))
+                ]
+                total = len(subdirs)
+                for idx, sub in enumerate(subdirs, 1):
+                    percent = int((idx / total) * 100)
+                    print(f"\033[93m🔗 Processing folder \033[0m{idx}\033[93m/\033[0m{total} ({percent}%)\033[93m...\033[0m")
+                    process_join_folder(sub, position, audio_choice)
+
+            out_folder = Path(parent) / "Joined"
+            djj.prompt_open_folder(str(out_folder) if out_folder.exists() else parent)
+
+        # ── SLIDESHOW ONLY branch ───────────────────────────────────────────
+        elif top_mode == '2':
+
             mode = djj.prompt_choice(
                 "📂 Are videos in subfolders?\n1. Yes (per-video subfolders), 2. No (flat folder) ",
                 ['1', '2'],
@@ -433,7 +783,6 @@ def main():
             is_flat_mode = mode == '2'
             print()
 
-            # Number of slideshows first so we know how many durations to ask
             num_slideshows_str = djj.prompt_choice(
                 "🎞️  How many slideshows to create?\n1. One slideshow\n2. Two slideshows (images auto-split)",
                 ['1', '2'],
@@ -447,7 +796,6 @@ def main():
                 print("   If only 1 image is available, it will be used in both.\033[0m")
                 print()
 
-            # Duration per slide — separate prompt per slideshow if 2
             def ask_duration(label="🕒 Duration per slide in seconds (default 3, decimals ok e.g. 2.5): "):
                 val = djj.get_float_input(label, min_val=0.1, max_val=30.0)
                 return val if val is not None else 3.0
@@ -463,7 +811,6 @@ def main():
                 image_duration2 = image_duration
             print()
 
-            # Run it
             if is_flat_mode:
                 process_slideshow_only_flat(parent, image_duration, image_duration2, num_slideshows)
                 output_folder = parent
@@ -482,8 +829,9 @@ def main():
 
             djj.prompt_open_folder(output_folder)
 
-        # ── SLIDESHOW + WATERMARK branch (original flow) ────────────────────
-        else:
+        # ── SLIDESHOW + WATERMARK branch ────────────────────────────────────
+        elif top_mode == '1':
+
             mode = djj.prompt_choice(
                 "📂 Are videos in subfolders?\n1. Yes (per-video subfolders), 2. No (flat folder) ",
                 ['1', '2'],
@@ -530,7 +878,7 @@ def main():
                 subdirs = [
                     os.path.join(parent, d) for d in sorted(os.listdir(parent))
                     if os.path.isdir(os.path.join(parent, d))
-                ]
+                ]   
                 total = len(subdirs)
                 for idx, sub in enumerate(subdirs, 1):
                     percent = int((idx / total) * 100)
@@ -540,6 +888,123 @@ def main():
 
             djj.prompt_open_folder(parent)
 
+        # ── SLIDESHOW + JOIN branch ─────────────────────────────────────────
+        elif top_mode == '4':
+
+            mode = djj.prompt_choice(
+                "📂 Are files in subfolders?\n1. Yes (per-video subfolders), 2. No (flat folder) ",
+                ['1', '2'],
+                default='1'
+            )
+            is_flat_mode = mode == '2'
+            print()
+
+            image_duration = djj.get_float_input(
+                "🕒 Duration per slide (default 3, decimals ok e.g. 2.5): ",
+                min_val=0.1, max_val=30.0
+            )
+            if image_duration is None:
+                image_duration = 3.0
+            print()
+
+            print("\033[93m📐 Max output longest edge (total joined width or height):\033[0m")
+            print("1. 1280")
+            print("2. 1920  (default)")
+            print("3. 2560")
+            print("4. 3840")
+            _edge_map = {'1': 1280, '2': 1920, '3': 2560, '4': 3840}
+            sl_max_edge = _edge_map[djj.prompt_choice("\033[93mChoice\033[0m", ['1', '2', '3', '4'], default='2')]
+            print()
+
+            print("\033[93m🖼️  Slideshow Position:\033[0m")
+            print("1. Left   (video on right)")
+            print("2. Right  (video on left)")
+            print("3. Top    (video on bottom)")
+            print("4. Bottom (video on top)")
+            position = djj.prompt_choice("\033[93mChoice\033[0m", ['1', '2', '3', '4'], default='1')
+            print()
+
+            print("\033[93m🔊 Audio:\033[0m")
+            print("1. Keep video's audio")
+            print("2. Strip audio")
+            print("3. Add silent audio track")
+            audio_choice = djj.prompt_choice("\033[93mChoice\033[0m", ['1', '2', '3'], default='1')
+            print()
+
+            if is_flat_mode:
+                process_slideshow_join_flat(parent, image_duration, position, audio_choice, sl_max_edge)
+            else:
+                subdirs = [
+                    os.path.join(parent, d) for d in sorted(os.listdir(parent))
+                    if os.path.isdir(os.path.join(parent, d))
+                ]
+                total = len(subdirs)
+                for idx, sub in enumerate(subdirs, 1):
+                    percent = int((idx / total) * 100)
+                    print(f"\033[93m🎞️ Processing folder \033[0m{idx}\033[93m/\033[0m{total} ({percent}%)\033[93m...\033[0m")
+                    process_slideshow_join_folder(sub, image_duration, position, audio_choice, sl_max_edge)
+
+            out_folder = Path(parent) / "Output" / "Slideshow_Joined"
+            djj.prompt_open_folder(str(out_folder) if out_folder.exists() else parent)
+
+        # ── COLLAGE + JOIN branch ────────────────────────────────────────────
+        elif top_mode == '5':
+
+            mode = djj.prompt_choice(
+                "📂 Are files in subfolders?\n1. Yes (per-video subfolders), 2. No (flat folder) ",
+                ['1', '2'],
+                default='1'
+            )
+            is_flat_mode = mode == '2'
+            print()
+
+            print("\033[93m🎑 Collage direction:\033[0m")
+            print("1. Horizontal (images side by side)")
+            print("2. Vertical   (images stacked)")
+            coll_dir_choice = djj.prompt_choice("\033[93mChoice\033[0m", ['1', '2'], default='1')
+            collage_direction = 'H' if coll_dir_choice == '1' else 'V'
+            print()
+
+            print("\033[93m📐 Max output longest edge (total joined width or height):\033[0m")
+            print("1. 1280")
+            print("2. 1920  (default)")
+            print("3. 2560")
+            print("4. 3840")
+            _edge_map = {'1': 1280, '2': 1920, '3': 2560, '4': 3840}
+            collage_longest_edge = _edge_map[djj.prompt_choice("\033[93mChoice\033[0m", ['1', '2', '3', '4'], default='2')]
+            print()
+
+            print("\033[93m🖼️  Collage Position:\033[0m")
+            print("1. Left   (video on right)")
+            print("2. Right  (video on left)")
+            print("3. Top    (video on bottom)")
+            print("4. Bottom (video on top)")
+            position = djj.prompt_choice("\033[93mChoice\033[0m", ['1', '2', '3', '4'], default='1')
+            print()
+
+            print("\033[93m🔊 Audio:\033[0m")
+            print("1. Keep video's audio")
+            print("2. Strip audio")
+            print("3. Add silent audio track")
+            audio_choice = djj.prompt_choice("\033[93mChoice\033[0m", ['1', '2', '3'], default='1')
+            print()
+
+            if is_flat_mode:
+                process_collage_join_flat(parent, position, audio_choice, collage_direction, collage_longest_edge)
+            else:
+                subdirs = [
+                    os.path.join(parent, d) for d in sorted(os.listdir(parent))
+                    if os.path.isdir(os.path.join(parent, d))
+                ]
+                total = len(subdirs)
+                for idx, sub in enumerate(subdirs, 1):
+                    percent = int((idx / total) * 100)
+                    print(f"\033[93m🖼️ Processing folder \033[0m{idx}\033[93m/\033[0m{total} ({percent}%)\033[93m...\033[0m")
+                    process_collage_join_folder(sub, position, audio_choice, collage_direction, collage_longest_edge)
+
+            out_folder = Path(parent) / "Output" / "Collage_Joined"
+            djj.prompt_open_folder(str(out_folder) if out_folder.exists() else parent)
+
         # ── What Next ───────────────────────────────────────────────────────
         action = djj.what_next()
         if action == 'exit':
@@ -547,4 +1012,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
     

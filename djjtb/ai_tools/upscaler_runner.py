@@ -7,7 +7,7 @@ import djjtb.utils as djj
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 
-SUPPORTED_EXTS  = ('.jpg', '.jpeg', '.png', '.webp', '.tiff', '.tif', '.bmp')
+SUPPORTED_EXTS  = ('.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp')  # webp excluded — convert first
 
 MODEL_DIR       = "/Users/home/Documents/ai_models/upscalers"
 MODEL_PATH      = f"{MODEL_DIR}/4x-UltraSharp.pth"
@@ -42,6 +42,9 @@ tile_pad     = int(os.environ.get("UPS_TILE_PAD", "10"))
 scale        = int(os.environ.get("UPS_SCALE", "4"))
 resize_edge    = int(os.environ.get("UPS_RESIZE_EDGE", "0"))     # 0 = no resize
 blend_strength = float(os.environ.get("UPS_BLEND", "1.0"))      # 1.0 = full AI upscale
+post_mode      = os.environ.get("UPS_POST", "none")              # none / natural / custom
+grain_strength = float(os.environ.get("UPS_GRAIN", "0.03"))     # 0.0-1.0
+edge_sharpen   = float(os.environ.get("UPS_SHARPEN", "0.5"))    # 0.0-1.0
 
 # ── Original ESRGAN architecture (matches 4x-UltraSharp key names) ────────────
 #
@@ -227,6 +230,36 @@ if blend_strength < 1.0:
     bicubic = cv2.resize(img_bgr, (w_out, h_out), interpolation=cv2.INTER_CUBIC)
     result_bgr = cv2.addWeighted(result_bgr, blend_strength, bicubic, 1.0 - blend_strength, 0)
 
+# ── Post-processing ───────────────────────────────────────────────────────────
+
+def apply_edge_sharpen(img, strength):
+    # Unsharp mask — sharpens edges only, leaves flat areas (skin) smooth
+    blur = cv2.GaussianBlur(img, (0, 0), sigmaX=2.0)
+    sharp = cv2.addWeighted(img, 1.0 + strength, blur, -strength, 0)
+    return sharp
+
+def apply_grain(img, strength):
+    # Luminance-weighted grain — more grain in midtones, less in shadows/highlights
+    # Mimics natural film/sensor noise
+    h, w = img.shape[:2]
+    noise = np.random.normal(0, strength * 255, (h, w)).astype(np.float32)
+    img_f = img.astype(np.float32)
+    # Weight grain by luminance curve (less grain at extremes)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.float32) / 255.0
+    weight = 1.0 - (2.0 * gray - 1.0) ** 2   # peaks at midtone (0.5), zero at 0 and 1
+    for c in range(3):
+        img_f[:, :, c] += noise * weight
+    return np.clip(img_f, 0, 255).astype(np.uint8)
+
+if post_mode == 'natural':
+    result_bgr = apply_edge_sharpen(result_bgr, edge_sharpen)
+    result_bgr = apply_grain(result_bgr, grain_strength)
+elif post_mode == 'custom':
+    if edge_sharpen > 0:
+        result_bgr = apply_edge_sharpen(result_bgr, edge_sharpen)
+    if grain_strength > 0:
+        result_bgr = apply_grain(result_bgr, grain_strength)
+
 # Resize to longest edge if requested
 if resize_edge > 0:
     result_bgr = resize_to_longest_edge(result_bgr, resize_edge)
@@ -381,7 +414,7 @@ def get_valid_inputs():
 
 # ─── Processing ───────────────────────────────────────────────────────────────
 
-def process_single_file(input_path, output_path, suffix, tile_size, resize_edge, blend_strength, timeout=600):
+def process_single_file(input_path, output_path, suffix, tile_size, resize_edge, blend_strength, post_mode, grain_strength, edge_sharpen, timeout=600):
     file_start = time.time()
 
     env = os.environ.copy()
@@ -395,6 +428,9 @@ def process_single_file(input_path, output_path, suffix, tile_size, resize_edge,
         "UPS_SCALE":       str(SCALE_FACTOR),
         "UPS_RESIZE_EDGE": str(resize_edge),
         "UPS_BLEND":       f"{blend_strength:.2f}",
+        "UPS_POST":        post_mode,
+        "UPS_GRAIN":       f"{grain_strength:.3f}",
+        "UPS_SHARPEN":     f"{edge_sharpen:.3f}",
     })
 
     try:
@@ -416,7 +452,7 @@ def process_single_file(input_path, output_path, suffix, tile_size, resize_edge,
         return False, str(e), elapsed
 
 
-def process_files_batch(input_paths, suffix, tile_size, resize_edge, blend_strength, tag_source):
+def process_files_batch(input_paths, suffix, tile_size, resize_edge, blend_strength, post_mode, grain_strength, edge_sharpen, tag_source):
     overall_start = time.time()
 
     blend_label = "100% — full AI upscale" if blend_strength >= 1.0 else f"{int(blend_strength*100)}% AI / {int((1-blend_strength)*100)}% bicubic"
@@ -428,6 +464,8 @@ def process_files_batch(input_paths, suffix, tile_size, resize_edge, blend_stren
     print(f"\033[93m🔠 Suffix:\033[0m {suffix}")
     print(f"\033[93m🔼 Scale:\033[0m {SCALE_FACTOR}x → PNG")
     print(f"\033[93m💪 Strength:\033[0m {blend_label}")
+    post_label = {'none': 'Off', 'natural': 'Natural (grain + edge sharpen)', 'custom': f'Custom — grain {int(grain_strength*100)}% / sharpen {int(edge_sharpen*100)}%'}[post_mode]
+    print(f"\033[93m✨ Post-process:\033[0m {post_label}")
     print(f"\033[93m📐 Resize:\033[0m {'longest edge → ' + str(resize_edge) + 'px' if resize_edge > 0 else 'No resize'}")
     print(f"\033[93m🪟 Tile size:\033[0m {'No tiling' if tile_size == 0 else tile_size}")
     print("---------------")
@@ -448,7 +486,7 @@ def process_files_batch(input_paths, suffix, tile_size, resize_edge, blend_stren
         print(f"\033[93mProcessing [{i+1}/{len(input_paths)}]:\033[0m {file_name}")
 
         success, output_msg, file_elapsed = process_single_file(
-            input_path, output_path, suffix, tile_size, resize_edge, blend_strength
+            input_path, output_path, suffix, tile_size, resize_edge, blend_strength, post_mode, grain_strength, edge_sharpen
         )
         total_elapsed = time.time() - overall_start
 
@@ -558,6 +596,33 @@ def main():
             except ValueError:
                 print("⚠️  \033[93mInvalid input, using 100%\033[0m")
                 blend_strength = 1.0
+        # ── Post-processing ──
+        post_choice = djj.prompt_choice(
+            "\033[93mPost-processing?\033[0m\n1. None\n2. Natural — grain + edge sharpen (recommended)\n3. Custom — choose strength\n",
+            ['1', '2', '3'],
+            default='2'
+        )
+        grain_strength = 0.0
+        edge_sharpen   = 0.0
+        if post_choice == '1':
+            post_mode = 'none'
+        elif post_choice == '2':
+            post_mode = 'natural'
+            grain_strength = 0.03
+            edge_sharpen   = 0.5
+        else:
+            post_mode = 'custom'
+            grain_input = input("\033[93mGrain strength (0–100, default 30):\033[0m\n > ").strip()
+            try:
+                grain_strength = (int(grain_input) if grain_input else 30) / 100.0
+            except ValueError:
+                grain_strength = 0.03
+            sharpen_input = input("\033[93mEdge sharpen strength (0–100, default 50):\033[0m\n > ").strip()
+            try:
+                edge_sharpen = (int(sharpen_input) if sharpen_input else 50) / 100.0
+            except ValueError:
+                edge_sharpen = 0.5
+
         do_resize = djj.prompt_choice(
             "\033[93mResize output to longest edge?\033[0m\n1. Yes\n2. No",
             ['1', '2'],
@@ -585,7 +650,7 @@ def main():
 
         os.system('clear')
 
-        process_files_batch(input_files, suffix, tile_size, resize_edge, blend_strength, tag_source)
+        process_files_batch(input_files, suffix, tile_size, resize_edge, blend_strength, post_mode, grain_strength, edge_sharpen, tag_source)
 
         print()
         action = djj.what_next()

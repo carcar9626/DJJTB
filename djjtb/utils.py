@@ -275,322 +275,7 @@ def open_path(path):
     else:
         print(f"\033[91m❌ Path does not exist:\033[0m {path}")
 
-"""
-def create_dissolve_slideshow(images, output_file, duration_per_slide=4, transition_duration=1.0,
-                             canvas_width=1920, canvas_height=1080):
-    # Copy the function above into your utils.py
-    
-def calculate_slideshow_duration(num_images, duration_per_slide, transition_duration=1.0):
-    # Copy this function too
-    
-    
-"""
 
-#Usage:
-    
-#import djjtb.utils as djj
-#
-#success, message = djj.create_dissolve_slideshow(
-#    images=my_images,
-#    output_file="slideshow.mp4",
-#    duration_per_slide=5
-#)
-"""
-Transition Helper for DJJTB - Reusable dissolve transition logic
-Can be added to djjtb.utils or used as standalone helper
-"""
-
-
-def create_dissolve_slideshow(images, output_file, duration_per_slide=4, transition_duration=1.0,
-                             canvas_width=1920, canvas_height=1080):
-    """
-    Create a slideshow with dissolve transitions using proven ffmpeg logic.
-    
-    Args:
-        images: List of image file paths
-        output_file: Output video file path
-        duration_per_slide: How long each slide shows (seconds)
-        transition_duration: Duration of dissolve transition (seconds)
-        canvas_width: Output video width
-        canvas_height: Output video height
-    
-    Returns:
-        tuple: (success: bool, message: str)
-    """
-    
-    if not images:
-        return False, "No images provided"
-    
-    if len(images) == 1:
-        # Single image - no transitions needed
-        cmd = [
-            "ffmpeg", "-y",
-            "-loop", "1", "-t", str(duration_per_slide), "-i", images[0],
-            "-vf", f"scale={canvas_width}:{canvas_height}:force_original_aspect_ratio=decrease,pad={canvas_width}:{canvas_height}:(ow-iw)/2:(oh-ih)/2",
-            "-c:v", "libx264", "-crf", "18", "-preset", "veryfast",
-            "-r", "30", "-fps_mode", "cfr",
-            output_file
-        ]
-    else:
-        # Multiple images - use dissolve transitions
-        cmd = ["ffmpeg", "-y"]
-        
-        # Add all images as inputs
-        for img_path in images:
-            cmd.extend(["-loop", "1", "-t", str(duration_per_slide), "-i", img_path])
-        
-        # Build filter complex with proper overlap timing
-        filter_parts = []
-        overlay_chain = []
-        
-        for i in range(len(images)):
-            # Scale and format each input
-            scale_filter = f"[{i}:v]scale={canvas_width}:{canvas_height}:force_original_aspect_ratio=decrease,pad={canvas_width}:{canvas_height}:(ow-iw)/2:(oh-ih)/2,format=yuva420p"
-            
-            if i == 0:
-                # First image: fade out at the end
-                fade_filter = f"{scale_filter},fade=t=out:st={duration_per_slide-transition_duration}:d={transition_duration}:alpha=1,setpts=PTS-STARTPTS[va{i}]"
-                filter_parts.append(fade_filter)
-                overlay_chain.append(f"va{i}")
-            else:
-                # Subsequent images: fade in, offset by (duration - transition) for each previous
-                offset_time = i * (duration_per_slide - transition_duration)
-                fade_filter = f"{scale_filter},fade=t=in:st=0:d={transition_duration}:alpha=1,setpts=PTS-STARTPTS+{offset_time}/TB[va{i}]"
-                filter_parts.append(fade_filter)
-                overlay_chain.append(f"va{i}")
-        
-        # Chain overlays
-        current_base = overlay_chain[0]
-        for i in range(1, len(overlay_chain)):
-            overlay_filter = f"[{current_base}][{overlay_chain[i]}]overlay[ov{i}]"
-            current_base = f"ov{i}"
-            filter_parts.append(overlay_filter)
-        
-        # Calculate exact final duration and add trim
-        final_duration = len(images) * duration_per_slide - (len(images) - 1) * transition_duration
-        filter_parts.append(f"[{current_base}]trim=duration={final_duration}")
-        
-        filter_complex = ";".join(filter_parts)
-        
-        cmd.extend([
-            "-filter_complex", filter_complex,
-            "-c:v", "libx264", "-crf", "18", "-preset", "veryfast",
-            "-r", "30", "-t", str(final_duration), "-fps_mode", "cfr",
-            output_file
-        ])
-    
-    # Execute ffmpeg command
-    try:
-        result = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        return True, f"Successfully created slideshow: {output_file}"
-    except subprocess.CalledProcessError as e:
-        error_msg = f"FFmpeg error: {e.stderr}"
-        logging.error(error_msg)
-        return False, error_msg
-    except Exception as e:
-        error_msg = f"Unexpected error: {str(e)}"
-        logging.error(error_msg)
-        return False, error_msg
-
-
-def calculate_slideshow_duration(num_images, duration_per_slide, transition_duration=1.0):
-    """
-    Calculate total slideshow duration with transitions.
-    
-    Args:
-        num_images: Number of images in slideshow
-        duration_per_slide: Duration each slide is visible
-        transition_duration: Duration of each transition
-    
-    Returns:
-        float: Total video duration in seconds
-    """
-    if num_images <= 1:
-        return duration_per_slide
-    return num_images * duration_per_slide - (num_images - 1) * transition_duration
-
-
-# Example usage and test function
-if __name__ == "__main__":
-    # Test the function
-    test_images = [
-        "/path/to/image1.jpg",
-        "/path/to/image2.jpg",
-        "/path/to/image3.jpg"
-    ]
-    
-    output_path = "/path/to/output.mp4"
-    
-    success, message = create_dissolve_slideshow(
-        images=test_images,
-        output_file=output_path,
-        duration_per_slide=5,
-        transition_duration=1.0,
-        canvas_width=1920,
-        canvas_height=1080
-    )
-    
-    if success:
-        print(f"✅ {message}")
-    else:
-        print(f"❌ {message}")
-    
-    # Calculate duration
-    total_duration = calculate_slideshow_duration(len(test_images), 5, 1.0)
-    print(f"Expected duration: {total_duration} seconds")
-
-
-# ADD THIS TO YOUR djjtb/utils.py:
-
-
-# Enhanced XMP detection functions for djjtb/utils.py
-# Add these functions to your utils.py file
-
-def has_xmp_file(image_path):
-    """
-    Check if an XMP sidecar file exists for the given image.
-    
-    Args:
-        image_path: Path to the image file (str or pathlib.Path)
-        
-    Returns:
-        bool: True if XMP file exists, False otherwise
-    """
-    import os
-    import pathlib
-    
-    # Handle both string and pathlib.Path inputs
-    if isinstance(image_path, pathlib.Path):
-        image_path = str(image_path)
-    
-    xmp_path = f"{image_path}.xmp"
-    return os.path.exists(xmp_path)
-
-
-def filter_images_without_xmp(image_paths, show_stats=True):
-    """
-    Filter out images that already have XMP sidecar files.
-    
-    Args:
-        image_paths: List of image file paths
-        show_stats: Whether to print filtering statistics
-        
-    Returns:
-        tuple: (images_without_xmp, images_with_xmp, stats_dict)
-    """
-    import os
-    
-    images_without_xmp = []
-    images_with_xmp = []
-    
-    for img_path in image_paths:
-        if has_xmp_file(img_path):
-            images_with_xmp.append(img_path)
-        else:
-            images_without_xmp.append(img_path)
-    
-    stats = {
-        'total_images': len(image_paths),
-        'with_xmp': len(images_with_xmp),
-        'without_xmp': len(images_without_xmp),
-        'skip_percentage': (len(images_with_xmp) / len(image_paths) * 100) if image_paths else 0
-    }
-    
-    if show_stats and image_paths:
-        print(f"\033[93m📊 XMP Detection Results:\033[0m")
-        print(f"   Total images: {stats['total_images']}")
-        print(f"   Already tagged (with XMP): \033[92m{stats['with_xmp']}\033[0m")
-        print(f"   Need tagging: \033[93m{stats['without_xmp']}\033[0m")
-        if stats['with_xmp'] > 0:
-            print(f"   Skipping: \033[92m{stats['skip_percentage']:.1f}%\033[0m")
-        print()
-    
-    return images_without_xmp, images_with_xmp, stats
-
-
-def check_xmp_files_in_folder(folder_path, extensions=('.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tiff'), include_subfolders=False):
-    """
-    Check XMP file status for all images in a folder.
-    Useful for getting an overview before processing.
-    
-    Args:
-        folder_path: Path to folder to check
-        extensions: Image file extensions to check
-        include_subfolders: Whether to scan subfolders
-        
-    Returns:
-        dict: Summary statistics and file lists
-    """
-    import pathlib
-    import os
-    
-    folder_path = pathlib.Path(folder_path)
-    
-    # Collect all images
-    if include_subfolders:
-        images = []
-        for ext in extensions:
-            images.extend(folder_path.rglob(f'*{ext}'))
-            images.extend(folder_path.rglob(f'*{ext.upper()}'))
-    else:
-        images = []
-        for ext in extensions:
-            images.extend(folder_path.glob(f'*{ext}'))
-            images.extend(folder_path.glob(f'*{ext.upper()}'))
-    
-    images = [str(img) for img in images]
-    
-    # Filter by XMP status
-    without_xmp, with_xmp, stats = filter_images_without_xmp(images, show_stats=False)
-    
-    result = {
-        'folder_path': str(folder_path),
-        'include_subfolders': include_subfolders,
-        'stats': stats,
-        'images_without_xmp': without_xmp,
-        'images_with_xmp': with_xmp,
-        'sample_with_xmp': with_xmp[:5] if with_xmp else [],
-        'sample_without_xmp': without_xmp[:5] if without_xmp else []
-    }
-    
-    return result
-
-
-def prompt_xmp_handling_mode():
-    """
-    Prompt user for how to handle existing XMP files.
-    Returns the chosen mode and relevant settings.
-    
-    Returns:
-        dict: Configuration for XMP handling
-    """
-    print("\033[93m🏷️  XMP File Handling:\033[0m")
-    
-    mode = prompt_choice(
-        "How should existing XMP files be handled?\n"
-        "1. Skip images that already have XMP files (recommended)\n"
-        "2. Process all images (overwrite existing XMP)\n"
-        "3. Process all images (merge with existing XMP)\n",
-        ['1', '2', '3'],
-        default='1'
-    )
-    
-    config = {
-        'skip_existing': mode == '1',
-        'overwrite_existing': mode == '2',
-        'merge_existing': mode == '3',
-        'mode_description': {
-            '1': 'Skip existing XMP files',
-            '2': 'Overwrite existing XMP files',
-            '3': 'Merge with existing XMP files'
-        }[mode]
-    }
-    
-    print(f"✅ \033[93mSelected:\033[0m {config['mode_description']}")
-    print()
-    
-    return config
-    
 # Add these functions to your djjtb/utils.py file
 
 def get_multifile_input(prompt_text="📁 Enter file paths", extensions=None, max_display=5):
@@ -817,51 +502,22 @@ def open_multiple_folders(folder_paths, max_open=3):
         for folder in unique_folders[max_open:]:
             print(f"  📁 {folder}")
 
-def prompt_open_folder(folder_path, initial_wait=240,   countdown_seconds=10):
+def prompt_open_folder(folder_path, initial_wait=240, countdown_seconds=10):
     """
-    Prompt user to open folder with countdown option
+    Prompt user to open folder. Waits indefinitely for a valid response.
     """
-    import time
-    import select
-    import sys
-    
-    while True:  # Loop until we get a valid response or timeout
-        print(f"\033[93mOpen output folder?\033[0m\n1. Yes\n2. No")
-        
-        # Initial wait period
-        ready, _, _ = select.select([sys.stdin], [], [], initial_wait)
-        
-        if ready:
-            choice = input().strip()
-            if choice == '1':
-                try:
-                    subprocess.run(['open', str(folder_path)], check=True)
-                    print(f"\033[92m✓ Opened: {folder_path}\033[0m")
-                except subprocess.CalledProcessError as e:
-                    print(f"\033[93m⚠️  Error opening folder: {e}\033[0m")
-                break  # Exit the loop
-            elif choice == '2':
-                break  # Exit without opening
-            # Invalid choice - loop continues
-        else:
-            # Start countdown
-            print(f"\033[93mNo response - continuing in {countdown_seconds} seconds (press enter to choose)...\033[0m")
-            countdown_broken = False
-            for i in range(countdown_seconds, 0, -1):
-                print(f"{i}...", end='\r', flush=True)
-                if select.select([sys.stdin], [], [], 1)[0]:
-                    input()  # consume input
-                    countdown_broken = True
-                    break
-            
-            if not countdown_broken:
-                # Countdown completed - exit without opening
-                print("\r" + " " * 20 + "\r", end='', flush=True)
-                break
-            else:
-                # Countdown was broken - clear line and loop back to prompt
-                print("\r" + " " * 50 + "\r", end='', flush=True)
-                # Loop continues to show prompt again
+    while True:
+        choice = input("\033[93mOpen output folder?\033[0m\n1. Yes\n2. No\n > ").strip()
+        if choice == '1':
+            try:
+                subprocess.run(['open', str(folder_path)], check=True)
+                print(f"\033[92m✓ Opened: {folder_path}\033[0m")
+            except subprocess.CalledProcessError as e:
+                print(f"\033[93m⚠️  Error opening folder: {e}\033[0m")
+            break
+        elif choice == '2':
+            break
+        # Invalid choice - loop continues
 
         
 #this one is for codeformer launcher
@@ -1427,17 +1083,6 @@ def what_next():
         os.system('clear')
         return 'continue'
 
-def get_audio_options(audio_choice):
-    """Get FFmpeg audio options based on user choice."""
-    if audio_choice == '1':  # Keep Original Audio
-        return ["-c:a", "aac"]
-    elif audio_choice == '2':  # Strip Audio
-        return ["-an"]
-    elif audio_choice == '3':  # Add Silent Audio Track
-        return ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000", "-map", "0:v:0", "-map", "1:a:0", "-c:a", "aac", "-shortest"]
-    else:
-        return ["-c:a", "aac"]  # Default to keep original
-
 def run_again():
     choice = prompt_choice("\033[93m Run again?\033[0m\n1. Yes, 2. No ", ['1', '2'], default='2')
     if choice == '2':
@@ -1445,3 +1090,28 @@ def run_again():
         return False
     os.system('clear')
     return True
+
+
+# ─── Media Utils Re-exports ───────────────────────────────────────────────────
+# Media-processing functions live in djjtb/media_utils.py.
+# Re-exported here so all existing scripts using djj.* continue to work unchanged.
+
+from djjtb.media_utils import (
+    make_even_dimensions,
+    get_pad_filter,
+    get_gif_dimensions,
+    get_audio_options,
+    create_dissolve_slideshow,
+    calculate_slideshow_duration,
+    has_xmp_file,
+    filter_images_without_xmp,
+    check_xmp_files_in_folder,
+    prompt_xmp_handling_mode,
+    get_join_dimensions,
+    join_image_video,
+    position_suffix,
+    clamp_to_longest_edge,
+    build_slideshow_and_join,
+    build_collage_and_join,
+    create_collage,
+)

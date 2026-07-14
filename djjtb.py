@@ -6,11 +6,57 @@ DJJTB Python Launcher
 
 import os
 import sys
+import time
+import subprocess
 from pathlib import Path
 
 # Add the project root to Python path
 sys.path.insert(0, str(Path(__file__).parent))
 import djjtb.utils as djj
+
+# ── Boot-launch detection ─────────────────────────────────────────────────────
+# Stamp file records the last time djjtb launched the grabbers.
+# If the Mac booted after that stamp, it's a fresh boot → launch grabbers.
+GRABBER_STAMP = Path("/Users/home/Documents/Scripts/DJJTB_output/grabber_last_launch.txt")
+
+def get_boot_time():
+    """Return system boot time as a Unix timestamp."""
+    try:
+        result = subprocess.run(
+            ["sysctl", "-n", "kern.boottime"],
+            capture_output=True, text=True
+        )
+        # Output looks like: { sec = 1234567890, usec = 0 } ...
+        for part in result.stdout.split(","):
+            if "sec" in part:
+                return float(part.split("=")[1].strip().split()[0])
+    except Exception:
+        pass
+    return 0.0
+
+def is_boot_launch():
+    """Return True if this is the first djjtb launch since last boot."""
+    boot_time = get_boot_time()
+    if not boot_time:
+        return False  # Can't determine — play it safe, skip auto-launch
+
+    if not GRABBER_STAMP.exists():
+        return True  # Never launched before → treat as boot launch
+
+    try:
+        last_launch = float(GRABBER_STAMP.read_text().strip())
+        # Boot happened AFTER our last stamp → fresh boot
+        return boot_time > last_launch
+    except Exception:
+        return True  # Corrupt stamp → treat as boot launch
+
+def write_grabber_stamp():
+    """Record current time as the last grabber launch time."""
+    try:
+        GRABBER_STAMP.parent.mkdir(parents=True, exist_ok=True)
+        GRABBER_STAMP.write_text(str(time.time()))
+    except Exception:
+        pass
 
 class DJJTBLauncher:
     
@@ -117,11 +163,11 @@ class DJJTBLauncher:
         print(" 💰 \033[4;93m2\033[0m  Strip Padding 🔲➡︎⬜️")
         print(" 💰 \033[4;93m3\033[0m  Flip or Rotate ↔️  🔄")
         print(" 💰 \033[4;93m4\033[0m  Collage Creation 🧩 🎇")
-        print(" 💰 \033[4;93m5\033[0m  Resize Images 🩷⬌💓")
+        print(" 💰 \033[4;93m5\033[0m  Image Processor 🩷⬌💓")
         print(" 💰 \033[4;93m6\033[0m  Slideshow Maker 🎑➡︎📽️")
         print(" 💰 \033[4;93m7\033[0m  Image Pairing ✋🏼 🤲🏼")
-        print(" 💰 \033[4;93m8\033[0m  Image Padding ◼️➡︎🔳")
-        print(" 💰 \033[4;93m9\033[0m  Webp to MP4 Converter 👾➡︎📹")
+        print(" 💰 \033[4;93m8\033[0m  Webp to MP4 Converter 👾➡︎📹")
+        print(" 💰 \033[4;93m9\033[0m  Images to Video Compiler 🌃🌆🎆🎇➡︎📹")
         print()
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰 \033[4;93m0\033[0m  ⏪ Back to MEDIA TOOLS")
@@ -138,20 +184,26 @@ class DJJTBLauncher:
         #print(" 2. ComfyUI ☀️ 💻")
         #print(" 3. Merge Loras 👫➡︎🧍🏼‍♂️")
         print(" 💰 \033[4;93m1\033[0m  Codeformer 😶‍🌫️➡︎😝")
-        print(" 💰\033[4;93m1B\033[0m  Image Upscaler (4x_UltraSharp 💓 💗 🩷")
         print(" 💰 \033[4;93m2\033[0m  JoyTag Tagger (AI) 🏷️")
         print(" 💰 \033[4;93m3\033[0m  Image Tagger (AI) 🔖")
         print(" 💰 \033[4;93m4\033[0m  FaceFusion (NSFW Patched) 👿➡︎😇")
         print(" 💰 \033[4;93m5\033[0m  FaceFusion WebUI 🌐 👿➡︎😇")
-        print(" 💰 \033[4;93m6\033[0m  WM Remover Auto-Detect(AI) 🤖 💋 🧼")
-        print(" 💰 \033[4;93m7\033[0m  WM Remover from Reference (AI) 👷🏻‍♂️ 💋 🧼")
+        print(" 💰 \033[4;93m6\033[0m  JoyCaption (AI) 🏷️")
+        print(" 💰 \033[4;93m7\033[0m  Image Upscaler (4x_UltraSharp 💓 💗 🩷")
+        print(" 💰\033[4;93m7a\033[0m  Codeformer x 4x_UltraSharp 💓 💗 🩷")
+        # print(" 💰 \033[4;93m6\033[0m  WM Remover Auto-Detect(AI) 🤖 💋 🧼")
+        # print(" 💰 \033[4;93m7\033[0m  WM Remover from Reference (AI) 👷🏻‍♂️ 💋 🧼")
         print(" 💰 \033[4;93m8\033[0m  IOPaint - lama cleaner (WebUI) 🦙 🧼")
 #        print(" 💰\033[4;93m9\033[0m  Image Upscaler (Real-Esrgan4x) 💓 💗 🩷")
 #        print("💰\033[4;93m10\033[0m  Image Upscaler (RealSR 4x) 👶🏼 👦🏻 🤦🏽‍♂️")
         print(" 💰 \033[4;93m9\033[0m  Image Finder (AI) 🔎")
         print(" 💰\033[4;93m10\033[0m  Image Caption Generator (AI)(Florence) 🩻📜")
-        print(" 💰\033[4;93m11\033[0m  Kohya_SS (AI)(SD Lora Trainer) 🏋🏻")
+        # print(" 💰\033[4;93m11\033[0m  Kohya_SS (AI)(SD Lora Trainer) 🏋🏻")
+        print(" 💰\033[4;93m11\033[0m  Prompt Assembler 📝")
         print(" 💰\033[4;93m12\033[0m  Comfyui Batch Process ▶️")
+        print(" 💰\033[4;93m13\033[0m  OpenCode (Local AI Agent) 🖥️🤖")
+        print(" 💰\033[4;93m14\033[0m  Open WebUI 🌐🧠")
+        print(" 💰\033[4;93m15\033[0m  Vocab + Mask Generator 🔤")
         print()
         print("\033[1;93m ⛓️  chaiNNer Workflows ⚙️\033[0m")
         print("\033[92m--------------------------------------------------\033[0m")
@@ -167,10 +219,11 @@ class DJJTBLauncher:
         print()
         print("\033[1;93m ⚙️  ➡️  ⤵️  🔀 🔁 🔄 🔃 ↔️  ⚙️\033[0m")
         print("\033[92m--------------------------------------------------\033[0m")
-        print(" 💰\033[4;93mCU\033[0m  ComfyUI")
-        print(" 💰\033[4;93mCH\033[0m  chaiNNer")
-        print(" 💰\033[4;93mCJ\033[0m  Prompt Lib CSV to JSON")
-        print(" 💰\033[4;93mJC\033[0m  Prompt Lib JSON to CSV")
+        print(" 💰 \033[4;93mCU\033[0m  ComfyUI")
+        print(" 💰 \033[4;93mCH\033[0m  chaiNNer")
+        print(" 💰\033[4;93mATK\033[0m  AI-TOOLKIT")
+        print(" 💰 \033[4;93mCJ\033[0m  Prompt Lib CSV to JSON")
+        print(" 💰 \033[4;93mJC\033[0m  Prompt Lib JSON to CSV")
         
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰 \033[4;93m0\033[0m  ⏪ Back")
@@ -189,6 +242,7 @@ class DJJTBLauncher:
         print(" 💰 \033[4;93m4\033[0m  Filename Randomizer 📇 🔀")
         print(" 💰 \033[4;93m5\033[0m  File Identifier 🆔")
         print(" 💰 \033[4;93m6\033[0m  README Generator 📖")
+        print(" 💰 \033[4;93m7\033[0m  X-to-W Folder Broadcaster 📤➡️📁")
         print()
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰 \033[4;93m0\033[0m  ⏪ Back")
@@ -259,7 +313,7 @@ class DJJTBLauncher:
             self.show_image_tools_menu()
             
             choice = djj.prompt_choice("\033[93mChoose a Tool\033[0m" if first_entry else "\033[93mChoose another option\033[0m",
-                                     ['1', '2', '3', '4', '5', '6', '7', '8','9', '0', '00'])
+                                      ['1', '2', '3', '4', '5', '6', '7', '8','9', '0', '00'])
             first_entry = False
             
             if choice == "1":
@@ -271,15 +325,15 @@ class DJJTBLauncher:
             elif choice == "4":
                 djj.run_script_in_tab("djjtb.media_tools.image_tools.image_collage_creator", self.venv_path, self.project_path)
             elif choice == "5":
-                djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path};    python3 -m djjtb.media_tools.image_tools.image_resizer")
+                djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path};    python3 -m djjtb.media_tools.image_tools.image_processor")
             elif choice == "6":
                 djj.run_script_in_tab("djjtb.media_tools.image_tools.image_slideshow_maker", self.venv_path, self.project_path)
             elif choice == "7":
                 djj.run_script_in_tab("djjtb.media_tools.image_tools.image_pairing", self.venv_path, self.project_path)
             elif choice == "8":
-                djj.run_script_in_tab("djjtb.media_tools.image_tools.image_padder", self.venv_path, self.project_path)
-            elif choice == "9":
                 djj.run_script_in_tab("djjtb.media_tools.image_tools.image_webp_to_mp4", self.venv_path, self.project_path)
+            elif choice == "9":
+                djj.run_script_in_tab("djjtb.media_tools.image_tools.image_video_compiler", self.venv_path, self.project_path)
             elif choice == "0":
                 break
             elif choice == "00":
@@ -333,7 +387,7 @@ class DJJTBLauncher:
         while True:
             self.show_ai_tools_menu()
             choice = djj.prompt_choice("\033[93mChoose an AI tool\033[0m",
-                                     ['1','1b', '2', '3', '4', '5', '6', '7', '8', '9','10','11','12','c0','c1' ,'c2' , 'c3', 'c4','c5','c6', 'c7', 'c8','cu','ch','cj', 'jc', '0', '00'])
+                                     ['1','1b', '2', '3', '4', '5', '6', '7', '7a','8','9','10','11','12','13','14','15','c0','c1' ,'c2' , 'c3', 'c4','c5','c6', 'c7', 'c8','cu','ch','cj', 'jc','atk', '0', '00'])
             """
             if choice == "1":  # Prompt Randomizer
                 djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path}/djjtb/ai_tools/; python3 -m djjtb.media_tools.ai_tools.prompt_randomizer")
@@ -359,9 +413,20 @@ class DJJTBLauncher:
                 command = (f"{self.project_path}/djjtb/ai_tools/run_facefusion.command")
                 djj.open_terminal_with_settings(command, "tagger", "525, 120, 1225, 700")
             elif choice == "6":  # Watermark Remover Auto-Detect
-                djj.run_command_in_tab(f"source /Users/home/Documents/ai_models/watermark_remover/wmrmvenv/bin/activate; cd {self.project_path}/; python3 -m djjtb.ai_tools.watermark_remover_auto")
-            elif choice == "7":  # Watermark Remover from Reference
-                djj.run_command_in_tab(f"cd {self.project_path}/; python3 -m djjtb.ai_tools.watermark_remover_ref")
+                djj.run_command_in_tab(
+                  f"source /Users/home/Documents/ai_models/joycaption/jcvenv/bin/activate; "
+                  f"cd {self.project_path}/; python3 -m djjtb.ai_tools.joycaption_runner"
+              )
+
+                # djj.run_command_in_tab(f"source /Users/home/Documents/ai_models/watermark_remover/wmrmvenv/bin/activate; cd {self.project_path}/; python3 -m djjtb.ai_tools.watermark_remover_auto")
+            elif choice == "7":
+                djj.run_command_in_tab(f"source /Users/home/Documents/ai_models/upscalers/upsvenv/bin/activate; cd {self.project_path}/; python3 -m djjtb.ai_tools.upscaler_runner")
+            elif choice == "7a":  # or whatever slot number you pick
+                djj.run_command_in_tab(
+                  f"source /Users/home/Documents/ai_models/upscalers/upsvenv/bin/activate; "
+                  f"cd {self.project_path}/; python3 -m djjtb.ai_tools.cf_ups_runner"
+              )
+                # djj.run_command_in_tab(f"cd {self.project_path}/; python3 -m djjtb.ai_tools.watermark_remover_ref")
             elif choice == "8":  # IOPaint
                 command = (f"{self.project_path}/djjtb/ai_tools/run_iopaint.command")
                 djj.open_terminal_with_settings(command, "tagger", "525, 120, 1225, 700")
@@ -374,14 +439,28 @@ class DJJTBLauncher:
             elif choice == "10":  # Image Caption Generator
                 command = f"source cd {self.project_path}/; python3 -m djjtb.ai_tools.image_caption_generator"
                 djj.open_terminal_with_settings(command, "tagger", "525, 120, 1460, 700")
-            elif choice == "11":  # Kohya_ss webUI
-                command = (f"{self.project_path}/djjtb/ai_tools/run_kohya_ss.command")
-                djj.open_terminal_with_settings(command, "tagger", "525, 120, 1225, 700")
+            elif choice == "11":  # Prompt Assembler
+                command = ("/Users/home/Documents/Scripts/FLOW_TOOLS/prompt_assembler/LOCAL/prompt_assembler_runner.command")
+                djj.open_terminal_with_settings(command, "comfyui", "1000, 120, 1700, 700")
+            # elif choice == "12":  # Kohya_ss webUI
+            #     command = (f"{self.project_path}/djjtb/ai_tools/run_kohya_ss.command")    
+            #     djj.open_terminal_with_settings(command, "tagger", "525, 120, 1225, 700")
             elif choice == "12":  # ComfyUI batch
                 djj.run_script_in_tab("djjtb.ai_tools.comfyui.comfyui_batch", self.venv_path, self.project_path)
+            elif choice == "13":  # OpenCode
+                command = f"cd {self.project_path}; opencode"
+                djj.open_terminal_with_settings(command, "home_profile", "1000, 120, 1700, 700")
+            elif choice == "14":  # Open WebUI
+                command = (f"{self.project_path}/djjtb/ai_tools/open_webui_runner.command")
+                djj.open_terminal_with_settings(command, "home_profile", "525, 120, 1460, 700")
+            elif choice == "15":  # Vocab + Mask Generator
+                djj.run_script_in_tab("djjtb.ai_tools.vocab_mask_generator", self.venv_path, self.project_path)
             elif choice == "cu":
                 command = (f"{self.project_path}/djjtb/ai_tools/comfyui_runner.command")
-                djj.open_terminal_with_settings(command, "tagger", "525, 120, 1225, 700")
+                djj.open_terminal_with_settings(command, "comfyui", "1000, 120, 1700, 700")
+            elif choice == "atk":
+                command = (f"{self.project_path}/djjtb/ai_tools/ostris_runner.command")
+                djj.open_terminal_with_settings(command, "home_profile", "1000, 120, 1700, 700")
             elif choice == "ch":
                 djj.open_path("/Applications/chaiNNer.app")
                 djj.wait_with_skip(3, "Returning to AI Tools menu")
@@ -423,10 +502,10 @@ class DJJTBLauncher:
         while True:
             self.show_file_tools_menu()
             choice = djj.prompt_choice("\033[93mChoose a file tool\033[0m",
-                                     ['1', '2', '3', '4', '5', '6', '0', '00'])
+                                     ['1', '2', '3', '4', '5', '6','7', '0', '00'])
             
             if choice == "1":  # Rsync
-                djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path}; python3 -m djjtb.quick_tools.rsync_helper")
+                djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path}; python3 -m djjtb.file_tools.rsync_helper")
             elif choice == "2":  # Add Root Folder Prefix
                 djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path}; python3 -m djjtb.file_tools.add_root_dir_prefix")
             elif choice == "3":  # Auto Subfolder
@@ -437,6 +516,8 @@ class DJJTBLauncher:
                 djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path}; python3 -m djjtb.file_tools.file_identifier")
             elif choice == "6":  # README Generator
                 djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path}; python3 -m djjtb.file_tools.readme_generator")
+            elif choice == "7":
+                djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path}; python3 -m djjtb.file_tools.x_to_w_copy")
             elif choice in ["0", "00"]:
                 break
     
@@ -448,19 +529,19 @@ class DJJTBLauncher:
         
         elif choice == "5":  # Link Grabber
             command = f"source {self.venv_path}; cd {self.project_path}; python3 -m djjtb.quick_tools.link_grabber"
-            djj.open_terminal_with_settings(command, "LinkGrabber", "50, 730, 600, 960")
+            djj.open_terminal_with_settings(command, "LinkGrabber", "850, 730, 1650, 960")
         
         elif choice == "6":  # Path Grabber
             command = f"source {self.venv_path}; cd {self.project_path}; python3 -m djjtb.quick_tools.path_grabber"
-            djj.open_terminal_with_settings(command, "path_grabber", "50, 450, 700, 680")
+            djj.open_terminal_with_settings(command, "path_grabber", "850, 450, 1650, 680")
         
         elif choice == "7":  # Multi XMP Viewer
             command = f"source {self.venv_path}; cd {self.project_path}/; python3 -m djjtb.quick_tools.multi_xmp_viewer"
-            djj.open_terminal_with_settings(command, "LinkGrabber", "50, 490, 250, 690")
+            djj.open_terminal_with_settings(command, "LinkGrabber", "50, 490, 100, 690")
         
         elif choice == "8":  # Media Info Viewer
             command = f"source {self.venv_path}; cd {self.project_path}/; python3 -m djjtb.quick_tools.media_info_viewer"
-            djj.open_terminal_with_settings(command, "LinkGrabber", "50, 80, 250, 280")
+            djj.open_terminal_with_settings(command, "LinkGrabber", "50, 80, 80, 280")
         
         elif choice == "9":  # Auto Scroller
             command = f"source {self.venv_path}; cd {self.project_path}; python3 -m djjtb.quick_tools.auto_scroller"
@@ -498,10 +579,24 @@ class DJJTBLauncher:
 #                    break
             
   
+    def launch_grabbers_at_boot(self):
+        """Fire Link Grabber and Path Grabber — only called on fresh boot launch."""
+        command_link = f"source {self.venv_path}; cd {self.project_path}; python3 -m djjtb.quick_tools.link_grabber"
+        djj.open_terminal_with_settings(command_link, "LinkGrabber", "850, 730, 1650, 960")
+        # Small pause so windows don't collide
+        time.sleep(2)
+        command_path = f"source {self.venv_path}; cd {self.project_path}; python3 -m djjtb.quick_tools.path_grabber"
+        djj.open_terminal_with_settings(command_path, "path_grabber", "850, 450, 1650, 680")
+
     def run(self):
         """Main launcher loop"""
         djj.setup_terminal()
         os.system('clear')
+
+        # Auto-launch grabbers on first boot only
+        if is_boot_launch():
+            self.launch_grabbers_at_boot()
+            write_grabber_stamp()
         
         while True:
             self.show_main_menu()

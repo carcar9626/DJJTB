@@ -3,9 +3,9 @@ import torch
 import os
 
 # Load LoRAs
-lora_30 = load_file("/Users/home/Documents/Lora_Training/Results/Merges/Anna16_CatAug19/caitalinagustina_Flux-KYS-EP19_TrainedLoRa.safetensors")
-lora_50 = load_file("/Users/home/Documents/Lora_Training/Results/Merges/Anna16_CatAug19/IG_SingaporeanAnna_En_Ann4-SCL-EP16_TrainedLoRa.safetensors")
-output_dir = "/Users/home/Documents/Lora_Training/Results/Merges/Anna16_CatAug19/"
+lora_30 = load_file("/Users/home/Documents/Lora_Training/Results/SACH-ZIT/EP07/lora-000007.TA_trained.safetensors")
+lora_50 = load_file("/Users/home/Documents/Lora_Training/Results/SACH-ZIT/EP08/lora-000008.TA_trained.safetensors")
+output_dir = "/Users/home/Documents/Lora_Training/Results/SACH-ZIT/EP07-08_MERGE/"
 
 # Merge weights (weighted average)
 merged = {}
@@ -20,6 +20,6 @@ for key in lora_50:
         merged[key] = lora_50[key]
 
 # Save merged LoRA
-save_file(merged, "/Users/home/Documents/Lora_Training/Results/Merges/Anna16_CatAug19/Antalina.safetensors")
+save_file(merged, "/Users/home/Documents/Lora_Training/Results/SACH-ZIT/EP07-08_MERGE/merged.safetensors")
 
 os.system(f"open {output_dir}")

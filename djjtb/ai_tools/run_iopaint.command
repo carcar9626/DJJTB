@@ -1,11 +1,12 @@
 #!/bin/bash
 
-source /Users/home/Documents/ai_models/watermark_remover/wmrmvenv/bin/activate  || exit 1
-
 cd /Users/home/Documents/ai_models/iopaint || exit 1
 
+# Activate IO-Paint virtual environment
+source iovenv/bin/activate || exit 1
+
 # Start iopaint in the background
-iopaint start --model=lama --device=cpu --port=8060 &
+python3 -m iopaint start --model=lama --device=cpu --port=8060 &
 
 # Give it a few seconds to fully start
 sleep 10

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Unique identifier for this LaunchAgent -->
+    <key>Label</key>
+    <string>com.djjtb.link-grabber</string>
+
+    <!-- The command to run: osascript runs the compiled AppleScript -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/osascript</string>
+        <string>/Users/home/Documents/Scripts/DJJTB/launchers/launch_link_grabber.scpt</string>
+    </array>
+
+    <!-- Run at login automatically -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <false/>
+
+    <!-- Log output in case something goes wrong -->
+    <key>StandardOutPath</key>
+    <string>/Users/home/Library/Logs/djjtb-link-grabber.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/home/Library/Logs/djjtb-link-grabber-error.log</string>
+</dict>
+</plist>

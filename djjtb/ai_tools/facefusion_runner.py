@@ -2,10 +2,8 @@ import os
 import sys
 import subprocess
 import pathlib
-import logging
 import shutil
 import time
-import uuid
 import djjtb.utils as djj
 
 # ============================================================================
@@ -42,6 +40,18 @@ FACE_LANDMARKER_SCORE = 0.5
 FACE_DETECTOR_MODEL = 'retinaface'
 FACE_MASK_TYPES = ['box', 'occlusion']
 FACE_SELECTOR_GENDER = 'female'
+
+# Face enhancer applied after the swap
+# Options: 'gfpgan_1.4', 'codeformer'
+# Blend: 0–100 (how strongly the enhancer is applied over the raw swap)
+FACE_ENHANCER_DEFAULT_MODEL = 'gfpgan_1.4'
+FACE_ENHANCER_DEFAULT_BLEND = 60
+
+# Expression restorer (Live Portrait) — restores target facial expression onto swapped face
+# Only model available in FF 3.3.2: 'live_portrait'
+# Factor: 0–100 — how much of the target's expression is restored (default: 80)
+EXPRESSION_RESTORER_DEFAULT_MODEL = 'live_portrait'
+EXPRESSION_RESTORER_DEFAULT_FACTOR = 80
 
 # ============================================================================
 # END CONFIGURATION - Don't edit below unless you know what you're doing!
@@ -196,30 +206,59 @@ def collect_files_from_paths(file_paths):
     
     return sorted(files, key=str.lower)
 
-def build_facefusion_args():
-    """Build FaceFusion arguments from configuration"""
+def build_facefusion_args(face_enhancer=None, face_enhancer_blend=FACE_ENHANCER_DEFAULT_BLEND,
+                          expression_restorer=False, expression_restorer_factor=EXPRESSION_RESTORER_DEFAULT_FACTOR):
+    """Build FaceFusion arguments from configuration.
+    face_enhancer: None = no enhancer, 'gfpgan_1.4' or 'codeformer' = use it
+    face_enhancer_blend: 0-100 blend strength
+    expression_restorer: True = add expression_restorer to processors list
+    expression_restorer_factor: 0-100 restore factor (default 80)
+    """
     args = []
-    
-    
-    # Add face mask padding (CRITICAL for chin coverage!)
+
     args.extend(["--face-mask-padding", str(FACE_MASK_PADDING)])
-    
-    # Add face mask blur
     args.extend(["--face-mask-blur", str(FACE_MASK_BLUR)])
-    # Add face gender selector
     args.extend(["--face-selector-gender", str(FACE_SELECTOR_GENDER)])
-    # Add face detector score
     args.extend(["--face-detector-score", str(FACE_DETECTOR_SCORE)])
-    
-    # Add face landmarker score
     args.extend(["--face-landmarker-score", str(FACE_LANDMARKER_SCORE)])
-    
-    # Add face detector model
     args.extend(["--face-detector-model", FACE_DETECTOR_MODEL])
-    args.extend(["--face-mask-types"] + FACE_MASK_TYPES)
-    
-    
+    args.extend(["--face-mask-type"] + FACE_MASK_TYPES)
+
+    # Build processors list — always starts with face_swapper
+    # Order matters: restorer reads the raw swap better before enhancer sharpens it
+    processors = ["face_swapper"]
+    if expression_restorer:
+        processors.append("expression_restorer")
+    if face_enhancer:
+        processors.append("face_enhancer")
+
+    if len(processors) > 1:
+        args.extend(["--processors"] + processors)
+
+    if face_enhancer:
+        args.extend(["--face-enhancer-model", face_enhancer])
+        args.extend(["--face-enhancer-blend", str(face_enhancer_blend)])
+
+    if expression_restorer:
+        args.extend(["--expression-restorer-model", EXPRESSION_RESTORER_DEFAULT_MODEL])
+        args.extend(["--expression-restorer-factor", str(expression_restorer_factor)])
+
     return args
+
+def write_cmd_log(output_file, cmd):
+    """
+    Write a hidden .txt file alongside the output file recording the exact command run.
+    File is named .<output_stem>_cmd.txt so it stays hidden on macOS.
+    """
+    try:
+        out_path = pathlib.Path(output_file)
+        log_path = out_path.parent / f".{out_path.stem}_cmd.txt"
+        with open(log_path, 'w', encoding='utf-8') as f:
+            f.write(" ".join(str(c) for c in cmd))
+            f.write("\n")
+    except Exception:
+        pass  # Never block processing over a log write failure
+
 
 def get_swap_mode():
     """Get face swap mode from user"""
@@ -233,57 +272,180 @@ def get_swap_mode():
     print()
     return mode
 
+DEFAULT_FACES_FOLDER = "/Volumes/Movies_2SSD/UD_Gens/Characters/OG/OG_Process/FACES"
+
+def list_default_faces_folder():
+    """
+    List supported files in the default FACES folder with numbered choices.
+    Returns a list of (number_str, file_path) tuples, or [] if folder not found.
+    """
+    folder = pathlib.Path(DEFAULT_FACES_FOLDER)
+    if not folder.exists():
+        print(f"\033[93m⚠️  Default FACES folder not found:\033[0m {DEFAULT_FACES_FOLDER}")
+        return []
+    files = sorted(
+        [f for f in folder.iterdir() if f.is_file() and f.suffix.lower() in SUPPORTED_EXTS],
+        key=lambda f: f.name.lower()
+    )
+    if not files:
+        print(f"\033[93m⚠️  No supported files found in default FACES folder.\033[0m")
+        return []
+    return files
+
+
+def pick_single_from_default_faces():
+    """
+    Show numbered list of default FACES folder, user picks one by number.
+    Returns file path string, or None on failure.
+    """
+    files = list_default_faces_folder()
+    if not files:
+        return None
+
+    print(f"\033[93m📂 Default FACES folder:\033[0m {DEFAULT_FACES_FOLDER}")
+    print("\033[93m" + "-" * 50 + "\033[0m")
+    for i, f in enumerate(files, 1):
+        print(f"  {i:2}. {f.name}")
+    print("\033[93m" + "-" * 50 + "\033[0m")
+    print()
+
+    valid = [str(i) for i in range(1, len(files) + 1)]
+    choice = djj.prompt_choice("\033[93mSelect a file number\033[0m", valid, default='1')
+    selected = files[int(choice) - 1]
+    print(f"✅ \033[92mSelected:\033[0m {selected.name}")
+    print()
+    return str(selected)
+
+
+def pick_multiple_from_default_faces():
+    """
+    Show numbered list of default FACES folder.
+    User picks files one at a time by number, pressing Enter on empty line to finish.
+    Returns list of file path strings, or [] on failure.
+    """
+    files = list_default_faces_folder()
+    if not files:
+        return []
+
+    selected = []
+    selected_indices = set()
+
+    while True:
+        print(f"\033[93m📂 Default FACES folder:\033[0m {DEFAULT_FACES_FOLDER}")
+        print("\033[93m" + "-" * 50 + "\033[0m")
+        for i, f in enumerate(files, 1):
+            marker = " ✅" if i in selected_indices else ""
+            print(f"  {i:2}. {f.name}{marker}")
+        print("\033[93m" + "-" * 50 + "\033[0m")
+
+        if selected:
+            print(f"\033[92mCurrently selected ({len(selected)}):\033[0m {', '.join(str(i) for i in sorted(selected_indices))}")
+
+        print("\033[93mEnter a number to add/remove, or press Enter to confirm:\033[0m")
+        raw = input(" > ").strip()
+
+        if raw == '':
+            if not selected:
+                print("\033[93m⚠️  No files selected. Pick at least one.\033[0m\n")
+                continue
+            break
+
+        try:
+            num = int(raw)
+            if 1 <= num <= len(files):
+                if num in selected_indices:
+                    # Toggle off
+                    selected_indices.remove(num)
+                    selected = [str(files[i - 1]) for i in sorted(selected_indices)]
+                    print(f"\033[93m➖ Removed:\033[0m {files[num - 1].name}\n")
+                else:
+                    # Add
+                    selected_indices.add(num)
+                    selected = [str(files[i - 1]) for i in sorted(selected_indices)]
+                    print(f"\033[92m➕ Added:\033[0m {files[num - 1].name}\n")
+            else:
+                print(f"\033[93mPlease enter a number between 1 and {len(files)}.\033[0m\n")
+        except ValueError:
+            print(f"\033[93mInvalid input. Enter a number or press Enter to confirm.\033[0m\n")
+
+    print(f"\033[92m✅ {len(selected)} file(s) selected.\033[0m")
+    print()
+    return selected
+
+
 def get_source_input(mode):
     """Get source files/folders based on swap mode"""
     if mode in ['3', '4']:
         # Multiple sources
         print("\033[1;93m📁 Source Selection (Multiple Sources)\033[0m")
-        
+
         input_mode = djj.prompt_choice(
-            "\033[93mSource input mode:\033[0m\n1. Folder containing source faces\n2. Space-separated source file paths\n",
-            ['1', '2'],
-            default='1'
+            "\033[93mSource input mode:\033[0m\n1. Folder containing source faces\n2. Space-separated file paths\n3. Pick from default FACES folder\n",
+            ['1', '2', '3'],
+            default='3'
         )
         print()
-        
+
         if input_mode == '1':
+            # Folder mode — untouched
             src_path = djj.get_path_input("Enter source folder path")
             print()
-            
+
             include_sub = djj.prompt_choice(
                 "\033[93mInclude subfolders?\033[0m\n1. Yes\n2. No",
                 ['1', '2'],
                 default='2'
             ) == '1'
             print()
-            
+
             source_files = collect_files_from_folder(src_path, include_sub)
             return source_files, 'folder', src_path
-            
-        else:
+
+        elif input_mode == '2':
+            # Space-separated paths
             file_paths = input("📁 \033[93mEnter source file paths (space-separated):\033[0m\n -> ").strip()
-            
             if not file_paths:
                 print("\033[1;93m❌ No file paths provided.\033[0m")
                 sys.exit(1)
-            
             source_files = collect_files_from_paths(file_paths)
             print()
             return source_files, 'files', None
-    
+
+        else:
+            # Default FACES folder picker — numbered multi-select
+            source_files = pick_multiple_from_default_faces()
+            if not source_files:
+                print("\033[1;93m❌ No files selected.\033[0m")
+                sys.exit(1)
+            return source_files, 'files', None
+
     else:
         # Single source (modes 1 and 2)
         print("\033[1;93m📁 Source Selection (Single Source)\033[0m")
-        source_path = djj.get_path_input("Enter source face file path")
+
+        input_mode = djj.prompt_choice(
+            "\033[93mSource input mode:\033[0m\n1. Enter file path\n2. Pick from default FACES folder\n",
+            ['1', '2'],
+            default='2'
+        )
         print()
-        
-        # Validate source file
-        source_path_obj = pathlib.Path(source_path)
-        if not source_path_obj.exists() or source_path_obj.suffix.lower() not in SUPPORTED_EXTS:
-            print(f"\033[93m❌ Invalid source file: {source_path}\033[0m")
-            sys.exit(1)
-            
-        return [str(source_path_obj)], 'single_file', None
+
+        if input_mode == '1':
+            source_path = djj.get_path_input("Enter source face file path")
+            print()
+            source_path_obj = pathlib.Path(source_path)
+            if not source_path_obj.exists() or source_path_obj.suffix.lower() not in SUPPORTED_EXTS:
+                print(f"\033[93m❌ Invalid source file: {source_path}\033[0m")
+                sys.exit(1)
+            return [str(source_path_obj)], 'single_file', None
+
+        else:
+            # Default FACES folder picker — single select
+            source_path = pick_single_from_default_faces()
+            if not source_path:
+                print("\033[1;93m❌ No file selected.\033[0m")
+                sys.exit(1)
+            return [source_path], 'single_file', None
 
 def get_target_input(mode):
     """Get target files/folders based on swap mode"""
@@ -355,7 +517,7 @@ def get_output_path_and_suffix(source_files, target_files, mode):
     """Determine output path and get suffix preference based on inputs"""
     
     output_choice = djj.prompt_choice(
-        "\033[33mOutput location:\033[0m\n1. Same folder as sources (creates 'Output/FF' subfolder)\n2. Same folder as targets (creates 'Output/FF' subfolder)\n3. Default Path\n4. Custom Path\n",
+        "\033[33mOutput location:\033[0m\n1. Same folder as sources (creates 'FF' subfolder)\n2. Same folder as targets (creates 'FF' subfolder)\n3. Default — target folder / FF (default)\n4. Custom Path\n",
         ['1', '2', '3', '4'],
         default='3'
     )
@@ -364,20 +526,16 @@ def get_output_path_and_suffix(source_files, target_files, mode):
     if output_choice == '1':
         # Same as source folder
         base_path = pathlib.Path(source_files[0]).parent
-        # Create Output/FF structure
-        output_path = base_path / "Output" / "FF"
+        output_path = base_path / "FF"
         
     elif output_choice == '2':
         # Same as target folder
         base_path = pathlib.Path(target_files[0]).parent
-        # Create Output/FF structure
-        output_path = base_path / "Output" / "FF"
+        output_path = base_path / "FF"
         
     elif output_choice == '3':
-        # Default path - /Volumes/Movies_2SSD/UD_Gens/Characters/UD/FF_outputs/Runner/first_target_parent
-        first_target_parent = pathlib.Path(target_files[0]).parent.name
-        default_base = pathlib.Path("/Volumes/Movies_2SSD/UD_Gens/Characters/UD/FF_outputs/Runner")
-        output_path = default_base / first_target_parent
+        # Default — FF subfolder right inside the target file's parent
+        output_path = pathlib.Path(target_files[0]).parent / "FF"
         
     else:  # output_choice == '4'
         # Custom path
@@ -393,19 +551,28 @@ def get_output_path_and_suffix(source_files, target_files, mode):
         ['1', '2'],
         default='1'
     ) == '1'
-    
-    return str(output_path), suffix_choice
 
-def generate_output_filename(source_file, target_file, output_path, add_suffix=True):
-    """Generate output filename based on source and target, avoiding overwrites"""
+    # Get source-name-in-filename preference
+    include_source_name = djj.prompt_choice(
+        "\033[33mInclude source filename in output filename?\033[0m\n1. Yes\n2. No [default: 2]",
+        ['1', '2'],
+        default='2'
+    ) == '1'
+
+    return str(output_path), suffix_choice, include_source_name
+
+def generate_output_filename(source_file, target_file, output_path, add_suffix=True, include_source_name=True):
+    """Generate output filename: targetname_sourcename_FF.ext (source name optional)"""
     source_name = pathlib.Path(source_file).stem
     target_name = pathlib.Path(target_file).stem
     target_ext = pathlib.Path(target_file).suffix
     
+    base_stem = f"{target_name}_{source_name}" if include_source_name else target_name
+    
     if add_suffix:
-        base_filename = f"{target_name}_FF{target_ext}"
+        base_filename = f"{base_stem}_FF{target_ext}"
     else:
-        base_filename = f"{target_name}{target_ext}"
+        base_filename = f"{base_stem}{target_ext}"
     
     output_file_path = pathlib.Path(output_path) / base_filename
     
@@ -416,7 +583,6 @@ def generate_output_filename(source_file, target_file, output_path, add_suffix=T
         stem = original_output_path.stem
         suffix = original_output_path.suffix
         if add_suffix:
-            # Remove _FF from stem to insert counter before it
             if stem.endswith('_FF'):
                 base_stem = stem[:-3]  # Remove '_FF'
                 new_filename = f"{base_stem}_{counter}_FF{suffix}"
@@ -430,7 +596,9 @@ def generate_output_filename(source_file, target_file, output_path, add_suffix=T
     
     return str(output_file_path)
 
-def process_single_headless(source_file, target_file, output_file, use_enhanced_mode=False):
+def process_single_headless(source_file, target_file, output_file,
+                            face_enhancer=None, face_enhancer_blend=FACE_ENHANCER_DEFAULT_BLEND,
+                            expression_restorer=False, expression_restorer_factor=EXPRESSION_RESTORER_DEFAULT_FACTOR):
     """Process single source to single target using headless-run"""
     cmd = [
         FACEFUSION_VENV_PYTHON, FACEFUSION_SCRIPT_PATH, "headless-run",
@@ -438,199 +606,36 @@ def process_single_headless(source_file, target_file, output_file, use_enhanced_
         "-t", str(target_file),
         "-o", str(output_file)
     ]
-    
-    # Add configuration arguments
-    cmd.extend(build_facefusion_args())
-    
+
+    cmd.extend(build_facefusion_args(face_enhancer, face_enhancer_blend,
+                                     expression_restorer, expression_restorer_factor))
+
     try:
         result = subprocess.run(cmd, cwd=FACEFUSION_DIR,
                               stdout=subprocess.PIPE,
                               stderr=subprocess.STDOUT,
                               text=True,
-                              timeout=600)  # 10 minute timeout per file
-        
+                              timeout=600)
+
+        if result.returncode == 0:
+            write_cmd_log(output_file, cmd)
         return result.returncode == 0, result.stdout if result.stdout else "No output"
     except subprocess.TimeoutExpired:
         return False, "Timeout (processing took too long)"
     except Exception as e:
         return False, str(e)
 
-def process_batch_job(source_file, target_files, output_path, add_suffix=True, use_enhanced_mode=False):
-    """Process single source to multiple targets using job system"""
-    
-    # Generate unique job ID
-    job_id = f"ff_batch_{int(time.time())}_{uuid.uuid4().hex[:8]}"
-    
-    print(f"\033[93m📋 Creating job:\033[0m {job_id}")
-    
-    # Step 1: Create job
-    cmd_create = [
-        FACEFUSION_VENV_PYTHON, FACEFUSION_SCRIPT_PATH, "job-create", job_id
-    ]
-    
-    try:
-        result = subprocess.run(cmd_create, cwd=FACEFUSION_DIR,
-                              stdout=subprocess.PIPE,
-                              stderr=subprocess.PIPE,
-                              text=True,
-                              timeout=30)
-        
-        if result.returncode != 0:
-            print(f"\033[93m❌ Failed to create job:\033[0m {result.stderr}")
-            return 0, len(target_files), [f"Job creation failed: {result.stderr}"]
-            
-    except Exception as e:
-        print(f"\033[93m❌ Exception creating job:\033[0m {str(e)}")
-        return 0, len(target_files), [f"Job creation exception: {str(e)}"]
-    
-    print(f"\033[92m✅ Job created successfully\033[0m")
-    
-    # Step 2: Add steps for each target and store expected output files
-    print(f"\033[93m📝 Adding {len(target_files)} steps to job...\033[0m")
-    
-    added_steps = 0
-    expected_outputs = []
-    
-    # Build base configuration args
-    config_args = build_facefusion_args()
-    
-    for target_file in target_files:
-        output_file = generate_output_filename(source_file, target_file, output_path, add_suffix)
-        expected_outputs.append(output_file)
-        
-        cmd_add_step = [
-            FACEFUSION_VENV_PYTHON, FACEFUSION_SCRIPT_PATH, "job-add-step", job_id,
-            "-s", str(source_file),
-            "-t", str(target_file),
-            "-o", str(output_file)
-        ]
-        
-        # Add configuration arguments to each step
-        cmd_add_step.extend(config_args)
-        
-        try:
-            result = subprocess.run(cmd_add_step, cwd=FACEFUSION_DIR,
-                                  stdout=subprocess.PIPE,
-                                  stderr=subprocess.PIPE,
-                                  text=True,
-                                  timeout=30)
-            
-            if result.returncode == 0:
-                added_steps += 1
-            else:
-                print(f"\033[93m⚠️  Failed to add step for:\033[0m {os.path.basename(target_file)}")
-                print(f"     Error: {result.stderr}")
-                
-        except Exception as e:
-            print(f"\033[93m⚠️  Exception adding step for:\033[0m {os.path.basename(target_file)} - {str(e)}")
-    
-    print(f"\033[92m✅ Added {added_steps}/{len(target_files)} steps\033[0m")
-    
-    if added_steps == 0:
-        print("\033[93m❌ No steps added successfully. Aborting job.\033[0m")
-        return 0, len(target_files), ["No steps could be added to job"]
-    
-    # Step 3: Submit job
-    print(f"\033[93m📤 Submitting job...\033[0m")
-    cmd_submit = [
-        FACEFUSION_VENV_PYTHON, FACEFUSION_SCRIPT_PATH, "job-submit", job_id
-    ]
-    
-    try:
-        result = subprocess.run(cmd_submit, cwd=FACEFUSION_DIR,
-                              stdout=subprocess.PIPE,
-                              stderr=subprocess.PIPE,
-                              text=True,
-                              timeout=30)
-        
-        if result.returncode != 0:
-            print(f"\033[93m❌ Failed to submit job:\033[0m {result.stderr}")
-            return 0, len(target_files), [f"Job submission failed: {result.stderr}"]
-            
-    except Exception as e:
-        print(f"\033[93m❌ Exception submitting job:\033[0m {str(e)}")
-        return 0, len(target_files), [f"Job submission exception: {str(e)}"]
-    
-    print(f"\033[92m✅ Job submitted successfully\033[0m")
-    
-    # Step 4: Run job
-    print(f"\033[93m🚀 Running job... (this may take a while)\033[0m")
-    cmd_run = [
-        FACEFUSION_VENV_PYTHON, FACEFUSION_SCRIPT_PATH, "job-run", job_id
-    ]
-    
-    success_count = 0
-    error_count = 0
-    error_messages = []
-    
-    try:
-        result = subprocess.run(cmd_run, cwd=FACEFUSION_DIR,
-                              stdout=subprocess.PIPE,
-                              stderr=subprocess.STDOUT,
-                              text=True,
-                              timeout=len(target_files) * 600)  # 10 minutes per target
-        
-        print(f"\033[93m🔍 Job execution output:\033[0m")
-        if result.stdout:
-            # Print last few lines of output for debugging
-            output_lines = result.stdout.strip().split('\n')
-            for line in output_lines[-10:]:  # Show last 10 lines
-                if line.strip():
-                    print(f"   {line}")
-        
-        if result.returncode == 0:
-            print(f"\033[92m✅ Job completed successfully\033[0m")
-            
-            # Wait a moment for files to be written
-            time.sleep(2)
-            
-            # Check for successful outputs using the expected file paths
-            for i, expected_output in enumerate(expected_outputs):
-                target_file = target_files[i]
-                
-                if pathlib.Path(expected_output).exists():
-                    print(f"\033[92m✅ Found output:\033[0m {os.path.basename(expected_output)}")
-                    success_count += 1
-                else:
-                    # Also check if file exists in output directory with any similar name
-                    output_dir = pathlib.Path(output_path)
-                    target_stem = pathlib.Path(target_file).stem
-                    
-                    # Look for files that might match this target
-                    possible_matches = list(output_dir.glob(f"*{target_stem}*"))
-                    
-                    if possible_matches:
-                        print(f"\033[93m⚠️  Expected file not found, but similar files exist:\033[0m")
-                        for match in possible_matches[:3]:  # Show first 3 matches
-                            print(f"     {match.name}")
-                        success_count += 1  # Count as success if similar file exists
-                    else:
-                        print(f"\033[93m❌ No output found for:\033[0m {os.path.basename(target_file)}")
-                        error_count += 1
-                        error_messages.append(f"Output not created for {os.path.basename(target_file)}")
-        else:
-            print(f"\033[93m❌ Job failed:\033[0m {result.stdout}")
-            error_count = len(target_files)
-            error_messages.append(f"Job execution failed: {result.stdout}")
-            
-    except subprocess.TimeoutExpired:
-        print(f"\033[93m⏰ Job timeout:\033[0m Processing took too long")
-        error_count = len(target_files)
-        error_messages.append("Job execution timed out")
-    except Exception as e:
-        print(f"\033[93m❌ Exception running job:\033[0m {str(e)}")
-        error_count = len(target_files)
-        error_messages.append(f"Job execution exception: {str(e)}")
-    
-    return success_count, error_count, error_messages
-
-def process_face_swap(mode, source_files, target_files, output_path, add_suffix, tag_source, target_action, use_enhanced_mode):
+def process_face_swap(mode, source_files, target_files, output_path, add_suffix, tag_source,
+                      target_action, face_enhancer=None,
+                      face_enhancer_blend=FACE_ENHANCER_DEFAULT_BLEND,
+                      expression_restorer=False, expression_restorer_factor=EXPRESSION_RESTORER_DEFAULT_FACTOR,
+                      include_source_name=True):
     """Main processing function that routes to appropriate method"""
-    
+
     print("\n" * 2)
     print(f"\n\033[1;93m🔄 Processing Face Swaps:\033[0m")
     print("\033[92m=\033[0m" * 50)
-    
+
     if mode == '1':
         print(f"\033[93m📁 Source:\033[0m {os.path.basename(source_files[0])}")
         print(f"\033[93m🎯 Targets:\033[0m {len(target_files)} file(s)")
@@ -647,35 +652,46 @@ def process_face_swap(mode, source_files, target_files, output_path, add_suffix,
         print(f"\033[93m📁 Sources:\033[0m {len(source_files)} file(s)")
         print(f"\033[93m🎯 Targets:\033[0m {len(target_files)} file(s)")
         mode_desc = "Multiple sources TO multiple targets"
-    
+
     print(f"\033[93m🔄 Mode:\033[0m {mode_desc}")
     print(f"\033[93m📤 Output:\033[0m {output_path}")
     print(f"\033[93m🏷️  Add suffix:\033[0m {'Yes' if add_suffix else 'No'}")
-    
-    # Show current configuration settings
+    print(f"\033[93m🏷️  Include source name:\033[0m {'Yes' if include_source_name else 'No'}")
     print(f"\033[93m⚙️  Face Mask Padding:\033[0m {FACE_MASK_PADDING}")
     print(f"\033[93m⚙️  Face Mask Blur:\033[0m {FACE_MASK_BLUR}")
     print(f"\033[93m⚙️  Detector Model:\033[0m {FACE_DETECTOR_MODEL}")
-    
+    if face_enhancer:
+        print(f"\033[93m✨ Face Enhancer:\033[0m {face_enhancer}  blend: {face_enhancer_blend}")
+    else:
+        print(f"\033[93m✨ Face Enhancer:\033[0m off")
+    if expression_restorer:
+        print(f"\033[93m😮 Expression Restorer:\033[0m {EXPRESSION_RESTORER_DEFAULT_MODEL}  factor: {expression_restorer_factor}")
+    else:
+        print(f"\033[93m😮 Expression Restorer:\033[0m off")
+
     print("\033[92m=\033[0m" * 50)
     print()
     print("\033[1;93m🎭 FaceFusion 🎭 \033[0m\033[93mactivating...\033[0m")
     print()
-    
+
     success_count = 0
     error_count = 0
     error_messages = []
-    
+
     if mode == '2':
-        # Single source to single target - use headless-run
+        # Single source to single target — headless-run
         source_file = source_files[0]
         target_file = target_files[0]
-        output_file = generate_output_filename(source_file, target_file, output_path, add_suffix)
-        
+        output_file = generate_output_filename(source_file, target_file, output_path, add_suffix, include_source_name)
+
         print(f"\033[93mProcessing:\033[0m {os.path.basename(source_file)} → {os.path.basename(target_file)}")
-        
-        success, error_msg = process_single_headless(source_file, target_file, output_file, use_enhanced_mode)
-        
+
+        success, error_msg = process_single_headless(
+            source_file, target_file, output_file,
+            face_enhancer, face_enhancer_blend,
+            expression_restorer, expression_restorer_factor
+        )
+
         if success:
             print(f"\033[92m✅ Success:\033[0m Face swap completed!")
             success_count = 1
@@ -683,34 +699,49 @@ def process_face_swap(mode, source_files, target_files, output_path, add_suffix,
             print(f"\033[93m❌ Failed:\033[0m {error_msg}")
             error_count = 1
             error_messages.append(error_msg)
-    
+
     elif mode == '1':
-        # Single source to multiple targets - use job system
+        # Single source to multiple targets — headless-run per target (same engine as all other modes)
         source_file = source_files[0]
-        success_count, error_count, error_messages = process_batch_job(source_file, target_files, output_path, add_suffix, use_enhanced_mode)
-    
+        for i, target_file in enumerate(target_files):
+            target_name = os.path.basename(target_file)
+            print(f"\033[93mProcessing [{i+1}/{len(target_files)}]:\033[0m {target_name}")
+            output_file = generate_output_filename(source_file, target_file, output_path, add_suffix, include_source_name)
+            success, error_msg = process_single_headless(
+                source_file, target_file, output_file,
+                face_enhancer, face_enhancer_blend,
+                expression_restorer, expression_restorer_factor
+            )
+            if success:
+                print(f"\033[92m✅ Done\033[0m")
+                success_count += 1
+            else:
+                print(f"\033[93m❌ Failed:\033[0m {error_msg[:80]}")
+                error_count += 1
+                error_messages.append(f"{target_name}: {error_msg}")
+
     elif mode == '3':
-        # Multiple sources to single target - process each source individually
+        # Multiple sources to single target — one headless-run per source
         target_file = target_files[0]
-        
+
         for i, source_file in enumerate(source_files):
             source_name = os.path.basename(source_file)
             print(f"\033[93mProcessing [{i+1}/{len(source_files)}]:\033[0m {source_name}")
-            
-            # Generate unique output filename for each source
+
             source_stem = pathlib.Path(source_file).stem
             target_stem = pathlib.Path(target_file).stem
-            target_ext = pathlib.Path(target_file).suffix
-            
-            if add_suffix:
-                output_filename = f"{source_stem}_to_{target_stem}_FF{target_ext}"
-            else:
-                output_filename = f"{source_stem}_to_{target_stem}{target_ext}"
-            
+            target_ext  = pathlib.Path(target_file).suffix
+            base_stem = f"{target_stem}_{source_stem}" if include_source_name else target_stem
+            output_filename = (f"{base_stem}_FF{target_ext}" if add_suffix
+                               else f"{base_stem}{target_ext}")
             output_file = str(pathlib.Path(output_path) / output_filename)
-            
-            success, error_msg = process_single_headless(source_file, target_file, output_file, use_enhanced_mode)
-            
+
+            success, error_msg = process_single_headless(
+                source_file, target_file, output_file,
+                face_enhancer, face_enhancer_blend,
+                expression_restorer, expression_restorer_factor
+            )
+
             if success:
                 print(f"\033[92m✅ Success:\033[0m {source_name}")
                 success_count += 1
@@ -719,49 +750,39 @@ def process_face_swap(mode, source_files, target_files, output_path, add_suffix,
                 print(f"   Error: {error_msg}")
                 error_count += 1
                 error_messages.append(f"{source_name}: {error_msg}")
-                
-    else:  # mode == '4' - Multi to Multi
-    # Multiple sources to multiple targets
-    # Process each source with all targets, organized by source-targetparent subfolder
-        
-        # Get today's date for folder structure
+
+    else:  # mode == '4' — multiple sources × multiple targets
         from datetime import datetime
         today_str = datetime.now().strftime("%Y-%m-%d")
-        
-        # Get target parent folder name (use first target's parent)
         target_parent_folder = pathlib.Path(target_files[0]).parent.name
-        
-        # Process each source with all targets
+
         for source_idx, source_file in enumerate(source_files):
             source_name = pathlib.Path(source_file).stem
-            
-            # Create subfolder: YYYY-MM-DD/sourcename-targetparent/
             date_folder = pathlib.Path(output_path) / today_str
             source_output_path = date_folder / f"{source_name}-{target_parent_folder}"
             source_output_path.mkdir(parents=True, exist_ok=True)
-            
+
             print(f"\n\033[1;93m📁 Processing source [{source_idx+1}/{len(source_files)}]:\033[0m {os.path.basename(source_file)}")
             print(f"\033[93m   Output folder:\033[0m {today_str}/{source_name}-{target_parent_folder}/")
             print(f"\033[93m   Targets:\033[0m {len(target_files)} file(s)")
             print()
-            
-            # Process each target with this source
+
             for target_idx, target_file in enumerate(target_files):
                 target_name = pathlib.Path(target_file).stem
-                target_ext = pathlib.Path(target_file).suffix
-                
-                # Generate output filename: sourcename_targetname_FF.ext
-                if add_suffix:
-                    output_filename = f"{source_name}_{target_name}_FF{target_ext}"
-                else:
-                    output_filename = f"{source_name}_{target_name}{target_ext}"
-                
+                target_ext  = pathlib.Path(target_file).suffix
+                base_name = f"{target_name}_{source_name}" if include_source_name else target_name
+                output_filename = (f"{base_name}_FF{target_ext}" if add_suffix
+                                   else f"{base_name}{target_ext}")
                 output_file = str(source_output_path / output_filename)
-                
+
                 print(f"\033[93m  [{target_idx+1}/{len(target_files)}] Processing:\033[0m {source_name} → {target_name}")
-                
-                success, error_msg = process_single_headless(source_file, target_file, output_file, use_enhanced_mode)
-                
+
+                success, error_msg = process_single_headless(
+                    source_file, target_file, output_file,
+                    face_enhancer, face_enhancer_blend,
+                    expression_restorer, expression_restorer_factor
+                )
+
                 if success:
                     print(f"\033[92m    ✅ Success\033[0m")
                     success_count += 1
@@ -770,45 +791,6 @@ def process_face_swap(mode, source_files, target_files, output_path, add_suffix,
                     error_count += 1
                     error_messages.append(f"{source_name}→{target_name}: {error_msg}")
 
-    # else:  # mode == '4' - Multi to Multi
-    #     # Multiple sources to multiple targets
-    #     # Process each target with all sources, organized by target subfolder
-    #
-    #     for target_idx, target_file in enumerate(target_files):
-    #         target_name = pathlib.Path(target_file).stem
-    #         target_output_path = pathlib.Path(output_path) / target_name
-    #         target_output_path.mkdir(parents=True, exist_ok=True)
-    #
-    #         print(f"\n\033[1;93m🎯 Processing target [{target_idx+1}/{len(target_files)}]:\033[0m {os.path.basename(target_file)}")
-    #         print(f"\033[93m   Output folder:\033[0m {target_output_path.name}/")
-    #         print(f"\033[93m   Sources:\033[0m {len(source_files)} file(s)")
-    #         print()
-    #
-    #         # Process each source individually for this target
-    #         for source_idx, source_file in enumerate(source_files):
-    #             source_name = pathlib.Path(source_file).stem
-    #             target_ext = pathlib.Path(target_file).suffix
-    #
-    #             # Generate output filename: sourcename_targetname_FF.ext
-    #             if add_suffix:
-    #                 output_filename = f"{source_name}_{target_name}_FF{target_ext}"
-    #             else:
-    #                 output_filename = f"{source_name}_{target_name}{target_ext}"
-    #
-    #             output_file = str(target_output_path / output_filename)
-    #
-    #             print(f"\033[93m  [{source_idx+1}/{len(source_files)}] Processing:\033[0m {source_name} → {target_name}")
-    #
-    #             success, error_msg = process_single_headless(source_file, target_file, output_file, use_enhanced_mode)
-    #
-    #             if success:
-    #                 print(f"\033[92m    ✅ Success\033[0m")
-    #                 success_count += 1
-    #             else:
-    #                 print(f"\033[93m    ❌ Failed:\033[0m {error_msg[:50]}...")
-    #                 error_count += 1
-    #                 error_messages.append(f"{source_name}→{target_name}: {error_msg}")
-    
     print()
     print("\033[92m=\033[0m" * 50)
     print(f"\033[1;93m🏁 Faceswap Processing Complete!\033[0m")
@@ -898,13 +880,40 @@ def main():
                     continue
                 print()
             
-        use_enhanced_mode = djj.prompt_choice(
-            "\033[93m🎚️  Use Enhanced Quality Mode?\033[0m\n1. Yes (better results, slower)\n2. No (faster, default)",
+        use_face_enhancer = djj.prompt_choice(
+            "\033[93m✨ Use Face Enhancer?\033[0m\n1. Yes\n2. No",
             ['1', '2'],
             default='1'
         ) == '1'
         print()
-        
+
+        face_enhancer = None
+        face_enhancer_blend = FACE_ENHANCER_DEFAULT_BLEND
+        if use_face_enhancer:
+            enhancer_choice = djj.prompt_choice(
+                "\033[93m✨ Enhancer model:\033[0m\n1. gfpgan_1.4\n2. codeformer",
+                ['1', '2'],
+                default='1'
+            )
+            face_enhancer = 'gfpgan_1.4' if enhancer_choice == '1' else 'codeformer'
+            print(f"✅ \033[92mEnhancer:\033[0m {face_enhancer}  blend: {face_enhancer_blend}")
+            print()
+
+        use_expression_restorer = djj.prompt_choice(
+            "\033[93m😮 Use Expression Restorer?\033[0m\n1. Yes\n2. No",
+            ['1', '2'],
+            default='2'
+        ) == '1'
+        expression_restorer_factor = EXPRESSION_RESTORER_DEFAULT_FACTOR
+        if use_expression_restorer:
+            factor_raw = input(f"\033[93m   Restore factor (0–100, default {EXPRESSION_RESTORER_DEFAULT_FACTOR}):\033[0m\n > ").strip()
+            try:
+                expression_restorer_factor = max(0, min(100, int(factor_raw) if factor_raw else EXPRESSION_RESTORER_DEFAULT_FACTOR))
+            except ValueError:
+                expression_restorer_factor = EXPRESSION_RESTORER_DEFAULT_FACTOR
+            print(f"✅ \033[92mExpression Restorer:\033[0m live_portrait  factor: {expression_restorer_factor}")
+            print()
+
         os.system('clear')
         print("\n" * 2)
         print("🔍 Analyzing inputs...")
@@ -920,7 +929,7 @@ def main():
         print("Choose Your Options:")
         
         # Get output path and suffix preference
-        output_path, add_suffix = get_output_path_and_suffix(source_files, target_files, mode)
+        output_path, add_suffix, include_source_name = get_output_path_and_suffix(source_files, target_files, mode)
         
         # Ask about target file handling
         target_action = djj.prompt_choice(
@@ -940,7 +949,10 @@ def main():
         os.system('clear')
         
         # Process face swaps using appropriate method
-        process_face_swap(mode, source_files, target_files, output_path, add_suffix, tag_source, target_action, use_enhanced_mode)
+        process_face_swap(mode, source_files, target_files, output_path, add_suffix, tag_source,
+                          target_action, face_enhancer, face_enhancer_blend,
+                          use_expression_restorer, expression_restorer_factor,
+                          include_source_name)
         
         print()
         action = djj.what_next()
