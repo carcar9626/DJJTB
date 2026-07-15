@@ -99,7 +99,7 @@ class DJJTBLauncher:
         #
         print(" 💰\033[4;93m10\033[0m  Link Scraper 🔗🪏")
         print("\033[92m--------------------------------------------------\033[0m")
-        print(" 💰\033[4;91mX\033[0m  Exit 👋🏻✈️         💰\033[4;91mAD\033[0m  ADMIN TOOLS 🔐")
+        print(" 💰\033[4;91mX\033[0m  Exit 👋🏻✈️")
         print("\033[92m==================================================\033[0m")
     
     def show_media_tools_menu(self):
@@ -249,19 +249,20 @@ class DJJTBLauncher:
         print(" 💰\033[4;93m00\033[0m ⏮️  MAIN MENU")
         print("\033[92m--------------------------------------------------\033[0m")
         
-    def show_admin_tools_menu(self):
-        """Display Admin Tools menu (password-protected)"""
-        os.system('clear')
-        print()
-        print("\033[91m🔐 ADMIN TOOLS 🔐\033[0m")
-        print("\033[92m--------------------------------------------------\033[0m")
-        print(" 💰 \033[4;93m1\033[0m  DJJTB Usage Scan 🔍")
-        print(" 💰 \033[4;93m2\033[0m  Env Backup 💾")
-        print(" 💰 \033[4;93m3\033[0m  Push to GitHub 🐙")
-        print("\033[92m--------------------------------------------------\033[0m")
-        print(" 💰 \033[4;93m0\033[0m  ⏪ Back")
-        print(" 💰\033[4;93m00\033[0m ⏮️  MAIN MENU")
-        print("\033[92m--------------------------------------------------\033[0m")
+#    def show_admin_tools_menu(self):
+#    """Display Admin Tools menu (password-protected)"""
+#    os.system("clear && printf '\033c'")
+#    print()
+#    print("\033[91m🔐 ADMIN TOOLS 🔐\033[0m")
+#    print("\033[92m--------------------------------------------------\033[0m")
+#    print("1. Backup DB Files 💾")
+#    print("2. Delete Cache 🗑️")
+#    print("3. Run Integrity Check 🧪")
+#    print("4. Sync Tag Databases 🔁")
+#    print("\033[92m--------------------------------------------------\033[0m")
+#    print(" 0. ⏪ Back")
+#    print("00. ⏮️  MAIN MENU")
+#    print("\033[92m--------------------------------------------------\033[0m")
     
     def handle_video_tools(self):
         """Handle video tools submenu"""
@@ -442,7 +443,7 @@ class DJJTBLauncher:
                 command = ("/Users/home/Documents/Scripts/FLOW_TOOLS/prompt_assembler/LOCAL/prompt_assembler_runner.command")
                 djj.open_terminal_with_settings(command, "comfyui", "1000, 120, 1700, 700")
             # elif choice == "12":  # Kohya_ss webUI
-            #     command = (f"{self.project_path}/djjtb/ai_tools/run_kohya_ss.command")
+            #     command = (f"{self.project_path}/djjtb/ai_tools/run_kohya_ss.command")    
             #     djj.open_terminal_with_settings(command, "tagger", "525, 120, 1225, 700")
             elif choice == "12":  # ComfyUI batch
                 djj.run_script_in_tab("djjtb.ai_tools.comfyui.comfyui_batch", self.venv_path, self.project_path)
@@ -549,42 +550,33 @@ class DJJTBLauncher:
                 djj.run_script_in_tab("djjtb.quick_tools.link_scraper", self.venv_path, self.project_path)
 
                 
-    def handle_admin_tools(self):
-        """Handle Admin Tools submenu (password-protected, not fancy — just a speedbump)"""
-        ADMIN_PASSWORD = "555"  # 🔒 change this to whatever you like
-
-        os.system('clear')
-        print()
-        print("\033[91m🔐 Restricted Access\033[0m")
-        attempt = input("Enter Admin Password: \n > ").strip()
-
-        if attempt != ADMIN_PASSWORD:
-            print("\n\033[91m❌ Incorrect password. Returning to main menu...\033[0m")
-            djj.wait_with_skip(3, "Returning to main menu")
-            return
-
-        while True:
-            self.show_admin_tools_menu()
-            choice = djj.prompt_choice("\033[91mChoose an admin tool\033[0m", ['1', '2', '3', '0', '00'])
-
-            if choice == "1":  # djjtb_scan.py
-                djj.run_command_in_tab(
-                    f"source {self.venv_path}; cd {self.project_path}; "
-                    f"python3 djjtb/helpers/djjtb_scan.py"
-                )
-            elif choice == "2":  # env_backup.sh
-                djj.run_command_in_tab(
-                    f"bash {self.project_path}/djjtb/helpers/env_backup.sh"
-                )
-            elif choice == "3":  # push_github.command
-                djj.run_command_in_tab(
-                    f"bash {self.project_path}/djjtb/helpers/push_github.command"
-                )
-            elif choice == "0":
-                break
-            elif choice == "00":
-                djj.switch_to_terminal_tab("1")
-                return
+#        def handle_admin_tools(self):
+#            """Handle Admin Tools submenu (requires password)"""
+#            PASSWORD = "supersecret"  # 🔒 Change this to your desired password
+#
+#            os.system("clear && printf '\033c'")
+#            print("\n\033[91m⚠️  Restricted Access\033[0m")
+#            attempt = input("Enter Admin Password: ")
+#
+#            if attempt != PASSWORD:
+#                print("\n\033[91m❌ Incorrect password. Returning to main menu...\033[0m")
+#                djj.wait_with_skip(3)
+#                return
+#
+#            while True:
+#                self.show_admin_tools_menu()
+#                choice = djj.prompt_choice("\033[91mChoose an admin tool\033[0m", ['1', '2', '3', '4', '0'])
+#
+#                if choice == "1":
+#                    djj.run_script_in_tab("djjtb.admin_tools.backup_db", self.venv_path, self.project_path)
+#                elif choice == "2":
+#                    djj.run_script_in_tab("djjtb.admin_tools.clear_cache", self.venv_path, self.project_path)
+#                elif choice == "3":
+#                    djj.run_script_in_tab("djjtb.admin_tools.check_integrity", self.venv_path, self.project_path)
+#                elif choice == "4":
+#                    djj.run_script_in_tab("djjtb.admin_tools.sync_tag_dbs", self.venv_path, self.project_path)
+#                elif choice == "0":
+#                    break
             
   
     def launch_grabbers_at_boot(self):
@@ -609,7 +601,7 @@ class DJJTBLauncher:
         while True:
             self.show_main_menu()
             choice = djj.prompt_choice("\033[93mChoose a category\033[0m",
-                                     ['1', '2', '3', '4', '5', '6', '7', '8', '9','10', 'a' , 'ad', 'c', 'x'])
+                                     ['1', '2', '3', '4', '5', '6', '7', '8', '9','10', 'a' , 'c', 'x'])
             
             if choice == "1":
                 self.handle_media_tools()
@@ -622,8 +614,6 @@ class DJJTBLauncher:
             elif choice == "a":  # App Launcher
                 command = f"cd {self.project_path}; python3 -m djjtb.app_launcher"
                 djj.open_terminal_with_settings(command, "djjtb", "738, 200, 1314, 958")
-            elif choice == "ad":  # Admin Tools
-                self.handle_admin_tools()
             elif choice == "c":
                 djj.cleanup_tabs()
             elif choice == "x":
