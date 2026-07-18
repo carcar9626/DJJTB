@@ -15,7 +15,7 @@ from datetime import datetime
 import djjtb.utils as djj
 
 # ComfyUI server address
-COMFYUI_URL = "http://127.0.0.1:8188"
+COMFYUI_URL = "http://127.0.0.1:8188"w
 
 # ComfyUI input folder
 COMFYUI_INPUT_FOLDER = "/Users/home/Documents/ai_models/ComfyUI_App/ComfyUI/input"

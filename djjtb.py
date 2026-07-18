@@ -163,7 +163,7 @@ class DJJTBLauncher:
         print(" 💰 \033[4;93m2\033[0m  Strip Padding 🔲➡︎⬜️")
         print(" 💰 \033[4;93m3\033[0m  Flip or Rotate ↔️  🔄")
         print(" 💰 \033[4;93m4\033[0m  Collage Creation 🧩 🎇")
-        print(" 💰 \033[4;93m5\033[0m  Image Processor 🩷⬌💓")
+        print(" 💰 \033[4;93m5\033[0m  Image Padder 🩷⬌💓")
         print(" 💰 \033[4;93m6\033[0m  Slideshow Maker 🎑➡︎📽️")
         print(" 💰 \033[4;93m7\033[0m  Image Pairing ✋🏼 🤲🏼")
         print(" 💰 \033[4;93m8\033[0m  Webp to MP4 Converter 👾➡︎📹")
@@ -258,6 +258,10 @@ class DJJTBLauncher:
         print(" 💰 \033[4;93m1\033[0m  DJJTB Usage Scan 🔍")
         print(" 💰 \033[4;93m2\033[0m  Env Backup 💾")
         print(" 💰 \033[4;93m3\033[0m  Push to GitHub 🐙")
+        print(" 💰 \033[4;93m4\033[0m  List Open Ports 🌐")
+        print(" 💰 \033[4;93m5\033[0m  Diskutil List 💽")
+        print(" 💰 \033[4;93m6\033[0m  Command Help ❓")
+        print(" 💰 \033[4;93m7\033[0m  VLC Screenshot Renamer 📸")
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰 \033[4;93m0\033[0m  ⏪ Back")
         print(" 💰\033[4;93m00\033[0m ⏮️  MAIN MENU")
@@ -324,7 +328,7 @@ class DJJTBLauncher:
             elif choice == "4":
                 djj.run_script_in_tab("djjtb.media_tools.image_tools.image_collage_creator", self.venv_path, self.project_path)
             elif choice == "5":
-                djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path};    python3 -m djjtb.media_tools.image_tools.image_processor")
+                djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path};    python3 -m djjtb.media_tools.image_tools.image_padder")
             elif choice == "6":
                 djj.run_script_in_tab("djjtb.media_tools.image_tools.image_slideshow_maker", self.venv_path, self.project_path)
             elif choice == "7":
@@ -565,20 +569,31 @@ class DJJTBLauncher:
 
         while True:
             self.show_admin_tools_menu()
-            choice = djj.prompt_choice("\033[91mChoose an admin tool\033[0m", ['1', '2', '3', '0', '00'])
+            choice = djj.prompt_choice("\033[91mChoose an admin tool\033[0m", ['1', '2', '3', '4', '5', '6', '7', '0', '00'])
 
             if choice == "1":  # djjtb_scan.py
                 djj.run_command_in_tab(
                     f"source {self.venv_path}; cd {self.project_path}; "
-                    f"python3 djjtb/helpers/djjtb_scan.py"
+                    f"python3 djjtb/admin_tools/djjtb_scan.py"
                 )
             elif choice == "2":  # env_backup.sh
                 djj.run_command_in_tab(
-                    f"bash {self.project_path}/djjtb/helpers/env_backup.sh"
+                    f"bash {self.project_path}/djjtb/admin_tools/env_backup.sh"
                 )
             elif choice == "3":  # push_github.command
                 djj.run_command_in_tab(
-                    f"bash {self.project_path}/djjtb/helpers/push_github.command"
+                    f"bash {self.project_path}/djjtb/admin_tools/push_github.command"
+                )
+            elif choice == "4":  # List Open Ports
+                djj.run_command_in_tab("lsof -iTCP -sTCP:LISTEN -P")
+            elif choice == "5":  # Diskutil List
+                djj.run_command_in_tab("diskutil list")
+            elif choice == "6":  # Command Help
+                djj.run_command_in_tab("bash /Users/home/Documents/Scripts/HELP/cmd_help.sh")
+            elif choice == "7":  # VLC Screenshot Renamer
+                djj.run_command_in_tab(
+                    f"source {self.venv_path}; cd {self.project_path}; "
+                    f"python3 djjtb/helpers/vlc/vlc_renamer.py"
                 )
             elif choice == "0":
                 break

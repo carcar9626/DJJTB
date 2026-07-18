@@ -493,6 +493,9 @@ def resize_only_images(images, dimension_type, desired_width, desired_height, ma
     sys.stdout.flush()
 
     return successful, failed, skipped, sorted(output_dirs_used)
+
+
+def crop_and_resize_images(images, edges, trim_px, dimension_type, desired_width, desired_height, manual_mode='1'):
     """
     Crop selected edges, then resize — all in-memory per image, one save.
     Output: each image's parent/Output/Cropped_Resized/
