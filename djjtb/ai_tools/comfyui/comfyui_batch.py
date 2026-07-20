@@ -269,31 +269,9 @@ def prompt_steps_override():
 #  Workflow file selector
 # ─────────────────────────────────────────────────────────────────────────────
 
-def get_workflow_files(folder_path):
-    folder = Path(folder_path)
-    if not folder.exists():
-        return []
-    return sorted([f for f in folder.glob('*.json') if f.is_file()])
-
-
 def select_workflow_from_folder(folder_path):
-    workflows = get_workflow_files(folder_path)
-    if not workflows:
-        print(f"❌ \033[93mNo workflow JSON files found in:\033[0m {folder_path}")
-        return None
-    print()
-    print(f"\033[93m📂 Workflows in:\033[0m {Path(folder_path).name}")
-    print("\033[93m" + "-" * 50 + "\033[0m")
-    for i, wf in enumerate(workflows, 1):
-        print(f"{i:2}. {wf.name}")
-    print("\033[93m" + "-" * 50 + "\033[0m")
-    print()
-    valid  = [str(i) for i in range(1, len(workflows) + 1)]
-    choice = djj.prompt_choice("\033[93mSelect workflow number\033[0m", valid, default='1')
-    selected = workflows[int(choice) - 1]
-    print(f"✅ \033[92mSelected:\033[0m {selected.name}")
-    print()
-    return str(selected)
+    selected = djj.pick_single_from_folder(folder_path, ('.json',), label="workflow")
+    return str(selected) if selected else None
 
 
 # ─────────────────────────────────────────────────────────────────────────────

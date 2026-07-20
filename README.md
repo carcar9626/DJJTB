@@ -210,8 +210,7 @@ output_path = djj.get_centralized_output_path("script_name")
 | `metadata_tool.py` | Python | Media processing tool with FFmpeg integration |
 | `playlist_generator.py` | Python | Media processing tool with FFmpeg integration |
 | `update_tools.py` | Python | Python script: update_tools |
-| `push_djjtb_force.command` | Shell | Ensure djjvenv is ignored Remove djjvenv from git tracking if already added before |
-| `push_djjtb.command` | Shell | Shell script: push_djjtb |
+| `push_github.command` | Shell | Push DJJTB repo to GitHub with optional __pycache__ cleanup, smart commit detection, and macOS Keychain credential helper |
 | `replace_decor_lines.py` | Python | Python script: replace_decor_lines |
 | `scan_djj_usage.py` | Python | Python script: scan_djj_usage |
 | `Help_ChatTemplate.py` | Python | Python script: Help_ChatTemplate |

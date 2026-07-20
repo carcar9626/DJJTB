@@ -184,11 +184,9 @@ class WorkflowHub:
             # Image tools
             {'name': 'Image Resizer', 'module': 'djjtb.media_tools.image_tools.image_resizer'},
             {'name': 'Image Converter', 'module': 'djjtb.media_tools.image_tools.image_converter'},
-            {'name': 'Flip or Rotate', 'module': 'djjtb.media_tools.image_tools.image_flip_rotate'},
+            {'name': 'Image Processor', 'module': 'djjtb.media_tools.image_tools.image_processor'},
             {'name': 'Collage Creator', 'module': 'djjtb.media_tools.image_tools.image_collage_creator'},
-            {'name': 'Image Pairing', 'module': 'djjtb.media_tools.image_tools.image_pairing'},
             {'name': 'Strip Padding', 'module': 'djjtb.media_tools.image_tools.image_strip_padding'},
-            {'name': 'Image Padder', 'module': 'djjtb.media_tools.image_tools.image_padder'},
             {'name': 'Slideshow Maker', 'module': 'djjtb.media_tools.image_tools.image_slideshow_maker'},
             {'name': 'Image Stack', 'module': 'djjtb.media_tools.image_tools.image_stack'},
             {'name': 'WebP to MP4 Converter', 'module': 'djjtb.media_tools.image_tools.image_webp_to_mp4'},

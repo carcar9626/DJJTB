@@ -161,13 +161,11 @@ class DJJTBLauncher:
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰 \033[4;93m1\033[0m  Image Converter 🎞️ ➡︎🌠")
         print(" 💰 \033[4;93m2\033[0m  Strip Padding 🔲➡︎⬜️")
-        print(" 💰 \033[4;93m3\033[0m  Flip or Rotate ↔️  🔄")
+        print(" 💰 \033[4;93m3\033[0m  Image Processor 🩷⬌💓 ↔️🔄 ✋🏼🤲🏼")
         print(" 💰 \033[4;93m4\033[0m  Collage Creation 🧩 🎇")
-        print(" 💰 \033[4;93m5\033[0m  Image Padder 🩷⬌💓")
-        print(" 💰 \033[4;93m6\033[0m  Slideshow Maker 🎑➡︎📽️")
-        print(" 💰 \033[4;93m7\033[0m  Image Pairing ✋🏼 🤲🏼")
-        print(" 💰 \033[4;93m8\033[0m  Webp to MP4 Converter 👾➡︎📹")
-        print(" 💰 \033[4;93m9\033[0m  Images to Video Compiler 🌃🌆🎆🎇➡︎📹")
+        print(" 💰 \033[4;93m5\033[0m  Slideshow Maker 🎑➡︎📽️")
+        print(" 💰 \033[4;93m6\033[0m  Webp to MP4 Converter 👾➡︎📹")
+        print(" 💰 \033[4;93m7\033[0m  Images to Video Compiler 🌃🌆🎆🎇➡︎📹")
         print()
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰 \033[4;93m0\033[0m  ⏪ Back to MEDIA TOOLS")
@@ -204,6 +202,7 @@ class DJJTBLauncher:
         print(" 💰\033[4;93m13\033[0m  OpenCode (Local AI Agent) 🖥️🤖")
         print(" 💰\033[4;93m14\033[0m  Open WebUI 🌐🧠")
         print(" 💰\033[4;93m15\033[0m  Vocab + Mask Generator 🔤")
+        print(" 💰\033[4;93m16\033[0m  Category Sorter (AI)(CLIP) 🗂️")
         print()
         print("\033[1;93m ⛓️  chaiNNer Workflows ⚙️\033[0m")
         print("\033[92m--------------------------------------------------\033[0m")
@@ -262,6 +261,8 @@ class DJJTBLauncher:
         print(" 💰 \033[4;93m5\033[0m  Diskutil List 💽")
         print(" 💰 \033[4;93m6\033[0m  Command Help ❓")
         print(" 💰 \033[4;93m7\033[0m  VLC Screenshot Renamer 📸")
+        print(" 💰 \033[4;93m8\033[0m  Mount Movies 4 & 8 💽")
+        print(" 💰\033[4;93m8a\033[0m  Unmount Movies 4 & 8 ⏏️")
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰 \033[4;93m0\033[0m  ⏪ Back")
         print(" 💰\033[4;93m00\033[0m ⏮️  MAIN MENU")
@@ -316,26 +317,22 @@ class DJJTBLauncher:
             self.show_image_tools_menu()
             
             choice = djj.prompt_choice("\033[93mChoose a Tool\033[0m" if first_entry else "\033[93mChoose another option\033[0m",
-                                      ['1', '2', '3', '4', '5', '6', '7', '8','9', '0', '00'])
+                                      ['1', '2', '3', '4', '5', '6', '7', '0', '00'])
             first_entry = False
-            
+
             if choice == "1":
                 djj.run_script_in_tab("djjtb.media_tools.image_tools.image_converter", self.venv_path, self.project_path)
             elif choice == "2":
                 djj.run_script_in_tab("djjtb.media_tools.image_tools.image_strip_padding", self.venv_path, self.project_path)
             elif choice == "3":
-                djj.run_script_in_tab("djjtb.media_tools.image_tools.image_flip_rotate", self.venv_path, self.project_path)
+                djj.run_script_in_tab("djjtb.media_tools.image_tools.image_processor", self.venv_path, self.project_path)
             elif choice == "4":
                 djj.run_script_in_tab("djjtb.media_tools.image_tools.image_collage_creator", self.venv_path, self.project_path)
             elif choice == "5":
-                djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path};    python3 -m djjtb.media_tools.image_tools.image_padder")
-            elif choice == "6":
                 djj.run_script_in_tab("djjtb.media_tools.image_tools.image_slideshow_maker", self.venv_path, self.project_path)
-            elif choice == "7":
-                djj.run_script_in_tab("djjtb.media_tools.image_tools.image_pairing", self.venv_path, self.project_path)
-            elif choice == "8":
+            elif choice == "6":
                 djj.run_script_in_tab("djjtb.media_tools.image_tools.image_webp_to_mp4", self.venv_path, self.project_path)
-            elif choice == "9":
+            elif choice == "7":
                 djj.run_script_in_tab("djjtb.media_tools.image_tools.image_video_compiler", self.venv_path, self.project_path)
             elif choice == "0":
                 break
@@ -390,7 +387,7 @@ class DJJTBLauncher:
         while True:
             self.show_ai_tools_menu()
             choice = djj.prompt_choice("\033[93mChoose an AI tool\033[0m",
-                                     ['1','1b', '2', '3', '4', '5', '6', '7', '7a','8','9','10','11','12','13','14','15','c0','c1' ,'c2' , 'c3', 'c4','c5','c6', 'c7', 'c8','cu','ch','cj', 'jc','atk', '0', '00'])
+                                     ['1','1b', '2', '3', '4', '5', '6', '7', '7a','8','9','10','11','12','13','14','15','16','c0','c1' ,'c2' , 'c3', 'c4','c5','c6', 'c7', 'c8','cu','ch','cj', 'jc','atk', '0', '00'])
             """
             if choice == "1":  # Prompt Randomizer
                 djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path}/djjtb/ai_tools/; python3 -m djjtb.media_tools.ai_tools.prompt_randomizer")
@@ -458,6 +455,8 @@ class DJJTBLauncher:
                 djj.open_terminal_with_settings(command, "home_profile", "525, 120, 1460, 700")
             elif choice == "15":  # Vocab + Mask Generator
                 djj.run_script_in_tab("djjtb.ai_tools.vocab_mask_generator", self.venv_path, self.project_path)
+            elif choice == "16":  # Category Sorter
+                djj.run_script_in_tab("djjtb.ai_tools.category_sorter.category_sorter", self.venv_path, self.project_path)
             elif choice == "cu":
                 command = (f"{self.project_path}/djjtb/ai_tools/comfyui_runner.command")
                 djj.open_terminal_with_settings(command, "comfyui", "1000, 120, 1700, 700")
@@ -569,7 +568,7 @@ class DJJTBLauncher:
 
         while True:
             self.show_admin_tools_menu()
-            choice = djj.prompt_choice("\033[91mChoose an admin tool\033[0m", ['1', '2', '3', '4', '5', '6', '7', '0', '00'])
+            choice = djj.prompt_choice("\033[91mChoose an admin tool\033[0m", ['1', '2', '3', '4', '5', '6', '7', '8', '8a','0', '00'])
 
             if choice == "1":  # djjtb_scan.py
                 djj.run_command_in_tab(
@@ -595,6 +594,30 @@ class DJJTBLauncher:
                     f"source {self.venv_path}; cd {self.project_path}; "
                     f"python3 djjtb/helpers/vlc/vlc_renamer.py"
                 )
+            elif choice == "8":  # Mount Movies 4 & 8 — silent background mount
+                print("\033[93mMounting Disks...\033[0m")
+                for disk_uuid in [
+                    "4AF0255E-DAEE-41F8-A045-0194DB148A2F",
+                    "284C712E-9F72-46B8-AF7A-4FB416299AF2",
+                ]:
+                    subprocess.Popen(
+                        ["diskutil", "mount", disk_uuid],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
+                time.sleep(2)
+            elif choice == "8a":  # Mount Movies 4 & 8 — silent background mount
+                print("\033[93mUnmounting Disks...\033[0m")
+                for disk_uuid in [
+                    "4AF0255E-DAEE-41F8-A045-0194DB148A2F",
+                    "284C712E-9F72-46B8-AF7A-4FB416299AF2",
+                ]:
+                    subprocess.Popen(
+                        ["diskutil", "unmount", disk_uuid],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
+                time.sleep(2)
             elif choice == "0":
                 break
             elif choice == "00":

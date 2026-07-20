@@ -215,6 +215,352 @@ def check_xmp_files_in_folder(folder_path, extensions=('.jpg', '.jpeg', '.png', 
     }
 
 
+# ─── Image Collection & Validation Helpers ───────────────────────────────────
+
+IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp', '.tiff')
+
+
+def is_image_extension(filename):
+    """Cheap extension-only check — use for fast collection-time filtering."""
+    return str(filename).lower().endswith(IMAGE_EXTENSIONS)
+
+
+def is_valid_image_file(file_path):
+    """
+    Real corruption check via Image.open()+verify() — slower than
+    is_image_extension, so reserve for pre-flight gates (e.g. before handing
+    a group of images to ffmpeg), not bulk collection filtering.
+    """
+    from PIL import Image
+    try:
+        with Image.open(file_path) as img:
+            img.verify()
+        return True
+    except Exception:
+        return False
+
+
+def collect_images_from_folder(folder_path, include_subfolders=False):
+    """
+    Collect images from a folder, never descending into Output dirs.
+    Non-recursive mode only lists the folder's immediate contents.
+    """
+    folder_path_obj = pathlib.Path(folder_path)
+
+    images = []
+    if folder_path_obj.is_dir():
+        if include_subfolders:
+            for root, dirs, files in os.walk(folder_path):
+                # Prune Output folders in-place so walk never descends into them
+                dirs[:] = [d for d in dirs if d.lower() != 'output']
+                images.extend(pathlib.Path(root) / f for f in files if pathlib.Path(f).suffix.lower() in IMAGE_EXTENSIONS)
+        else:
+            images = [f for f in folder_path_obj.glob('*') if f.suffix.lower() in IMAGE_EXTENSIONS and f.is_file()]
+
+    return sorted([str(v) for v in images], key=str.lower)
+
+
+def collect_images_from_paths(raw_input):
+    """
+    Collect images from space-separated paths (supports drag-and-drop).
+    Handles quoted paths, escaped spaces, files and folders mixed together.
+    """
+    images = []
+    raw = raw_input.strip()
+
+    # Rebuild tokens: split on spaces, but re-join tokens that are escaped spaces
+    # (macOS drag-and-drop escapes spaces as '\ ')
+    tokens = []
+    current = ''
+    i = 0
+    while i < len(raw):
+        if raw[i] == '\\' and i + 1 < len(raw) and raw[i + 1] == ' ':
+            current += ' '
+            i += 2
+        elif raw[i] == ' ':
+            if current:
+                tokens.append(current)
+                current = ''
+            i += 1
+        else:
+            current += raw[i]
+            i += 1
+    if current:
+        tokens.append(current)
+
+    for token in tokens:
+        path_str = token.strip().strip('\'"')
+        if not path_str:
+            continue
+        try:
+            path_obj = pathlib.Path(path_str).expanduser().resolve()
+            if path_obj.is_file() and path_obj.suffix.lower() in IMAGE_EXTENSIONS:
+                images.append(str(path_obj))
+            elif path_obj.is_dir():
+                images.extend(collect_images_from_folder(str(path_obj), include_subfolders=False))
+            else:
+                print(f"  ⚠️  \033[93mNot found or unsupported:\033[0m {path_str}")
+        except Exception as e:
+            print(f"  ⚠️  \033[93mError resolving path\033[0m '{path_str}': {e}")
+
+    return sorted(set(images), key=str.lower)
+
+
+def collect_images_from_path_list(paths, include_subfolders=False):
+    """
+    Given a list of already-resolved paths (files + dirs, e.g. from a txt
+    file), filter files by extension and expand dirs one level via
+    collect_images_from_folder. The interactive "ask for txt path" prompt
+    stays in the caller's CLI flow — this only handles the resolved list.
+    """
+    images = []
+    for path in paths:
+        path_obj = pathlib.Path(path)
+        if path_obj.is_file():
+            if path_obj.suffix.lower() in IMAGE_EXTENSIONS:
+                images.append(str(path_obj))
+        elif path_obj.is_dir():
+            images.extend(collect_images_from_folder(str(path_obj), include_subfolders=include_subfolders))
+
+    return sorted(set(images), key=str.lower)
+
+
+def get_output_directory(images, is_folder_mode=True, first_folder=None, subfolder_name="Padded"):
+    """Determine output directory based on input mode."""
+    if is_folder_mode and first_folder:
+        return os.path.join(first_folder, "Output", subfolder_name)
+    elif images:
+        first_image_dir = os.path.dirname(images[0])
+        return os.path.join(first_image_dir, "Output", subfolder_name)
+    else:
+        return os.path.join(os.getcwd(), "Output", subfolder_name)
+
+
+# ─── Image Grouping Helpers ───────────────────────────────────────────────────
+
+def group_images_by_parent_folder(image_paths):
+    """
+    Group images by their immediate parent folder.
+    Returns dict: {parent_folder_path: [image_paths]}
+    """
+    grouped = {}
+    for img_path in image_paths:
+        parent = str(pathlib.Path(img_path).parent)
+        if parent not in grouped:
+            grouped[parent] = []
+        grouped[parent].append(img_path)
+    return grouped
+
+
+def get_match_key(filename, match_type, num_chars):
+    """Extract match key from filename based on prefix/suffix."""
+    name_no_ext = os.path.splitext(filename)[0]
+    if match_type == 'prefix':
+        return name_no_ext[:num_chars] if len(name_no_ext) >= num_chars else name_no_ext
+    else:
+        return name_no_ext[-num_chars:] if len(name_no_ext) >= num_chars else name_no_ext
+
+
+def group_images_by_match(images, match_type, num_chars):
+    """Group images by their prefix/suffix match key."""
+    from collections import defaultdict
+    groups = defaultdict(list)
+    for img_path in images:
+        filename = os.path.basename(img_path)
+        match_key = get_match_key(filename, match_type, num_chars)
+        groups[match_key].append(img_path)
+    return dict(groups)
+
+
+def create_sequential_groups(images, group_size):
+    """Create sequential groups of images, only including complete groups."""
+    groups = []
+    for i in range(0, len(images), group_size):
+        group = images[i:i + group_size]
+        if len(group) == group_size:
+            groups.append(group)
+    return groups
+
+
+def build_groups_for_images(images, pairing_mode, group_size=None, match_type=None, num_chars=None):
+    """
+    Build groups from an image list using sequential or auto-match mode.
+    Sequential ('1'): fixed-size groups of group_size, trailing partial
+    group dropped.
+    Auto-match ('2'): groups sized naturally by shared prefix/suffix match
+    key — group_size is ignored, nothing is dropped or truncated to fit a
+    target size.
+    """
+    if pairing_mode == '1':
+        return create_sequential_groups(images, group_size)
+    else:
+        matched = group_images_by_match(images, match_type, num_chars)
+        return list(matched.values())
+
+
+def get_max_dimensions(image_paths):
+    """Get maximum dimensions from a list of images, ensuring even numbers."""
+    from PIL import Image
+    max_width = 0
+    max_height = 0
+    for img_path in image_paths:
+        with Image.open(img_path) as img:
+            max_width = max(max_width, img.width)
+            max_height = max(max_height, img.height)
+    max_width = max_width if max_width % 2 == 0 else max_width + 1
+    max_height = max_height if max_height % 2 == 0 else max_height + 1
+    return max_width, max_height
+
+
+# ─── Image Transform Helpers ──────────────────────────────────────────────────
+
+def calculate_padding_offset(img_width, img_height, new_width, new_height, position):
+    """Calculate the offset for padding based on position."""
+    if position == 'center':
+        offset_x = (new_width - img_width) // 2
+        offset_y = (new_height - img_height) // 2
+    elif position == 'left':
+        offset_x = 0
+        offset_y = (new_height - img_height) // 2
+    elif position == 'right':
+        offset_x = new_width - img_width
+        offset_y = (new_height - img_height) // 2
+    else:
+        offset_x = (new_width - img_width) // 2
+        offset_y = (new_height - img_height) // 2
+    return (offset_x, offset_y)
+
+
+def create_blurred_background(img, new_width, new_height, bg_mode, blur_radius, opacity):
+    """Create an image-based background with blur and opacity."""
+    from PIL import Image, ImageFilter
+    if bg_mode == 'stretched':
+        bg_img = img.copy().resize((new_width, new_height), Image.Resampling.LANCZOS)
+    elif bg_mode == 'tiled':
+        bg_img = Image.new('RGBA', (new_width, new_height), (0, 0, 0, 0))
+        img_width, img_height = img.size
+        for y in range(0, new_height, img_height):
+            for x in range(0, new_width, img_width):
+                bg_img.paste(img, (x, y))
+    elif bg_mode == 'centered':
+        bg_img = Image.new('RGBA', (new_width, new_height), (0, 0, 0, 0))
+        img_width, img_height = img.size
+        offset_x = (new_width - img_width) // 2
+        offset_y = (new_height - img_height) // 2
+        bg_img.paste(img, (offset_x, offset_y))
+    else:
+        bg_img = img.copy().resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+    bg_img = bg_img.filter(ImageFilter.GaussianBlur(radius=blur_radius))
+    alpha = Image.new('L', bg_img.size, int(255 * opacity))
+    bg_img.putalpha(alpha)
+    return bg_img
+
+
+def get_save_format(img_path):
+    """
+    Return (pillow_format_str, extension) matching the source file's format.
+    Preserves original format silently — no conversion.
+    """
+    ext = pathlib.Path(img_path).suffix.lower()
+    format_map = {
+        '.jpg':  ('JPEG', '.jpg'),
+        '.jpeg': ('JPEG', '.jpeg'),
+        '.png':  ('PNG',  '.png'),
+        '.bmp':  ('BMP',  '.bmp'),
+        '.gif':  ('GIF',  '.gif'),
+        '.webp': ('WEBP', '.webp'),
+        '.tiff': ('TIFF', '.tiff'),
+    }
+    return format_map.get(ext, ('PNG', '.png'))
+
+
+def resize_pil_image(img, dimension_type, desired_width, desired_height, manual_mode='1'):
+    """
+    Resize an already-open PIL Image in-memory.
+    dimension_type: '1'=Width '2'=Height '3'=Longest Edge '4'=Manual (exact W x H)
+    manual_mode (only for '4'): '1'=Stretch '2'=Pad (white, keeps aspect)
+    """
+    from PIL import Image
+    orig_width, orig_height = img.size
+
+    if dimension_type == '1':  # Width
+        target_width = desired_width
+        target_height = max(1, int(orig_height * (desired_width / orig_width)))
+    elif dimension_type == '2':  # Height
+        target_height = desired_height
+        target_width = max(1, int(orig_width * (desired_height / orig_height)))
+    elif dimension_type == '3':  # Longest Edge
+        if orig_width >= orig_height:
+            target_width = desired_width
+            target_height = max(1, int(orig_height * (desired_width / orig_width)))
+        else:
+            target_height = desired_width
+            target_width = max(1, int(orig_width * (desired_width / orig_height)))
+    else:  # '4' Manual
+        target_width = desired_width
+        target_height = desired_height
+
+    if dimension_type == '4' and manual_mode == '2':  # Pad mode — letterbox, keep aspect
+        scale = min(target_width / orig_width, target_height / orig_height)
+        new_w = max(1, int(orig_width * scale))
+        new_h = max(1, int(orig_height * scale))
+        img_scaled = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+        bg_color = (255, 255, 255, 255) if img_scaled.mode == 'RGBA' else (255, 255, 255)
+        canvas = Image.new(img_scaled.mode, (target_width, target_height), bg_color)
+        offset = ((target_width - new_w) // 2, (target_height - new_h) // 2)
+        if img_scaled.mode == 'RGBA':
+            canvas.paste(img_scaled, offset, img_scaled)
+        else:
+            canvas.paste(img_scaled, offset)
+        return canvas
+    else:
+        return img.resize((target_width, target_height), Image.Resampling.LANCZOS)
+
+
+def fit_image_to_canvas(img, canvas_width, canvas_height):
+    """
+    Aspect-preserving fit of img within (canvas_width, canvas_height).
+    Returns (resized_img, paste_x, paste_y) — resized_img is not pasted yet.
+    """
+    img_ratio = img.width / img.height
+    target_width = canvas_width
+    target_height = int(target_width / img_ratio)
+    if target_height > canvas_height:
+        target_height = canvas_height
+        target_width = int(target_height * img_ratio)
+
+    from PIL import Image
+    resized = img.resize((target_width, target_height), Image.Resampling.LANCZOS)
+    paste_x = (canvas_width - target_width) // 2
+    paste_y = (canvas_height - target_height) // 2
+    return resized, paste_x, paste_y
+
+
+def rotate_or_flip_image(img, operation, choice, custom_angle=None):
+    """
+    Pure rotate/flip transform on an already-open PIL Image.
+    operation: 'rotate' or 'flip'
+    choice: for rotate — '90'/'180'/'270'/'custom'; for flip — 'horizontal'/'vertical'
+    custom_angle: degrees, positive = counterclockwise (only used when choice == 'custom')
+    """
+    from PIL import Image
+    if operation == 'rotate':
+        if choice == '90':
+            return img.rotate(90, expand=True)
+        elif choice == '180':
+            return img.rotate(180, expand=True)
+        elif choice == '270':
+            return img.rotate(270, expand=True)
+        else:
+            return img.rotate(-custom_angle, expand=True)
+    else:
+        if choice == 'horizontal':
+            return img.transpose(Image.FLIP_LEFT_RIGHT)
+        else:
+            return img.transpose(Image.FLIP_TOP_BOTTOM)
+
+
 def prompt_xmp_handling_mode():
     """
     Prompt user for how to handle existing XMP files.
@@ -282,9 +628,25 @@ def position_suffix(position):
     """
     Return a short filename suffix for a join position choice.
     '1'→'_lft', '2'→'_rgt', '3'→'_top', '4'→'_btm'
-    Matches the convention used in image_pairing.py.
     """
     return {'1': '_lft', '2': '_rgt', '3': '_top', '4': '_btm'}.get(position, '')
+
+
+def find_video_for_image(image_path, folder):
+    """
+    Find a matching video in folder whose stem starts with the image stem.
+    Returns the video path string, or None if not found.
+    """
+    video_exts = ('.mp4', '.mov', '.webm')
+    img_stem = pathlib.Path(image_path).stem
+    candidates = [
+        f for f in os.listdir(folder)
+        if pathlib.Path(f).suffix.lower() in video_exts
+        and pathlib.Path(f).stem.startswith(img_stem)
+    ]
+    if candidates:
+        return os.path.join(folder, sorted(candidates)[0])
+    return None
 
 
 def clamp_to_longest_edge(w, h, max_longest_edge):
@@ -454,10 +816,106 @@ def join_image_video(image_path, video_path, output_path, position, audio_choice
 
 # ─── Collage Helper ───────────────────────────────────────────────────────────
 
+def _collage_one_group(group, direction, longest_edge, output_dir, suffix):
+    """
+    Build and save one collage image from `group` (any size >= 1).
+    Returns the saved path, or None on failure (caller reports the error).
+    """
+    from PIL import Image
+
+    imgs = [Image.open(p).convert('RGB') for p in group]
+
+    if direction == 'H':
+        # Scale all images to the tallest image's height, then paste side by side
+        target_h = max(im.height for im in imgs)
+        resized = [
+            im.resize((int(im.width * target_h / im.height), target_h), Image.Resampling.LANCZOS)
+            for im in imgs
+        ]
+        total_w = sum(im.width for im in resized)
+        canvas = Image.new('RGB', (total_w, target_h))
+        x = 0
+        for im in resized:
+            canvas.paste(im, (x, 0))
+            x += im.width
+    else:  # V
+        # Scale all images to the widest image's width, then stack vertically
+        target_w = max(im.width for im in imgs)
+        resized = [
+            im.resize((target_w, int(im.height * target_w / im.width)), Image.Resampling.LANCZOS)
+            for im in imgs
+        ]
+        total_h = sum(im.height for im in resized)
+        canvas = Image.new('RGB', (target_w, total_h))
+        y = 0
+        for im in resized:
+            canvas.paste(im, (0, y))
+            y += im.height
+
+    # Resize so longest edge hits the target
+    cw, ch = canvas.size
+    if cw >= ch:
+        new_w = longest_edge
+        new_h = int(ch * longest_edge / cw)
+    else:
+        new_h = longest_edge
+        new_w = int(cw * longest_edge / ch)
+    # Force even dims for ffmpeg compatibility downstream
+    new_w = new_w if new_w % 2 == 0 else new_w - 1
+    new_h = new_h if new_h % 2 == 0 else new_h - 1
+    canvas = canvas.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+    # Name based on first image in group.
+    # Strip any trailing _comp or _compN so re-collage passes don't
+    # chain into ugly _comp_comp_comp names — the folder nesting
+    # (Comp/ → Comp/Comp/ → …) carries the generation info instead.
+    import re as _re
+    first_stem = pathlib.Path(group[0]).stem
+    first_stem = _re.sub(r'_comp\d*$', '', first_stem)
+    out_path = os.path.join(output_dir, f"{first_stem}{suffix}.jpg")
+    canvas.save(out_path, 'JPEG', quality=95)
+    return out_path
+
+
+def create_collage_from_groups(groups, direction, longest_edge, output_dir, suffix='_comp'):
+    """
+    Collage pre-built groups directly — each group (whatever size it is)
+    becomes one collage image. Use this when groups come from auto-match
+    (variable sizes); for fixed-size sequential groups, create_collage's
+    chunking gives an identical result.
+
+    Args:
+        groups:       list of image-path lists, each already a complete group
+        direction:    'H' (horizontal) or 'V' (vertical)
+        longest_edge: int, target size for the longest edge after resize
+        output_dir:   folder to save collages into (will be created if needed)
+
+    Returns:
+        List of saved collage file paths (in order; groups that fail are skipped)
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    collage_paths = []
+
+    for idx, group in enumerate(groups, 1):
+        try:
+            out_path = _collage_one_group(group, direction, longest_edge, output_dir, suffix)
+            collage_paths.append(out_path)
+            sys.stdout.write(f"\r\033[93mCollaging \033[0m{idx}/{len(groups)}...")
+            sys.stdout.flush()
+        except Exception as e:
+            print(f"\033[93m❌ Error creating collage for group {idx}: {e}\033[0m")
+
+    sys.stdout.write("\r" + " " * 60 + "\r")
+    sys.stdout.flush()
+    print(f"\033[92m✅ {len(collage_paths)} collage(s) created → {output_dir}\033[0m")
+    return collage_paths
+
+
 def create_collage(image_paths, direction, longest_edge, output_dir, group_size, suffix='_comp'):
     """
-    Group images sequentially, collage each group into a single image,
-    resize so longest edge == longest_edge, save to output_dir with _comp suffix.
+    Group images sequentially into fixed-size chunks, then collage each
+    group (see create_collage_from_groups). Trailing partial group is
+    dropped with a warning.
 
     Args:
         image_paths:  flat list of image paths (already sorted/ordered)
@@ -469,12 +927,6 @@ def create_collage(image_paths, direction, longest_edge, output_dir, group_size,
     Returns:
         List of saved collage file paths (in order)
     """
-    from PIL import Image
-
-    os.makedirs(output_dir, exist_ok=True)
-    collage_paths = []
-
-    # Build sequential groups
     groups = [image_paths[i:i + group_size] for i in range(0, len(image_paths), group_size)]
     complete_groups = [g for g in groups if len(g) == group_size]
 
@@ -482,71 +934,7 @@ def create_collage(image_paths, direction, longest_edge, output_dir, group_size,
         leftover = len(image_paths) - len(complete_groups) * group_size
         print(f"\033[93m⚠️  {leftover} image(s) left over (incomplete group) — skipped\033[0m")
 
-    for idx, group in enumerate(complete_groups):
-        try:
-            imgs = [Image.open(p).convert('RGB') for p in group]
-
-            if direction == 'H':
-                # Scale all images to the tallest image's height, then paste side by side
-                target_h = max(im.height for im in imgs)
-                resized = [
-                    im.resize((int(im.width * target_h / im.height), target_h), Image.Resampling.LANCZOS)
-                    for im in imgs
-                ]
-                total_w = sum(im.width for im in resized)
-                canvas = Image.new('RGB', (total_w, target_h))
-                x = 0
-                for im in resized:
-                    canvas.paste(im, (x, 0))
-                    x += im.width
-            else:  # V
-                # Scale all images to the widest image's width, then stack vertically
-                target_w = max(im.width for im in imgs)
-                resized = [
-                    im.resize((target_w, int(im.height * target_w / im.width)), Image.Resampling.LANCZOS)
-                    for im in imgs
-                ]
-                total_h = sum(im.height for im in resized)
-                canvas = Image.new('RGB', (target_w, total_h))
-                y = 0
-                for im in resized:
-                    canvas.paste(im, (0, y))
-                    y += im.height
-
-            # Resize so longest edge hits the target
-            cw, ch = canvas.size
-            if cw >= ch:
-                new_w = longest_edge
-                new_h = int(ch * longest_edge / cw)
-            else:
-                new_h = longest_edge
-                new_w = int(cw * longest_edge / ch)
-            # Force even dims for ffmpeg compatibility downstream
-            new_w = new_w if new_w % 2 == 0 else new_w - 1
-            new_h = new_h if new_h % 2 == 0 else new_h - 1
-            canvas = canvas.resize((new_w, new_h), Image.Resampling.LANCZOS)
-
-            # Name based on first image in group.
-            # Strip any trailing _comp or _compN so re-collage passes don't
-            # chain into ugly _comp_comp_comp names — the folder nesting
-            # (Comp/ → Comp/Comp/ → …) carries the generation info instead.
-            import re as _re
-            first_stem = pathlib.Path(group[0]).stem
-            first_stem = _re.sub(r'_comp\d*$', '', first_stem)
-            out_path = os.path.join(output_dir, f"{first_stem}{suffix}.jpg")
-            canvas.save(out_path, 'JPEG', quality=95)
-            collage_paths.append(out_path)
-
-            sys.stdout.write(f"\r\033[93mCollaging \033[0m{idx + 1}/{len(complete_groups)}...")
-            sys.stdout.flush()
-
-        except Exception as e:
-            print(f"\033[93m❌ Error creating collage for group {idx + 1}: {e}\033[0m")
-
-    sys.stdout.write("\r" + " " * 60 + "\r")
-    sys.stdout.flush()
-    print(f"\033[92m✅ {len(collage_paths)} collage(s) created → {output_dir}\033[0m")
-    return collage_paths
+    return create_collage_from_groups(complete_groups, direction, longest_edge, output_dir, suffix)
 
 
 # ─── Slideshow/Collage + Join Helpers ────────────────────────────────────────

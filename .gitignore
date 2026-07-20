@@ -12,6 +12,8 @@ __pycache__/
 Prompt_Randomizer/
 output/
 outputs/
+# Symlink to external AI models folder (do not commit)
+ai_models
 # Distribution / packaging
 .Python
 build/
@@ -213,3 +215,9 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 djjvenv/
+
+# Allow specific .txt files that should be tracked
+!requirements.txt
+!requirements.bak.txt
+!assets/folder_nests.txt
+!assets/folder_nests_temp.txt

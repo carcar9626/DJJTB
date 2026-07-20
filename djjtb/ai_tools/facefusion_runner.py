@@ -274,104 +274,6 @@ def get_swap_mode():
 
 DEFAULT_FACES_FOLDER = "/Volumes/Movies_2SSD/UD_Gens/Characters/OG/OG_Process/FACES"
 
-def list_default_faces_folder():
-    """
-    List supported files in the default FACES folder with numbered choices.
-    Returns a list of (number_str, file_path) tuples, or [] if folder not found.
-    """
-    folder = pathlib.Path(DEFAULT_FACES_FOLDER)
-    if not folder.exists():
-        print(f"\033[93m⚠️  Default FACES folder not found:\033[0m {DEFAULT_FACES_FOLDER}")
-        return []
-    files = sorted(
-        [f for f in folder.iterdir() if f.is_file() and f.suffix.lower() in SUPPORTED_EXTS],
-        key=lambda f: f.name.lower()
-    )
-    if not files:
-        print(f"\033[93m⚠️  No supported files found in default FACES folder.\033[0m")
-        return []
-    return files
-
-
-def pick_single_from_default_faces():
-    """
-    Show numbered list of default FACES folder, user picks one by number.
-    Returns file path string, or None on failure.
-    """
-    files = list_default_faces_folder()
-    if not files:
-        return None
-
-    print(f"\033[93m📂 Default FACES folder:\033[0m {DEFAULT_FACES_FOLDER}")
-    print("\033[93m" + "-" * 50 + "\033[0m")
-    for i, f in enumerate(files, 1):
-        print(f"  {i:2}. {f.name}")
-    print("\033[93m" + "-" * 50 + "\033[0m")
-    print()
-
-    valid = [str(i) for i in range(1, len(files) + 1)]
-    choice = djj.prompt_choice("\033[93mSelect a file number\033[0m", valid, default='1')
-    selected = files[int(choice) - 1]
-    print(f"✅ \033[92mSelected:\033[0m {selected.name}")
-    print()
-    return str(selected)
-
-
-def pick_multiple_from_default_faces():
-    """
-    Show numbered list of default FACES folder.
-    User picks files one at a time by number, pressing Enter on empty line to finish.
-    Returns list of file path strings, or [] on failure.
-    """
-    files = list_default_faces_folder()
-    if not files:
-        return []
-
-    selected = []
-    selected_indices = set()
-
-    while True:
-        print(f"\033[93m📂 Default FACES folder:\033[0m {DEFAULT_FACES_FOLDER}")
-        print("\033[93m" + "-" * 50 + "\033[0m")
-        for i, f in enumerate(files, 1):
-            marker = " ✅" if i in selected_indices else ""
-            print(f"  {i:2}. {f.name}{marker}")
-        print("\033[93m" + "-" * 50 + "\033[0m")
-
-        if selected:
-            print(f"\033[92mCurrently selected ({len(selected)}):\033[0m {', '.join(str(i) for i in sorted(selected_indices))}")
-
-        print("\033[93mEnter a number to add/remove, or press Enter to confirm:\033[0m")
-        raw = input(" > ").strip()
-
-        if raw == '':
-            if not selected:
-                print("\033[93m⚠️  No files selected. Pick at least one.\033[0m\n")
-                continue
-            break
-
-        try:
-            num = int(raw)
-            if 1 <= num <= len(files):
-                if num in selected_indices:
-                    # Toggle off
-                    selected_indices.remove(num)
-                    selected = [str(files[i - 1]) for i in sorted(selected_indices)]
-                    print(f"\033[93m➖ Removed:\033[0m {files[num - 1].name}\n")
-                else:
-                    # Add
-                    selected_indices.add(num)
-                    selected = [str(files[i - 1]) for i in sorted(selected_indices)]
-                    print(f"\033[92m➕ Added:\033[0m {files[num - 1].name}\n")
-            else:
-                print(f"\033[93mPlease enter a number between 1 and {len(files)}.\033[0m\n")
-        except ValueError:
-            print(f"\033[93mInvalid input. Enter a number or press Enter to confirm.\033[0m\n")
-
-    print(f"\033[92m✅ {len(selected)} file(s) selected.\033[0m")
-    print()
-    return selected
-
 
 def get_source_input(mode):
     """Get source files/folders based on swap mode"""
@@ -413,7 +315,7 @@ def get_source_input(mode):
 
         else:
             # Default FACES folder picker — numbered multi-select
-            source_files = pick_multiple_from_default_faces()
+            source_files = [str(p) for p in djj.pick_multiple_from_folder(DEFAULT_FACES_FOLDER, SUPPORTED_EXTS, label="face")]
             if not source_files:
                 print("\033[1;93m❌ No files selected.\033[0m")
                 sys.exit(1)
@@ -441,11 +343,11 @@ def get_source_input(mode):
 
         else:
             # Default FACES folder picker — single select
-            source_path = pick_single_from_default_faces()
-            if not source_path:
+            picked = djj.pick_single_from_folder(DEFAULT_FACES_FOLDER, SUPPORTED_EXTS, label="face")
+            if not picked:
                 print("\033[1;93m❌ No file selected.\033[0m")
                 sys.exit(1)
-            return [source_path], 'single_file', None
+            return [str(picked)], 'single_file', None
 
 def get_target_input(mode):
     """Get target files/folders based on swap mode"""

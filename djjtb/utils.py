@@ -276,6 +276,96 @@ def open_path(path):
         print(f"\033[91m❌ Path does not exist:\033[0m {path}")
 
 
+def list_files_in_folder(folder, extensions):
+    """
+    List files in folder (non-recursive) matching extensions, sorted by name.
+    Returns a list of pathlib.Path, or [] if the folder is missing or empty.
+    """
+    folder = pathlib.Path(folder)
+    if not folder.exists():
+        print(f"\033[93m⚠️  Folder not found:\033[0m {folder}")
+        return []
+    files = sorted(
+        [f for f in folder.iterdir() if f.is_file() and f.suffix.lower() in extensions],
+        key=lambda f: f.name.lower()
+    )
+    if not files:
+        print(f"\033[93m⚠️  No supported files found in:\033[0m {folder}")
+    return files
+
+
+def pick_single_from_folder(folder, extensions, label="file"):
+    """
+    Show numbered list of files in folder, user picks one by number.
+    Returns a pathlib.Path, or None on failure.
+    """
+    files = list_files_in_folder(folder, extensions)
+    if not files:
+        return None
+
+    print(f"\033[93m📂 Folder:\033[0m {folder}")
+    print("\033[93m" + "-" * 50 + "\033[0m")
+    for i, f in enumerate(files, 1):
+        print(f"  {i:2}. {f.name}")
+    print("\033[93m" + "-" * 50 + "\033[0m")
+    print()
+
+    valid = [str(i) for i in range(1, len(files) + 1)]
+    choice = prompt_choice(f"\033[93mSelect a {label} number\033[0m", valid, default='1')
+    selected = files[int(choice) - 1]
+    print(f"✅ \033[92mSelected:\033[0m {selected.name}")
+    print()
+    return selected
+
+
+def pick_multiple_from_folder(folder, extensions, label="file"):
+    """
+    Show numbered list of files in folder. User toggles files on/off by number,
+    pressing Enter on an empty line to finish. Returns a list of pathlib.Path.
+    """
+    files = list_files_in_folder(folder, extensions)
+    if not files:
+        return []
+
+    selected_indices = set()
+
+    while True:
+        print(f"\033[93m📂 Folder:\033[0m {folder}")
+        print("\033[93m" + "-" * 50 + "\033[0m")
+        for i, f in enumerate(files, 1):
+            marker = " ✅" if i in selected_indices else ""
+            print(f"  {i:2}. {f.name}{marker}")
+        print("\033[93m" + "-" * 50 + "\033[0m")
+
+        if selected_indices:
+            print(f"\033[92mCurrently selected ({len(selected_indices)}):\033[0m {', '.join(str(i) for i in sorted(selected_indices))}")
+
+        print("\033[93mEnter a number to add/remove, or press Enter to confirm:\033[0m")
+        raw = input(" > ").strip()
+
+        if raw == '':
+            if not selected_indices:
+                print(f"\033[93m⚠️  No {label}s selected. Pick at least one.\033[0m\n")
+                continue
+            break
+
+        try:
+            num = int(raw)
+            if 1 <= num <= len(files):
+                if num in selected_indices:
+                    selected_indices.remove(num)
+                    print(f"\033[93m➖ Removed:\033[0m {files[num - 1].name}\n")
+                else:
+                    selected_indices.add(num)
+                    print(f"\033[92m➕ Added:\033[0m {files[num - 1].name}\n")
+            else:
+                print(f"\033[93mPlease enter a number between 1 and {len(files)}.\033[0m\n")
+        except ValueError:
+            print("\033[93mInvalid input. Enter a number or press Enter to confirm.\033[0m\n")
+
+    return [files[i - 1] for i in sorted(selected_indices)]
+
+
 # Add these functions to your djjtb/utils.py file
 
 def get_multifile_input(prompt_text="📁 Enter file paths", extensions=None, max_display=5):
@@ -1110,8 +1200,29 @@ from djjtb.media_utils import (
     get_join_dimensions,
     join_image_video,
     position_suffix,
+    find_video_for_image,
     clamp_to_longest_edge,
     build_slideshow_and_join,
     build_collage_and_join,
     create_collage,
+    create_collage_from_groups,
+    IMAGE_EXTENSIONS,
+    is_image_extension,
+    is_valid_image_file,
+    collect_images_from_folder,
+    collect_images_from_paths,
+    collect_images_from_path_list,
+    get_output_directory,
+    group_images_by_parent_folder,
+    get_match_key,
+    group_images_by_match,
+    create_sequential_groups,
+    build_groups_for_images,
+    get_max_dimensions,
+    calculate_padding_offset,
+    create_blurred_background,
+    get_save_format,
+    resize_pil_image,
+    fit_image_to_canvas,
+    rotate_or_flip_image,
 )
