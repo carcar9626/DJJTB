@@ -1079,11 +1079,14 @@ def get_path_input(prompt, max_attempts=5):
     print("\033[93m Too many invalid attempts. Exiting.\033[0m", file=sys.stderr)
     sys.exit(1)
 
-def get_int_input(prompt, min_val=None, max_val=None, max_attempts=5):
-    """Prompt user for an integer input, optionally with min and max constraints."""
+def get_int_input(prompt, min_val=None, max_val=None, max_attempts=5, default=None):
+    """Prompt user for an integer input, optionally with min and max constraints.
+    If default is not None, pressing Enter on an empty line returns it."""
     attempt = 0
     while attempt < max_attempts:
         val_str = input(f"\033[93m{prompt}\033[0m:\n > ").strip()
+        if not val_str and default is not None:
+            return default
         try:
             val = int(val_str)
             if min_val is not None and val < min_val:
@@ -1101,11 +1104,14 @@ def get_int_input(prompt, min_val=None, max_val=None, max_attempts=5):
     print("\033[93mToo many invalid attempts. Exiting.\033[0m", file=sys.stderr)
     sys.exit(1)
 
-def get_float_input(prompt, min_val=None, max_val=None, max_attempts=5):
-    """Prompt user for a float input, optionally with min and max constraints."""
+def get_float_input(prompt, min_val=None, max_val=None, max_attempts=5, default=None):
+    """Prompt user for a float input, optionally with min and max constraints.
+    If default is not None, pressing Enter on an empty line returns it."""
     attempt = 0
     while attempt < max_attempts:
         val_str = input(f"\033[93m{prompt}\033[0m").strip()
+        if not val_str and default is not None:
+            return default
         try:
             val = float(val_str)
             if min_val is not None and val < min_val:

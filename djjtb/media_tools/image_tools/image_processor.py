@@ -2,8 +2,105 @@ import os
 import sys
 import subprocess
 import pathlib
-from PIL import Image
+import tempfile
+import shutil
+from PIL import Image, ImageChops
+import numpy as np
+from scipy.ndimage import label, find_objects
 import djjtb.utils as djj
+
+
+# Shared by Rotate/Flip and Convert Format: user-chosen format name -> (Pillow format, extension).
+OUTPUT_FORMAT_MAP = {
+    'png': ('PNG', '.png'),
+    'jpg': ('JPEG', '.jpg'),
+    'webp': ('WEBP', '.webp'),
+    'bmp': ('BMP', '.bmp'),
+    'gif': ('GIF', '.gif'),
+}
+
+
+# ─── Shared per-image batch loop (Pad / Crop / Resize / Crop+Resize / Convert) ─
+
+def _default_save_kwargs(pillow_format, image):
+    """Standard JPEG/WEBP quality=95 save rule shared by Pad/Crop/Resize/Crop+Resize."""
+    save_kwargs = {}
+    if pillow_format == 'JPEG':
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
+        save_kwargs['quality'] = 95
+    elif pillow_format == 'WEBP':
+        save_kwargs['quality'] = 95
+    return image, save_kwargs
+
+
+def _run_batch(images, subfolder_name, suffix, header_msg, transform_fn,
+               save_format_fn=None, save_kwargs_fn=None, logger=None, error_verb="process"):
+    """
+    Shared per-image batch loop for Pad/Crop/Resize/Crop+Resize/Convert.
+
+    transform_fn(img, img_path) -> processed PIL Image ready to save; raise
+    to record a per-image failure (caught below like any other error).
+    save_format_fn(img_path) -> (pillow_format, file_ext); defaults to
+    djj.get_save_format (source format preserved).
+    save_kwargs_fn(pillow_format, image) -> (image, save_kwargs); defaults
+    to the standard JPEG/WEBP quality=95 rule.
+    Output: each image's parent/Output/<subfolder_name>/<stem>_<suffix><ext>.
+    """
+    if save_format_fn is None:
+        save_format_fn = djj.get_save_format
+    if save_kwargs_fn is None:
+        save_kwargs_fn = _default_save_kwargs
+
+    print()
+    print(f"{len(images)} \033[93mimages found\033[0m")
+    print()
+    print(header_msg)
+
+    successful = []
+    failed = []
+    skipped = []
+    output_dirs_used = set()
+
+    for i, img_path in enumerate(images, 1):
+        try:
+            with Image.open(img_path) as img:
+                processed = transform_fn(img, img_path)
+
+                pillow_format, file_ext = save_format_fn(img_path)
+                img_path_obj = pathlib.Path(img_path)
+                img_output_dir = img_path_obj.parent / "Output" / subfolder_name
+                img_output_dir.mkdir(parents=True, exist_ok=True)
+                output_filename = f"{img_path_obj.stem}_{suffix}{file_ext}"
+                output_path = img_output_dir / output_filename
+
+                if output_path.exists():
+                    skipped.append(img_path_obj.name)
+                    output_dirs_used.add(str(img_output_dir))
+                    sys.stdout.write(f"\rProcessing {i}/{len(images)} ({i/len(images)*100:.1f}%)...")
+                    sys.stdout.flush()
+                    continue
+
+                processed, save_kwargs = save_kwargs_fn(pillow_format, processed)
+
+                processed.save(str(output_path), format=pillow_format, **save_kwargs)
+                successful.append(img_path_obj.name)
+                output_dirs_used.add(str(img_output_dir))
+
+            sys.stdout.write(f"\rProcessing {i}/{len(images)} ({i/len(images)*100:.1f}%)...")
+            sys.stdout.flush()
+
+        except Exception as e:
+            failed.append((pathlib.Path(img_path).name, str(e)))
+            if logger:
+                logger.error(f"Failed to {error_verb} {img_path}: {e}")
+            sys.stdout.write(f"\rProcessing {i}/{len(images)} ({i/len(images)*100:.1f}%)... ❌")
+            sys.stdout.flush()
+
+    sys.stdout.write("\r" + " " * 60 + "\r")
+    sys.stdout.flush()
+
+    return successful, failed, skipped, sorted(output_dirs_used)
 
 
 # ─── Pad ──────────────────────────────────────────────────────────────────────
@@ -18,94 +115,49 @@ def pad_images(images, output_dir, shape, pad_percent, color, custom_width, cust
     os.makedirs(output_dir, exist_ok=True)
     logger = djj.setup_logging(output_dir, script_name="image_processor_pad")
 
-    print()
-    print(f"{len(images)} \033[93mimages found\033[0m")
-    print()
-    print("\033[93mPadding images...\033[0m")
-
-    successful = []
-    failed = []
-    skipped = []
-    output_dirs_used = set()
-
     color_map = {'white': (255, 255, 255, 255), 'black': (0, 0, 0, 255), 'grey': (128, 128, 128, 255)}
     padding_color = custom_color if color == 'custom' else color_map.get(color, (255, 255, 255, 255))
 
-    for i, img_path in enumerate(images, 1):
-        try:
-            with Image.open(img_path) as img:
-                img = img.convert('RGBA')
-                width, height = img.size
+    def transform(img, img_path):
+        img = img.convert('RGBA')
+        width, height = img.size
 
-                if shape == 'square':
-                    target_size = max(width, height)
-                    new_width = new_height = target_size
-                    position = 'center'
-                elif shape == 'landscape':
-                    new_width = int(height * 16 / 9)
-                    new_height = height
-                    position = padding_position
-                elif shape == 'portrait':
-                    new_width = int(height * 9 / 16)
-                    new_height = height
-                    position = padding_position
-                elif shape == 'percent':
-                    pad_x = int(width * pad_percent / 100)
-                    pad_y = int(height * pad_percent / 100)
-                    new_width = width + pad_x * 2
-                    new_height = height + pad_y * 2
-                    position = 'center'  # Percent mode always centers
-                else:  # custom
-                    new_width = custom_width
-                    new_height = custom_height
-                    position = padding_position
+        if shape == 'square':
+            target_size = max(width, height)
+            new_width = new_height = target_size
+            position = 'center'
+        elif shape == 'landscape':
+            new_width = int(height * 16 / 9)
+            new_height = height
+            position = padding_position
+        elif shape == 'portrait':
+            new_width = int(height * 9 / 16)
+            new_height = height
+            position = padding_position
+        elif shape == 'percent':
+            pad_x = int(width * pad_percent / 100)
+            pad_y = int(height * pad_percent / 100)
+            new_width = width + pad_x * 2
+            new_height = height + pad_y * 2
+            position = 'center'  # Percent mode always centers
+        else:  # custom
+            new_width = custom_width
+            new_height = custom_height
+            position = padding_position
 
-                if bg_type == 'image':
-                    new_image = djj.create_blurred_background(img, new_width, new_height, bg_mode, bg_blur, bg_opacity)
-                else:
-                    new_image = Image.new('RGBA', (new_width, new_height), padding_color)
+        if bg_type == 'image':
+            new_image = djj.create_blurred_background(img, new_width, new_height, bg_mode, bg_blur, bg_opacity)
+        else:
+            new_image = Image.new('RGBA', (new_width, new_height), padding_color)
 
-                offset = djj.calculate_padding_offset(width, height, new_width, new_height, position)
-                new_image.paste(img, offset, img)
+        offset = djj.calculate_padding_offset(width, height, new_width, new_height, position)
+        new_image.paste(img, offset, img)
+        return new_image
 
-                pillow_format, file_ext = djj.get_save_format(img_path)
-                img_path_obj = pathlib.Path(img_path)
-                img_output_dir = img_path_obj.parent / "Output" / "Padded"
-                img_output_dir.mkdir(parents=True, exist_ok=True)
-                output_filename = f"{img_path_obj.stem}_padded{file_ext}"
-                output_path = img_output_dir / output_filename
-
-                if output_path.exists():
-                    skipped.append(img_path_obj.name)
-                    output_dirs_used.add(str(img_output_dir))
-                    sys.stdout.write(f"\rProcessing {i}/{len(images)} ({i/len(images)*100:.1f}%)...")
-                    sys.stdout.flush()
-                    continue
-
-                save_kwargs = {}
-                if pillow_format == 'JPEG':
-                    new_image = new_image.convert('RGB')
-                    save_kwargs['quality'] = 95
-                elif pillow_format == 'WEBP':
-                    save_kwargs['quality'] = 95
-
-                new_image.save(str(output_path), format=pillow_format, **save_kwargs)
-                successful.append(img_path_obj.name)
-                output_dirs_used.add(str(img_output_dir))
-
-            sys.stdout.write(f"\rProcessing {i}/{len(images)} ({i/len(images)*100:.1f}%)...")
-            sys.stdout.flush()
-
-        except Exception as e:
-            failed.append((pathlib.Path(img_path).name, str(e)))
-            logger.error(f"Failed to process {img_path}: {e}")
-            sys.stdout.write(f"\rProcessing {i}/{len(images)} ({i/len(images)*100:.1f}%)... ❌")
-            sys.stdout.flush()
-
-    sys.stdout.write("\r" + " " * 60 + "\r")
-    sys.stdout.flush()
-
-    return successful, failed, skipped, sorted(output_dirs_used)
+    return _run_batch(
+        images, "Padded", "padded", "\033[93mPadding images...\033[0m",
+        transform, logger=logger, error_verb="process"
+    )
 
 
 # ─── Crop Edges ───────────────────────────────────────────────────────────────
@@ -198,79 +250,29 @@ def crop_images(images, edges, trim_px):
     Output format always matches the source file — no conversion.
     Output: each image's parent/Output/Cropped/
     """
-    print()
-    print(f"{len(images)} \033[93mimages found\033[0m")
-    print()
     edge_label = " + ".join(e.capitalize() for e in sorted(edges))
-    print(f"\033[93mCropping images —\033[0m {edge_label} \033[93m@ {trim_px}px...\033[0m")
 
-    successful = []
-    failed = []
-    skipped = []
-    output_dirs_used = set()
+    def transform(img, img_path):
+        width, height = img.size
 
-    for i, img_path in enumerate(images, 1):
-        try:
-            with Image.open(img_path) as img:
-                width, height = img.size
+        left_trim   = trim_px if 'left' in edges else 0
+        right_trim  = trim_px if 'right' in edges else 0
+        top_trim    = trim_px if 'top' in edges else 0
+        bottom_trim = trim_px if 'bottom' in edges else 0
 
-                left_trim   = trim_px if 'left' in edges else 0
-                right_trim  = trim_px if 'right' in edges else 0
-                top_trim    = trim_px if 'top' in edges else 0
-                bottom_trim = trim_px if 'bottom' in edges else 0
+        new_width = width - left_trim - right_trim
+        new_height = height - top_trim - bottom_trim
+        if new_width <= 0 or new_height <= 0:
+            raise ValueError(f"Trim too large for {width}x{height} image")
 
-                new_width = width - left_trim - right_trim
-                new_height = height - top_trim - bottom_trim
+        box = (left_trim, top_trim, width - right_trim, height - bottom_trim)
+        return img.crop(box)
 
-                if new_width <= 0 or new_height <= 0:
-                    failed.append((pathlib.Path(img_path).name,
-                                   f"Trim too large for {width}x{height} image"))
-                    sys.stdout.write(f"\rProcessing {i}/{len(images)} ({i/len(images)*100:.1f}%)... ❌")
-                    sys.stdout.flush()
-                    continue
-
-                box = (left_trim, top_trim, width - right_trim, height - bottom_trim)
-                cropped = img.crop(box)
-
-                pillow_format, file_ext = djj.get_save_format(img_path)
-                img_path_obj = pathlib.Path(img_path)
-                img_output_dir = img_path_obj.parent / "Output" / "Cropped"
-                img_output_dir.mkdir(parents=True, exist_ok=True)
-                output_filename = f"{img_path_obj.stem}_cropped{file_ext}"
-                output_path = img_output_dir / output_filename
-
-                if output_path.exists():
-                    skipped.append(img_path_obj.name)
-                    output_dirs_used.add(str(img_output_dir))
-                    sys.stdout.write(f"\rProcessing {i}/{len(images)} ({i/len(images)*100:.1f}%)...")
-                    sys.stdout.flush()
-                    continue
-
-                save_kwargs = {}
-                if pillow_format == 'JPEG' and cropped.mode == 'RGBA':
-                    cropped = cropped.convert('RGB')
-                    save_kwargs['quality'] = 95
-                elif pillow_format == 'JPEG':
-                    save_kwargs['quality'] = 95
-                elif pillow_format == 'WEBP':
-                    save_kwargs['quality'] = 95
-
-                cropped.save(str(output_path), format=pillow_format, **save_kwargs)
-                successful.append(img_path_obj.name)
-                output_dirs_used.add(str(img_output_dir))
-
-            sys.stdout.write(f"\rProcessing {i}/{len(images)} ({i/len(images)*100:.1f}%)...")
-            sys.stdout.flush()
-
-        except Exception as e:
-            failed.append((pathlib.Path(img_path).name, str(e)))
-            sys.stdout.write(f"\rProcessing {i}/{len(images)} ({i/len(images)*100:.1f}%)... ❌")
-            sys.stdout.flush()
-
-    sys.stdout.write("\r" + " " * 60 + "\r")
-    sys.stdout.flush()
-
-    return successful, failed, skipped, sorted(output_dirs_used)
+    return _run_batch(
+        images, "Cropped", "cropped",
+        f"\033[93mCropping images —\033[0m {edge_label} \033[93m@ {trim_px}px...\033[0m",
+        transform
+    )
 
 
 # ─── Resize (in-memory, chainable after crop) ────────────────────────────────
@@ -319,60 +321,10 @@ def resize_only_images(images, dimension_type, desired_width, desired_height, ma
     Resize with no cropping step. Preserves source format.
     Output: each image's parent/Output/Resized/
     """
-    print()
-    print(f"{len(images)} \033[93mimages found\033[0m")
-    print()
-    print("\033[93mResizing images...\033[0m")
+    def transform(img, img_path):
+        return djj.resize_pil_image(img, dimension_type, desired_width, desired_height, manual_mode)
 
-    successful = []
-    failed = []
-    skipped = []
-    output_dirs_used = set()
-
-    for i, img_path in enumerate(images, 1):
-        try:
-            with Image.open(img_path) as img:
-                resized = djj.resize_pil_image(img, dimension_type, desired_width, desired_height, manual_mode)
-
-                pillow_format, file_ext = djj.get_save_format(img_path)
-                img_path_obj = pathlib.Path(img_path)
-                img_output_dir = img_path_obj.parent / "Output" / "Resized"
-                img_output_dir.mkdir(parents=True, exist_ok=True)
-                output_filename = f"{img_path_obj.stem}_r{file_ext}"
-                output_path = img_output_dir / output_filename
-
-                if output_path.exists():
-                    skipped.append(img_path_obj.name)
-                    output_dirs_used.add(str(img_output_dir))
-                    sys.stdout.write(f"\rProcessing {i}/{len(images)} ({i/len(images)*100:.1f}%)...")
-                    sys.stdout.flush()
-                    continue
-
-                save_kwargs = {}
-                if pillow_format == 'JPEG' and resized.mode == 'RGBA':
-                    resized = resized.convert('RGB')
-                    save_kwargs['quality'] = 95
-                elif pillow_format == 'JPEG':
-                    save_kwargs['quality'] = 95
-                elif pillow_format == 'WEBP':
-                    save_kwargs['quality'] = 95
-
-                resized.save(str(output_path), format=pillow_format, **save_kwargs)
-                successful.append(img_path_obj.name)
-                output_dirs_used.add(str(img_output_dir))
-
-            sys.stdout.write(f"\rProcessing {i}/{len(images)} ({i/len(images)*100:.1f}%)...")
-            sys.stdout.flush()
-
-        except Exception as e:
-            failed.append((pathlib.Path(img_path).name, str(e)))
-            sys.stdout.write(f"\rProcessing {i}/{len(images)} ({i/len(images)*100:.1f}%)... ❌")
-            sys.stdout.flush()
-
-    sys.stdout.write("\r" + " " * 60 + "\r")
-    sys.stdout.flush()
-
-    return successful, failed, skipped, sorted(output_dirs_used)
+    return _run_batch(images, "Resized", "r", "\033[93mResizing images...\033[0m", transform)
 
 
 def crop_and_resize_images(images, edges, trim_px, dimension_type, desired_width, desired_height, manual_mode='1'):
@@ -380,92 +332,51 @@ def crop_and_resize_images(images, edges, trim_px, dimension_type, desired_width
     Crop selected edges, then resize — all in-memory per image, one save.
     Output: each image's parent/Output/Cropped_Resized/
     """
-    print()
-    print(f"{len(images)} \033[93mimages found\033[0m")
-    print()
     edge_label = " + ".join(label for key, label in CROP_EDGE_OPTIONS if key in edges)
-    print(f"\033[93mCropping ({edge_label} @ {trim_px}px) then resizing...\033[0m")
 
-    successful = []
-    failed = []
-    skipped = []
-    output_dirs_used = set()
+    def transform(img, img_path):
+        width, height = img.size
 
-    for i, img_path in enumerate(images, 1):
-        try:
-            with Image.open(img_path) as img:
-                width, height = img.size
+        left_trim   = trim_px if 'left' in edges else 0
+        right_trim  = trim_px if 'right' in edges else 0
+        top_trim    = trim_px if 'top' in edges else 0
+        bottom_trim = trim_px if 'bottom' in edges else 0
 
-                left_trim   = trim_px if 'left' in edges else 0
-                right_trim  = trim_px if 'right' in edges else 0
-                top_trim    = trim_px if 'top' in edges else 0
-                bottom_trim = trim_px if 'bottom' in edges else 0
+        new_width = width - left_trim - right_trim
+        new_height = height - top_trim - bottom_trim
+        if new_width <= 0 or new_height <= 0:
+            raise ValueError(f"Trim too large for {width}x{height} image")
 
-                new_width = width - left_trim - right_trim
-                new_height = height - top_trim - bottom_trim
+        box = (left_trim, top_trim, width - right_trim, height - bottom_trim)
+        cropped = img.crop(box)
+        return djj.resize_pil_image(cropped, dimension_type, desired_width, desired_height, manual_mode)
 
-                if new_width <= 0 or new_height <= 0:
-                    failed.append((pathlib.Path(img_path).name,
-                                   f"Trim too large for {width}x{height} image"))
-                    sys.stdout.write(f"\rProcessing {i}/{len(images)} ({i/len(images)*100:.1f}%)... ❌")
-                    sys.stdout.flush()
-                    continue
-
-                box = (left_trim, top_trim, width - right_trim, height - bottom_trim)
-                cropped = img.crop(box)
-                resized = djj.resize_pil_image(cropped, dimension_type, desired_width, desired_height, manual_mode)
-
-                pillow_format, file_ext = djj.get_save_format(img_path)
-                img_path_obj = pathlib.Path(img_path)
-                img_output_dir = img_path_obj.parent / "Output" / "Cropped_Resized"
-                img_output_dir.mkdir(parents=True, exist_ok=True)
-                output_filename = f"{img_path_obj.stem}_cr{file_ext}"
-                output_path = img_output_dir / output_filename
-
-                if output_path.exists():
-                    skipped.append(img_path_obj.name)
-                    output_dirs_used.add(str(img_output_dir))
-                    sys.stdout.write(f"\rProcessing {i}/{len(images)} ({i/len(images)*100:.1f}%)...")
-                    sys.stdout.flush()
-                    continue
-
-                save_kwargs = {}
-                if pillow_format == 'JPEG' and resized.mode == 'RGBA':
-                    resized = resized.convert('RGB')
-                    save_kwargs['quality'] = 95
-                elif pillow_format == 'JPEG':
-                    save_kwargs['quality'] = 95
-                elif pillow_format == 'WEBP':
-                    save_kwargs['quality'] = 95
-
-                resized.save(str(output_path), format=pillow_format, **save_kwargs)
-                successful.append(img_path_obj.name)
-                output_dirs_used.add(str(img_output_dir))
-
-            sys.stdout.write(f"\rProcessing {i}/{len(images)} ({i/len(images)*100:.1f}%)...")
-            sys.stdout.flush()
-
-        except Exception as e:
-            failed.append((pathlib.Path(img_path).name, str(e)))
-            sys.stdout.write(f"\rProcessing {i}/{len(images)} ({i/len(images)*100:.1f}%)... ❌")
-            sys.stdout.flush()
-
-    sys.stdout.write("\r" + " " * 60 + "\r")
-    sys.stdout.flush()
-
-    return successful, failed, skipped, sorted(output_dirs_used)
+    return _run_batch(
+        images, "Cropped_Resized", "cr",
+        f"\033[93mCropping ({edge_label} @ {trim_px}px) then resizing...\033[0m",
+        transform
+    )
 
 
-def print_pad_crop_summary(title, successful, failed, skipped, output_dirs_used, output_dir_fallback):
-    """Shared summary printer for Pad / Crop / Crop+Resize / Resize."""
+def print_batch_summary(title, successful, failed, skipped, output_dirs_used,
+                         output_dir_fallback, log_filename=None,
+                         success_label="Successfully processed", count_label="images"):
+    """
+    Shared summary printer for Pad/Crop/Resize/Crop+Resize/Convert/Rotate+Flip/Strip.
+    `successful` may be a list (its length is shown) or, for Strip's N-parts-
+    per-image case, an int count already computed by the caller.
+    """
     print()
     print(f"\033[93m{title}\033[0m")
     print("-------------")
-    print(f"✅ \033[93mSuccessfully processed:\033[0m {len(successful)} images")
+    count = len(successful) if isinstance(successful, list) else successful
+    label_suffix = f" {count_label}" if count_label else ""
+    print(f"✅ \033[93m{success_label}:\033[0m {count}{label_suffix}")
     if skipped:
         print(f"⏭️  \033[93mSkipped (already exists):\033[0m {len(skipped)}")
     if failed:
-        print(f"❌ \033[93mFailed:\033[0m {len(failed)} (see image_processor_pad_log.txt in output folder)")
+        log_suffix = f" (see {log_filename} in output folder)" if log_filename else ""
+        print(f"❌ \033[93mFailed:\033[0m {len(failed)}{log_suffix}")
         for name, err in failed[:3]:
             print(f"   • {name}: {err}")
     if len(output_dirs_used) == 1:
@@ -503,16 +414,9 @@ def run_pad(images, is_folder_mode, first_folder):
     custom_height = None
 
     if shape == 'percent':
-        while True:
-            pct_input = input("\033[93mPad percentage per side [default: 10]:\033[0m\n -> ").strip()
-            try:
-                pad_percent = float(pct_input) if pct_input else 10.0
-                if pad_percent <= 0:
-                    print("\033[93mPlease enter a positive number.\033[0m")
-                    continue
-                break
-            except ValueError:
-                print("\033[93mPlease enter a valid number.\033[0m")
+        pad_percent = djj.get_float_input(
+            "Pad percentage per side [default: 10]", min_val=0.0001, default=10.0
+        )
         try:
             with Image.open(images[0]) as _ex:
                 img_w_example, img_h_example = _ex.size
@@ -614,7 +518,8 @@ def run_pad(images, is_folder_mode, first_folder):
         padding_position, bg_type, bg_mode, bg_blur, bg_opacity
     )
 
-    print_pad_crop_summary("Padding Summary", successful, failed, skipped, output_dirs_used, output_dir)
+    print_batch_summary("Padding Summary", successful, failed, skipped, output_dirs_used, output_dir,
+                         log_filename="image_processor_pad_log.txt")
 
 
 def run_crop(images, is_folder_mode, first_folder):
@@ -626,7 +531,7 @@ def run_crop(images, is_folder_mode, first_folder):
     print("-------------")
     successful, failed, skipped, output_dirs_used = crop_images(images, edges, trim_px)
 
-    print_pad_crop_summary(
+    print_batch_summary(
         "Cropping Summary", successful, failed, skipped, output_dirs_used,
         djj.get_output_directory(images, is_folder_mode=is_folder_mode, first_folder=first_folder, subfolder_name="Cropped")
     )
@@ -643,7 +548,7 @@ def run_crop_and_resize(images, is_folder_mode, first_folder):
         images, edges, trim_px, dimension_type, desired_width, desired_height, manual_mode
     )
 
-    print_pad_crop_summary(
+    print_batch_summary(
         "Crop + Resize Summary", successful, failed, skipped, output_dirs_used,
         djj.get_output_directory(images, is_folder_mode=is_folder_mode, first_folder=first_folder, subfolder_name="Cropped_Resized")
     )
@@ -657,7 +562,7 @@ def run_resize_only(images, is_folder_mode, first_folder):
         images, dimension_type, desired_width, desired_height, manual_mode
     )
 
-    print_pad_crop_summary(
+    print_batch_summary(
         "Resize Summary", successful, failed, skipped, output_dirs_used,
         djj.get_output_directory(images, is_folder_mode=is_folder_mode, first_folder=first_folder, subfolder_name="Resized")
     )
@@ -682,8 +587,7 @@ def rotate_flip_batch(images, base_path, operation, choice, custom_angle, output
 
     successful = []
     failed = []
-    format_map = {'png': ('PNG', '.png'), 'jpg': ('JPEG', '.jpg'), 'bmp': ('BMP', '.bmp'), 'gif': ('GIF', '.gif')}
-    pillow_format, file_extension = format_map[output_format.lower()]
+    pillow_format, file_extension = OUTPUT_FORMAT_MAP[output_format.lower()]
 
     for i, img_path in enumerate(images, 1):
         img_path = pathlib.Path(img_path)
@@ -760,16 +664,225 @@ def run_rotate_flip(images, base_path):
     print("-------------")
     successful, failed, output_dir = rotate_flip_batch(images, base_path, operation, choice, custom_angle, output_format)
 
-    print("\n" * 1)
-    print("\033[93mRotate/Flip Summary\033[0m")
-    print("-------------")
-    print(f"\033[93m✅ Successfully processed:\033[0m {len(successful)}\033[93m images\033[0m")
-    if failed:
-        print(f"\033[93mFailed operations:\033[0m {len(failed)} \033[93m(see image_processor_rotate_flip_log.txt in output folder)\033[0m")
-    print(f"\033[93mOutput folder:\033[0m \n{output_dir}")
-    print("\n" * 2)
+    print_batch_summary(
+        "Rotate/Flip Summary", successful, failed, [], [output_dir], output_dir,
+        log_filename="image_processor_rotate_flip_log.txt"
+    )
 
-    djj.prompt_open_folder(output_dir)
+
+# ─── Convert Format ───────────────────────────────────────────────────────────
+
+def convert_images(images, output_dir, output_format, keep_metadata, quality=95):
+    """
+    Convert images to the specified format.
+    Output: each image's parent/Output/Converted/
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    logger = djj.setup_logging(output_dir, script_name="image_processor_convert")
+
+    pillow_format, file_ext = OUTPUT_FORMAT_MAP[output_format]
+
+    def transform(img, img_path):
+        if pillow_format == 'JPEG':
+            if img.mode in ('RGBA', 'LA', 'P'):
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                if img.mode == 'P':
+                    img = img.convert('RGBA')
+                background.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
+                img = background
+            elif img.mode not in ('RGB', 'L'):
+                img = img.convert('RGB')
+        elif pillow_format in ('PNG', 'WEBP'):
+            if img.mode not in ('RGB', 'RGBA', 'L', 'LA'):
+                img = img.convert('RGBA')
+        return img
+
+    def save_kwargs_fn(_pillow_format, image):
+        save_kwargs = {}
+        if keep_metadata and _pillow_format in ('JPEG', 'PNG', 'WEBP'):
+            exif = image.info.get('exif')
+            if exif:
+                save_kwargs['exif'] = exif
+        if _pillow_format in ('JPEG', 'WEBP'):
+            save_kwargs['quality'] = quality
+        return image, save_kwargs
+
+    return _run_batch(
+        images, "Converted", "c", "\033[93mConverting images...\033[0m",
+        transform, save_format_fn=lambda p: (pillow_format, file_ext),
+        save_kwargs_fn=save_kwargs_fn, logger=logger, error_verb="convert"
+    )
+
+
+def run_convert(images, is_folder_mode, first_folder):
+    format_choice = djj.prompt_choice(
+        "\033[93mOutput format:\033[0m\n"
+        "1. PNG\n"
+        "2. JPG\n"
+        "3. WebP\n"
+        "4. BMP\n"
+        "5. GIF\n",
+        ['1', '2', '3', '4', '5'],
+        default='1'
+    )
+    print()
+
+    format_map = {'1': 'png', '2': 'jpg', '3': 'webp', '4': 'bmp', '5': 'gif'}
+    output_format = format_map[format_choice]
+
+    quality = 95
+    if output_format in ('jpg', 'webp'):
+        quality_input = input("\033[93mQuality [1-100, default: 95]:\033[0m\n -> ").strip()
+        try:
+            if quality_input:
+                quality = int(quality_input)
+                quality = max(1, min(100, quality))
+        except ValueError:
+            quality = 95
+        print()
+
+    keep_metadata = djj.prompt_choice(
+        "\033[93mKeep metadata?\033[0m\n1. Yes\n2. No\n",
+        ['1', '2'],
+        default='2'
+    ) == '1'
+    print()
+
+    output_dir = djj.get_output_directory(images, is_folder_mode=is_folder_mode, first_folder=first_folder, subfolder_name="Converted")
+
+    print("-------------")
+    successful, failed, skipped, output_dirs_used = convert_images(
+        images, output_dir, output_format, keep_metadata, quality
+    )
+
+    print_batch_summary("Convert Summary", successful, failed, skipped, output_dirs_used, output_dir,
+                         log_filename="image_processor_convert_log.txt")
+
+
+# ─── Strip Padding / Split Collage ────────────────────────────────────────────
+
+# Commonly used solid padding colors to prioritize (RGB)
+KNOWN_BG_COLORS = [
+    (255, 255, 255),  # white
+    (0, 0, 0),        # black
+    (136, 136, 136),  # gray
+    (0, 255, 0),      # chroma green
+    (0, 0, 255),      # chroma blue
+]
+
+def detect_border_color(im, tolerance=5):
+    corners = [
+        im.getpixel((0, 0)),
+        im.getpixel((im.width - 1, 0)),
+        im.getpixel((0, im.height - 1)),
+        im.getpixel((im.width - 1, im.height - 1)),
+    ]
+    # Count all corner occurrences
+    color_counts = {}
+    for c in corners:
+        color_counts[c] = color_counts.get(c, 0) + 1
+
+    # Prefer known padding colors if present
+    for color in KNOWN_BG_COLORS:
+        if color in color_counts:
+            return color
+
+    # Fall back to most common corner color
+    return max(color_counts, key=color_counts.get)
+
+
+def trim_multiple_regions(im, tolerance=15, min_width=20, min_height=20):
+    im = im.convert("RGB")
+    bg_color = detect_border_color(im, tolerance)
+    bg = Image.new("RGB", im.size, bg_color)
+    diff = ImageChops.difference(im, bg)
+    diff = Image.eval(diff, lambda x: 255 if x > tolerance else 0)
+
+    diff_np = np.array(diff)
+    mask = diff_np.sum(axis=2) > 0
+
+    labeled, num_features = label(mask)
+    slices = find_objects(labeled)
+
+    cropped_images = []
+    for s in slices:
+        w, h = s[1].stop - s[1].start, s[0].stop - s[0].start
+        if w >= min_width and h >= min_height:
+            cropped = im.crop((s[1].start, s[0].start, s[1].stop, s[0].stop))
+            cropped_images.append(cropped)
+
+    return cropped_images
+
+
+def strip_images(images, output_dir):
+    """
+    Split each image into its detected sub-regions (strips padding / splits
+    a collage back into its parts). 1-image-in -> N-images-out, so `successful`
+    counts parts produced, not images processed.
+    Output: each image's parent/Output/Stripped/
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    logger = djj.setup_logging(output_dir, script_name="image_processor_strip")
+
+    print()
+    print(f"{len(images)} \033[93mimages found\033[0m")
+    print()
+    print("\033[93mStripping padding / splitting collage...\033[0m")
+
+    successful = 0
+    failed = []
+    output_dirs_used = set()
+
+    for i, img_path in enumerate(images, 1):
+        img_path_obj = pathlib.Path(img_path)
+        try:
+            with Image.open(img_path) as img:
+                cropped_images = trim_multiple_regions(img)
+
+                img_output_dir = img_path_obj.parent / "Output" / "Stripped"
+                img_output_dir.mkdir(parents=True, exist_ok=True)
+                output_dirs_used.add(str(img_output_dir))
+
+                for idx, cropped in enumerate(cropped_images, 1):
+                    output_filename = f"{img_path_obj.stem}_part{idx}.png"
+                    out_path = img_output_dir / output_filename
+                    cropped.save(out_path)
+                    successful += 1
+
+            sys.stdout.write(f"\rProcessing {i}/{len(images)} ({i/len(images)*100:.1f}%)...")
+            sys.stdout.flush()
+
+        except Exception as e:
+            failed.append((img_path_obj.name, str(e)))
+            logger.error(f"Failed to process {img_path_obj.name}: {e}")
+            sys.stdout.write(f"\rProcessing {i}/{len(images)} ({i/len(images)*100:.1f}%)... ❌")
+            sys.stdout.flush()
+
+    sys.stdout.write("\r" + " " * 60 + "\r")
+    sys.stdout.flush()
+
+    return successful, failed, sorted(output_dirs_used)
+
+
+def run_strip(images, is_folder_mode, first_folder):
+    print("\033[93mSuggested Background Colors for Collages:\033[0m")
+    print(" • \033[97mWhite\033[0m \033[94m(255,255,255);(#FFFFFF)\033[0m")
+    print(" • \033[30mBlack\033[0m \033[94m(0,0,0);(#000000)\033[0m")
+    print(" • \033[90mGray\033[0m \033[94m(136,136,136);(#888888)\033[0m")
+    print(" • \033[92mChroma Green\033[0m \033[94m(0,255,0);(#00FF00)\033[0m")
+    print(" • \033[96mChroma Blue\033[0m \033[94m(0,0,255);(#0000FF)\033[0m")
+    print("\033[93mThese are auto-detected.\n\033[0m")
+
+    output_dir = djj.get_output_directory(images, is_folder_mode=is_folder_mode, first_folder=first_folder, subfolder_name="Stripped")
+
+    print("-------------")
+    successful, failed, output_dirs_used = strip_images(images, output_dir)
+
+    print_batch_summary(
+        "Strip Padding Summary", successful, failed, [], output_dirs_used, output_dir,
+        log_filename="image_processor_strip_log.txt",
+        success_label="Parts produced", count_label=""
+    )
 
 
 # ─── Image Pairing / Joining / Collage ───────────────────────────────────────
@@ -1027,6 +1140,121 @@ def process_all_groups(groups, durations, transition_duration, logger,
     return success_count, error_count, list(paired_folders), list(joined_folders), list(comp_joined_folders)
 
 
+def _ask_grouping_params():
+    """
+    Ask grouping mode + group size / match type + num chars.
+    Shared by run_pairing's main flow and its Mode 3 re-collage loop.
+    """
+    pairing_mode = djj.prompt_choice(
+        "\033[93mGrouping mode:\033[0m\n"
+        "1. Sequential (by position)\n"
+        "2. Auto-match (by prefix/suffix)\n",
+        ['1', '2'],
+        default='1'
+    )
+    print()
+
+    group_size = None
+    match_type = None
+    num_chars = None
+
+    if pairing_mode == '1':
+        group_size = djj.get_int_input("Images per group [default: 3]", min_val=1, default=3)
+        print()
+    else:
+        match_type_choice = djj.prompt_choice(
+            "\033[93mMatch by:\033[0m\n1. Prefix\n2. Suffix\n",
+            ['1', '2'],
+            default='1'
+        )
+        match_type = 'prefix' if match_type_choice == '1' else 'suffix'
+        print()
+        num_chars = djj.get_int_input(f"Number of characters for {match_type} match [default: 4]", min_val=1, default=4)
+        print()
+
+    return pairing_mode, group_size, match_type, num_chars
+
+
+def _ask_collage_direction_and_edge(edge_calc_image_path, dimension_error_label="first image"):
+    """
+    Ask collage direction + longest-edge size.
+    Shared by run_pairing's main flow and its Mode 3 re-collage loop.
+    edge_calc_image_path is probed for the "2x shorter edge" option.
+    """
+    direction_choice = djj.prompt_choice(
+        "\033[93mCollage direction:\033[0m\n"
+        "1. Horizontal (default)\n"
+        "2. Vertical\n",
+        ['1', '2'],
+        default='1'
+    )
+    direction = 'H' if direction_choice == '1' else 'V'
+    print()
+
+    edge_choice = djj.prompt_choice(
+        "\033[93mLongest edge size:\033[0m\n"
+        "1. 1920px (default)\n"
+        "2. Custom\n"
+        "3. 2× shorter edge of first image\n",
+        ['1', '2', '3'],
+        default='1'
+    )
+    print()
+
+    if edge_choice == '1':
+        longest_edge = 1920
+    elif edge_choice == '2':
+        longest_edge = djj.get_int_input(
+            "\033[93mEnter longest edge in pixels:\033[0m",
+            min_val=100, max_val=9999
+        ) or 1920
+    else:
+        try:
+            with Image.open(edge_calc_image_path) as probe_img:
+                shorter = min(probe_img.width, probe_img.height)
+            longest_edge = shorter * 2
+            print(f"\033[93mUsing {longest_edge}px (2× {shorter}px shorter edge)\033[0m")
+        except Exception:
+            longest_edge = 1920
+            print(f"\033[93m⚠️  Could not read {dimension_error_label} dimensions, defaulting to 1920px\033[0m")
+    print()
+
+    return direction, longest_edge
+
+
+def _create_main_collage(folder_path, groups, collage_direction, collage_longest_edge, all_collage_folders):
+    """Create the main collage for a folder's groups. Shared by run_pairing modes 3/4/5."""
+    comp_dir = os.path.join(folder_path, "Output", "Comp")
+    collage_out = djj.create_collage_from_groups(groups, collage_direction, collage_longest_edge, comp_dir)
+    all_collage_folders.append(comp_dir)
+    return collage_out, comp_dir
+
+
+def _build_comp_join_collage_paths(groups, collage_out, do_comp_join, same_collage_params,
+                                    comp_collage_direction, comp_collage_longest_edge):
+    """
+    Build {stem: collage_path} for Comp_Joined routing. If comp join uses
+    different params, generates an alternate collage into a temp dir (caller
+    must clean up the returned temp_comp_dir). Shared by run_pairing modes 4/5.
+    """
+    temp_comp_dir = None
+    if do_comp_join and not same_collage_params:
+        temp_comp_dir = tempfile.mkdtemp(prefix="djjtb_comp_join_")
+        alt_collage_out = djj.create_collage_from_groups(
+            groups, comp_collage_direction, comp_collage_longest_edge, temp_comp_dir
+        )
+        collage_paths_by_stem = {}
+        for grp, cpath in zip(groups, alt_collage_out):
+            stem = pathlib.Path(grp[0]).stem
+            collage_paths_by_stem[stem] = cpath
+    else:
+        collage_paths_by_stem = {}
+        for grp, cpath in zip(groups, collage_out):
+            stem = pathlib.Path(grp[0]).stem
+            collage_paths_by_stem[stem] = cpath
+    return collage_paths_by_stem, temp_comp_dir
+
+
 def run_pairing(images, input_mode, input_path, include_subfolders):
     # ── Top-level mode ───────────────────────────────────────────────────
     top_mode = djj.prompt_choice(
@@ -1042,58 +1270,9 @@ def run_pairing(images, input_mode, input_path, include_subfolders):
     print()
 
     # ── Grouping mode ────────────────────────────────────────────────────
-    pairing_mode = djj.prompt_choice(
-        "\033[93mGrouping mode:\033[0m\n"
-        "1. Sequential (by position)\n"
-        "2. Auto-match (by prefix/suffix)\n",
-        ['1', '2'],
-        default='1'
-    )
-    print()
-
-    group_size = None
-    match_type = None
-    num_chars = None
-
-    if pairing_mode == '1':
-        while True:
-            try:
-                group_size_input = input("\033[93mImages per group\033[0m [default: 3]:\n -> ").strip()
-                if not group_size_input:
-                    group_size = 3
-                    break
-                group_size = int(group_size_input)
-                if group_size > 0:
-                    break
-                else:
-                    print("\033[93mPlease enter a positive number.\033[0m")
-            except ValueError:
-                print("\033[93mPlease enter a valid number.\033[0m")
-        print()
-    else:
-        # Auto-match: group size comes from however many images actually
-        # share a match key — no fixed count to ask for.
-        match_type_choice = djj.prompt_choice(
-            "\033[93mMatch by:\033[0m\n1. Prefix\n2. Suffix\n",
-            ['1', '2'],
-            default='1'
-        )
-        match_type = 'prefix' if match_type_choice == '1' else 'suffix'
-        print()
-        while True:
-            try:
-                nc_input = input(f"\033[93mNumber of characters for {match_type} match\033[0m [default: 4]:\n -> ").strip()
-                if not nc_input:
-                    num_chars = 4
-                    break
-                num_chars = int(nc_input)
-                if num_chars > 0:
-                    break
-                else:
-                    print("\033[93mPlease enter a positive number.\033[0m")
-            except ValueError:
-                print("\033[93mPlease enter a valid number.\033[0m")
-        print()
+    # Auto-match mode: group size comes from however many images actually
+    # share a match key — no fixed count to ask for.
+    pairing_mode, group_size, match_type, num_chars = _ask_grouping_params()
 
     # ── Collage params (modes 3, 4, 5) ────────────────────────────────────
     collage_direction = None
@@ -1106,43 +1285,7 @@ def run_pairing(images, input_mode, input_path, include_subfolders):
     comp_collage_longest_edge = None
 
     if top_mode in ('3', '4', '5'):
-        collage_direction_choice = djj.prompt_choice(
-            "\033[93mCollage direction:\033[0m\n"
-            "1. Horizontal (default)\n"
-            "2. Vertical\n",
-            ['1', '2'],
-            default='1'
-        )
-        collage_direction = 'H' if collage_direction_choice == '1' else 'V'
-        print()
-
-        edge_choice = djj.prompt_choice(
-            "\033[93mLongest edge size:\033[0m\n"
-            "1. 1920px (default)\n"
-            "2. Custom\n"
-            "3. 2× shorter edge of first image\n",
-            ['1', '2', '3'],
-            default='1'
-        )
-        print()
-
-        if edge_choice == '1':
-            collage_longest_edge = 1920
-        elif edge_choice == '2':
-            collage_longest_edge = djj.get_int_input(
-                "\033[93mEnter longest edge in pixels:\033[0m",
-                min_val=100, max_val=9999
-            ) or 1920
-        else:
-            try:
-                with Image.open(images[0]) as first_img:
-                    shorter = min(first_img.width, first_img.height)
-                collage_longest_edge = shorter * 2
-                print(f"\033[93mUsing {collage_longest_edge}px (2× {shorter}px shorter edge)\033[0m")
-            except Exception:
-                collage_longest_edge = 1920
-                print("\033[93m⚠️  Could not read first image dimensions, defaulting to 1920px\033[0m")
-        print()
+        collage_direction, collage_longest_edge = _ask_collage_direction_and_edge(images[0])
 
         # Comp join prompt (modes 4, 5) — ask before pairing params
         if top_mode in ('4', '5'):
@@ -1209,35 +1352,15 @@ def run_pairing(images, input_mode, input_path, include_subfolders):
 
     if top_mode in ('1', '4'):
         for i in range(max_group_size):
-            while True:
-                try:
-                    dur_input = input(f"\033[93mDuration for image {i+1} (seconds)\033[0m [default: 5]:\n -> ").strip()
-                    if not dur_input:
-                        duration = 5.0
-                        break
-                    duration = float(dur_input)
-                    if duration > 0:
-                        break
-                    else:
-                        print("\033[93mPlease enter a positive number.\033[0m")
-                except ValueError:
-                    print("\033[93mPlease enter a valid number.\033[0m")
+            duration = djj.get_float_input(
+                f"Duration for image {i+1} (seconds) [default: 5]", min_val=0.0001, default=5.0
+            )
             durations.append(duration)
             print()
 
-        while True:
-            try:
-                trans_input = input("\033[93mTransition duration (seconds)\033[0m [default: 2]:\n -> ").strip()
-                if not trans_input:
-                    transition_duration = 2.0
-                    break
-                transition_duration = float(trans_input)
-                if transition_duration >= 0:
-                    break
-                else:
-                    print("\033[93mPlease enter a non-negative number.\033[0m")
-            except ValueError:
-                print("\033[93mPlease enter a valid number.\033[0m")
+        transition_duration = djj.get_float_input(
+            "Transition duration (seconds) [default: 2]", min_val=0, default=2.0
+        )
         print()
 
         total_duration = sum(durations) - (len(durations) - 1) * transition_duration
@@ -1348,41 +1471,22 @@ def run_pairing(images, input_mode, input_path, include_subfolders):
 
         # ── Mode 3: Collage only ──────────────────────────────────────────
         elif top_mode == '3':
-            comp_dir = os.path.join(folder_path, "Output", "Comp")
-            collage_out = djj.create_collage_from_groups(
-                groups, collage_direction, collage_longest_edge, comp_dir
+            collage_out, comp_dir = _create_main_collage(
+                folder_path, groups, collage_direction, collage_longest_edge, all_collage_folders
             )
             total_success += len(collage_out)
-            all_collage_folders.append(comp_dir)
             _last_collage_out = list(collage_out)
             _collage_gen = 1
 
         # ── Mode 4: Collage + Pair ────────────────────────────────────────
         elif top_mode == '4':
-            import tempfile
-            import shutil as _shutil
-
-            comp_dir = os.path.join(folder_path, "Output", "Comp")
-            collage_out = djj.create_collage_from_groups(
-                groups, collage_direction, collage_longest_edge, comp_dir
+            collage_out, comp_dir = _create_main_collage(
+                folder_path, groups, collage_direction, collage_longest_edge, all_collage_folders
             )
-            all_collage_folders.append(comp_dir)
-
-            temp_comp_dir = None
-            if do_comp_join and not same_collage_params:
-                temp_comp_dir = tempfile.mkdtemp(prefix="djjtb_comp_join_")
-                alt_collage_out = djj.create_collage_from_groups(
-                    groups, comp_collage_direction, comp_collage_longest_edge, temp_comp_dir
-                )
-                collage_paths_by_stem = {}
-                for grp, cpath in zip(groups, alt_collage_out):
-                    stem = pathlib.Path(grp[0]).stem
-                    collage_paths_by_stem[stem] = cpath
-            else:
-                collage_paths_by_stem = {}
-                for grp, cpath in zip(groups, collage_out):
-                    stem = pathlib.Path(grp[0]).stem
-                    collage_paths_by_stem[stem] = cpath
+            collage_paths_by_stem, temp_comp_dir = _build_comp_join_collage_paths(
+                groups, collage_out, do_comp_join, same_collage_params,
+                comp_collage_direction, comp_collage_longest_edge
+            )
 
             s, e, pf, jf, cjf = process_all_groups(
                 groups, durations, transition_duration, logger,
@@ -1394,7 +1498,7 @@ def run_pairing(images, input_mode, input_path, include_subfolders):
             )
 
             if temp_comp_dir and os.path.exists(temp_comp_dir):
-                _shutil.rmtree(temp_comp_dir, ignore_errors=True)
+                shutil.rmtree(temp_comp_dir, ignore_errors=True)
             total_success += s
             total_error += e
             all_paired_folders.extend(pf)
@@ -1403,30 +1507,13 @@ def run_pairing(images, input_mode, input_path, include_subfolders):
 
         # ── Mode 5: Collage + Join only ───────────────────────────────────
         elif top_mode == '5':
-            import tempfile
-            import shutil as _shutil
-
-            comp_dir = os.path.join(folder_path, "Output", "Comp")
-            collage_out = djj.create_collage_from_groups(
-                groups, collage_direction, collage_longest_edge, comp_dir
+            collage_out, comp_dir = _create_main_collage(
+                folder_path, groups, collage_direction, collage_longest_edge, all_collage_folders
             )
-            all_collage_folders.append(comp_dir)
-
-            temp_comp_dir = None
-            if do_comp_join and not same_collage_params:
-                temp_comp_dir = tempfile.mkdtemp(prefix="djjtb_comp_join_")
-                alt_collage_out = djj.create_collage_from_groups(
-                    groups, comp_collage_direction, comp_collage_longest_edge, temp_comp_dir
-                )
-                collage_paths_by_stem = {}
-                for grp, cpath in zip(groups, alt_collage_out):
-                    stem = pathlib.Path(grp[0]).stem
-                    collage_paths_by_stem[stem] = cpath
-            else:
-                collage_paths_by_stem = {}
-                for grp, cpath in zip(groups, collage_out):
-                    stem = pathlib.Path(grp[0]).stem
-                    collage_paths_by_stem[stem] = cpath
+            collage_paths_by_stem, temp_comp_dir = _build_comp_join_collage_paths(
+                groups, collage_out, do_comp_join, same_collage_params,
+                comp_collage_direction, comp_collage_longest_edge
+            )
 
             pos_sfx = djj.position_suffix(join_only_position)
             cj_success = 0
@@ -1463,7 +1550,7 @@ def run_pairing(images, input_mode, input_path, include_subfolders):
                     logger.error(f"Comp join failed for {first_img.name}")
 
             if temp_comp_dir and os.path.exists(temp_comp_dir):
-                _shutil.rmtree(temp_comp_dir, ignore_errors=True)
+                shutil.rmtree(temp_comp_dir, ignore_errors=True)
 
             total_success += cj_success
             total_skip += cj_skip
@@ -1481,90 +1568,11 @@ def run_pairing(images, input_mode, input_path, include_subfolders):
         if recap != '1':
             break
 
-        rc_pairing_mode = djj.prompt_choice(
-            "\033[93mGrouping mode:\033[0m\n"
-            "1. Sequential (by position)\n"
-            "2. Auto-match (by prefix/suffix)\n",
-            ['1', '2'],
-            default='1'
+        rc_pairing_mode, rc_group_size, rc_match_type, rc_num_chars = _ask_grouping_params()
+
+        rc_direction, rc_longest_edge = _ask_collage_direction_and_edge(
+            _last_collage_out[0], dimension_error_label="image"
         )
-        print()
-
-        rc_group_size = None
-        rc_match_type = None
-        rc_num_chars = None
-
-        if rc_pairing_mode == '1':
-            while True:
-                try:
-                    rc_gs_input = input("\033[93mImages per group\033[0m [default: 3]:\n -> ").strip()
-                    if not rc_gs_input:
-                        rc_group_size = 3
-                        break
-                    rc_group_size = int(rc_gs_input)
-                    if rc_group_size > 0:
-                        break
-                    else:
-                        print("\033[93mPlease enter a positive number.\033[0m")
-                except ValueError:
-                    print("\033[93mPlease enter a valid number.\033[0m")
-            print()
-        else:
-            rc_mt_choice = djj.prompt_choice(
-                "\033[93mMatch by:\033[0m\n1. Prefix\n2. Suffix\n",
-                ['1', '2'], default='1'
-            )
-            rc_match_type = 'prefix' if rc_mt_choice == '1' else 'suffix'
-            print()
-            while True:
-                try:
-                    rc_nc = input(f"\033[93mNumber of characters for {rc_match_type} match\033[0m [default: 4]:\n -> ").strip()
-                    if not rc_nc:
-                        rc_num_chars = 4
-                        break
-                    rc_num_chars = int(rc_nc)
-                    if rc_num_chars > 0:
-                        break
-                    else:
-                        print("\033[93mPlease enter a positive number.\033[0m")
-                except ValueError:
-                    print("\033[93mPlease enter a valid number.\033[0m")
-            print()
-
-        rc_dir_choice = djj.prompt_choice(
-            "\033[93mCollage direction:\033[0m\n"
-            "1. Horizontal (default)\n"
-            "2. Vertical\n",
-            ['1', '2'], default='1'
-        )
-        rc_direction = 'H' if rc_dir_choice == '1' else 'V'
-        print()
-
-        rc_edge_choice = djj.prompt_choice(
-            "\033[93mLongest edge size:\033[0m\n"
-            "1. 1920px (default)\n"
-            "2. Custom\n"
-            "3. 2× shorter edge of first image\n",
-            ['1', '2', '3'], default='1'
-        )
-        print()
-        if rc_edge_choice == '1':
-            rc_longest_edge = 1920
-        elif rc_edge_choice == '2':
-            rc_longest_edge = djj.get_int_input(
-                "\033[93mEnter longest edge in pixels:\033[0m",
-                min_val=100, max_val=9999
-            ) or 1920
-        else:
-            try:
-                with Image.open(_last_collage_out[0]) as _rc_img:
-                    _shorter = min(_rc_img.width, _rc_img.height)
-                rc_longest_edge = _shorter * 2
-                print(f"\033[93mUsing {rc_longest_edge}px (2× {_shorter}px shorter edge)\033[0m")
-            except Exception:
-                rc_longest_edge = 1920
-                print("\033[93m⚠️  Could not read image dimensions, defaulting to 1920px\033[0m")
-        print()
 
         # Each round gets its own Comp/ subfolder nested one level deeper.
         # Suffix is always _comp — the folder depth is the generation indicator.
@@ -1648,7 +1656,7 @@ def main():
         print()
         print("\033[92m==================================================\033[0m")
         print("\033[1;33mImage Processor\033[0m")
-        print("Pad / Crop / Resize / Rotate / Flip / Pair / Join / Collage")
+        print("Pad / Crop / Resize / Rotate / Flip / Pair / Join / Collage / Convert / Strip")
         print("\033[92m==================================================\033[0m")
         print()
 
@@ -1713,8 +1721,10 @@ def main():
             "3. Crop edges + Resize (trim, then resize to target)\n"
             "4. Resize only (no crop)\n"
             "5. Rotate / Flip\n"
-            "6. Image Pairing / Joining / Collage...\n",
-            ['1', '2', '3', '4', '5', '6'],
+            "6. Image Pairing / Joining / Collage...\n"
+            "7. Convert format\n"
+            "8. Strip padding / split collage\n",
+            ['1', '2', '3', '4', '5', '6', '7', '8'],
             default='1'
         )
         print()
@@ -1731,8 +1741,12 @@ def main():
             run_resize_only(images, is_folder_mode, input_path)
         elif operation == '5':
             run_rotate_flip(images, input_path)
-        else:
+        elif operation == '6':
             run_pairing(images, input_mode, input_path, include_subfolders)
+        elif operation == '7':
+            run_convert(images, is_folder_mode, input_path)
+        else:
+            run_strip(images, is_folder_mode, input_path)
 
         action = djj.what_next()
         if action == 'exit':

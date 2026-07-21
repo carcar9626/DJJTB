@@ -159,13 +159,11 @@ class DJJTBLauncher:
         print()
         print("\033[1;93m🖼️  IMAGES TOOLS 🖼️\033[0m")
         print("\033[92m--------------------------------------------------\033[0m")
-        print(" 💰 \033[4;93m1\033[0m  Image Converter 🎞️ ➡︎🌠")
-        print(" 💰 \033[4;93m2\033[0m  Strip Padding 🔲➡︎⬜️")
-        print(" 💰 \033[4;93m3\033[0m  Image Processor 🩷⬌💓 ↔️🔄 ✋🏼🤲🏼")
-        print(" 💰 \033[4;93m4\033[0m  Collage Creation 🧩 🎇")
-        print(" 💰 \033[4;93m5\033[0m  Slideshow Maker 🎑➡︎📽️")
-        print(" 💰 \033[4;93m6\033[0m  Webp to MP4 Converter 👾➡︎📹")
-        print(" 💰 \033[4;93m7\033[0m  Images to Video Compiler 🌃🌆🎆🎇➡︎📹")
+        print(" 💰 \033[4;93m1\033[0m  Image Processor 🩷⬌💓 ↔️🔄 ✋🏼🤲🏼")
+        print(" 💰 \033[4;93m2\033[0m  Collage Creation 🧩 🎇")
+        print(" 💰 \033[4;93m3\033[0m  Slideshow Maker 🎑➡︎📽️")
+        print(" 💰 \033[4;93m4\033[0m  Webp to MP4 Converter 👾➡︎📹")
+        print(" 💰 \033[4;93m5\033[0m  Images to Video Compiler 🌃🌆🎆🎇➡︎📹")
         print()
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰 \033[4;93m0\033[0m  ⏪ Back to MEDIA TOOLS")
@@ -317,22 +315,18 @@ class DJJTBLauncher:
             self.show_image_tools_menu()
             
             choice = djj.prompt_choice("\033[93mChoose a Tool\033[0m" if first_entry else "\033[93mChoose another option\033[0m",
-                                      ['1', '2', '3', '4', '5', '6', '7', '0', '00'])
+                                      ['1', '2', '3', '4', '5', '0', '00'])
             first_entry = False
 
             if choice == "1":
-                djj.run_script_in_tab("djjtb.media_tools.image_tools.image_converter", self.venv_path, self.project_path)
-            elif choice == "2":
-                djj.run_script_in_tab("djjtb.media_tools.image_tools.image_strip_padding", self.venv_path, self.project_path)
-            elif choice == "3":
                 djj.run_script_in_tab("djjtb.media_tools.image_tools.image_processor", self.venv_path, self.project_path)
-            elif choice == "4":
+            elif choice == "2":
                 djj.run_script_in_tab("djjtb.media_tools.image_tools.image_collage_creator", self.venv_path, self.project_path)
-            elif choice == "5":
+            elif choice == "3":
                 djj.run_script_in_tab("djjtb.media_tools.image_tools.image_slideshow_maker", self.venv_path, self.project_path)
-            elif choice == "6":
+            elif choice == "4":
                 djj.run_script_in_tab("djjtb.media_tools.image_tools.image_webp_to_mp4", self.venv_path, self.project_path)
-            elif choice == "7":
+            elif choice == "5":
                 djj.run_script_in_tab("djjtb.media_tools.image_tools.image_video_compiler", self.venv_path, self.project_path)
             elif choice == "0":
                 break
