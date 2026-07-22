@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "pose": {
+      "command": "/Users/home/Documents/Scripts/DJJTB/djjtb/mcp_server/mcpvenv/bin/python3",
+      "args": ["-m", "djjtb.mcp_server.server", "--category", "pose"]
+    },
+    "scene": {
+      "command": "/Users/home/Documents/Scripts/DJJTB/djjtb/mcp_server/mcpvenv/bin/python3",
+      "args": ["-m", "djjtb.mcp_server.server", "--category", "scene"]
+    },
+    "lighting": {
+      "command": "/Users/home/Documents/Scripts/DJJTB/djjtb/mcp_server/mcpvenv/bin/python3",
+      "args": ["-m", "djjtb.mcp_server.server", "--category", "lighting"]
+    },
+    "outfit": {
+      "command": "/Users/home/Documents/Scripts/DJJTB/djjtb/mcp_server/mcpvenv/bin/python3",
+      "args": ["-m", "djjtb.mcp_server.server", "--category", "outfit"]
+    },
+    "composition": {
+      "command": "/Users/home/Documents/Scripts/DJJTB/djjtb/mcp_server/mcpvenv/bin/python3",
+      "args": ["-m", "djjtb.mcp_server.server", "--category", "composition"]
+    }
+  }
+}

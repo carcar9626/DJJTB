@@ -1,0 +1,1 @@
+[{"type": "openapi", "url": "http://192.168.50.67:8000/scene", "spec_type": "url", "spec": "", "path": "openapi.json", "auth_type": "bearer", "key": "", "info": {"id": "", "name": "djjtb_scene", "description": "File prompts into the scene category only"}}]

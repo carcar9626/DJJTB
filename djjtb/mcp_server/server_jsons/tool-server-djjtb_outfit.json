@@ -1,0 +1,1 @@
+[{"type": "openapi", "url": "http://192.168.50.67:8000/outfit", "spec_type": "url", "spec": "", "path": "openapi.json", "auth_type": "bearer", "key": "", "info": {"id": "", "name": "djjtb_outfit", "description": "File prompts into the outfit category only"}}]

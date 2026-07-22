@@ -59,11 +59,11 @@ def write_grabber_stamp():
         pass
 
 class DJJTBLauncher:
-    
+
     def __init__(self):
         self.venv_path = "~/Documents/Scripts/DJJTB/venv/bin/activate"
         self.project_path = "/Users/home/Documents/Scripts/DJJTB"
-    
+
     def show_main_menu(self):
         """Display main menu"""
         os.system('clear')
@@ -98,6 +98,7 @@ class DJJTBLauncher:
         print(" 💰 \033[4;93m9\033[0m  Auto Scroller ⚙️ ⏬")
         #
         print(" 💰\033[4;93m10\033[0m  Link Scraper 🔗🪏")
+        print(" 💰\033[4;93m11\033[0m  Mount Movies 4 & 8 💽")
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰\033[4;91mX\033[0m  Exit 👋🏻✈️         💰\033[4;91mAD\033[0m  ADMIN TOOLS 🔐")
         print("\033[92m==================================================\033[0m")
@@ -185,6 +186,7 @@ class DJJTBLauncher:
         print(" 💰 \033[4;93m4\033[0m  FaceFusion (NSFW Patched) 👿➡︎😇")
         print(" 💰 \033[4;93m5\033[0m  FaceFusion WebUI 🌐 👿➡︎😇")
         print(" 💰 \033[4;93m6\033[0m  JoyCaption (AI) 🏷️")
+        print(" 💰\033[4;93m6a\033[0m  JoyCaption Ollama (AI) 🏷️")
         print(" 💰 \033[4;93m7\033[0m  Image Upscaler (4x_UltraSharp 💓 💗 🩷")
         print(" 💰\033[4;93m7a\033[0m  Codeformer x 4x_UltraSharp 💓 💗 🩷")
         # print(" 💰 \033[4;93m6\033[0m  WM Remover Auto-Detect(AI) 🤖 💋 🧼")
@@ -240,12 +242,13 @@ class DJJTBLauncher:
         print(" 💰 \033[4;93m5\033[0m  File Identifier 🆔")
         print(" 💰 \033[4;93m6\033[0m  README Generator 📖")
         print(" 💰 \033[4;93m7\033[0m  X-to-W Folder Broadcaster 📤➡️📁")
+        print(" 💰 \033[4;93m8\033[0m  Add Pose Prompts 🤸📝")
         print()
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰 \033[4;93m0\033[0m  ⏪ Back")
         print(" 💰\033[4;93m00\033[0m ⏮️  MAIN MENU")
         print("\033[92m--------------------------------------------------\033[0m")
-        
+
     def show_admin_tools_menu(self):
         """Display Admin Tools menu (password-protected)"""
         os.system('clear')
@@ -261,11 +264,12 @@ class DJJTBLauncher:
         print(" 💰 \033[4;93m7\033[0m  VLC Screenshot Renamer 📸")
         print(" 💰 \033[4;93m8\033[0m  Mount Movies 4 & 8 💽")
         print(" 💰\033[4;93m8a\033[0m  Unmount Movies 4 & 8 ⏏️")
+        print(" 💰 \033[4;93m9\033[0m  Stop ComfyUI 🛑")
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰 \033[4;93m0\033[0m  ⏪ Back")
         print(" 💰\033[4;93m00\033[0m ⏮️  MAIN MENU")
         print("\033[92m--------------------------------------------------\033[0m")
-    
+
     def handle_video_tools(self):
         """Handle video tools submenu"""
         first_entry = True
@@ -381,7 +385,7 @@ class DJJTBLauncher:
         while True:
             self.show_ai_tools_menu()
             choice = djj.prompt_choice("\033[93mChoose an AI tool\033[0m",
-                                     ['1','1b', '2', '3', '4', '5', '6', '7', '7a','8','9','10','11','12','13','14','15','16','c0','c1' ,'c2' , 'c3', 'c4','c5','c6', 'c7', 'c8','cu','ch','cj', 'jc','atk', '0', '00'])
+                                     ['1','1b', '2', '3', '4', '5', '6', '6a', '7', '7a','8','9','10','11','12','13','14','15','16','c0','c1' ,'c2' , 'c3', 'c4','c5','c6', 'c7', 'c8','cu','ch','cj', 'jc','atk', '0', '00'])
             """
             if choice == "1":  # Prompt Randomizer
                 djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path}/djjtb/ai_tools/; python3 -m djjtb.media_tools.ai_tools.prompt_randomizer")
@@ -413,6 +417,8 @@ class DJJTBLauncher:
               )
 
                 # djj.run_command_in_tab(f"source /Users/home/Documents/ai_models/watermark_remover/wmrmvenv/bin/activate; cd {self.project_path}/; python3 -m djjtb.ai_tools.watermark_remover_auto")
+            elif choice == "6a":  # JoyCaption via Ollama (GGUF, no dedicated venv needed)
+                djj.run_script_in_tab("djjtb.ai_tools.joycaption_runner_ollama", self.venv_path, self.project_path)
             elif choice == "7":
                 djj.run_command_in_tab(f"source /Users/home/Documents/ai_models/upscalers/upsvenv/bin/activate; cd {self.project_path}/; python3 -m djjtb.ai_tools.upscaler_runner")
             elif choice == "7a":  # or whatever slot number you pick
@@ -498,7 +504,7 @@ class DJJTBLauncher:
         while True:
             self.show_file_tools_menu()
             choice = djj.prompt_choice("\033[93mChoose a file tool\033[0m",
-                                     ['1', '2', '3', '4', '5', '6','7', '0', '00'])
+                                     ['1', '2', '3', '4', '5', '6','7', '8', '0', '00'])
             
             if choice == "1":  # Rsync
                 djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path}; python3 -m djjtb.file_tools.rsync_helper")
@@ -514,9 +520,11 @@ class DJJTBLauncher:
                 djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path}; python3 -m djjtb.file_tools.readme_generator")
             elif choice == "7":
                 djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path}; python3 -m djjtb.file_tools.x_to_w_copy")
+            elif choice == "8":  # Add Pose Prompts
+                djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path}; python3 -m djjtb.file_tools.add_pose_prompts")
             elif choice in ["0", "00"]:
                 break
-    
+
     def handle_quick_tools(self, choice):
         """Handle quick tools"""
         if choice == "4":  # Reverse Image Search
@@ -545,7 +553,20 @@ class DJJTBLauncher:
         elif choice == "10":
                 djj.run_script_in_tab("djjtb.quick_tools.link_scraper", self.venv_path, self.project_path)
 
-                
+        elif choice == "11":  # Mount Movies 4 & 8 — silent background mount
+            print("\033[93mMounting Disks...\033[0m")
+            for disk_uuid in [
+                "4AF0255E-DAEE-41F8-A045-0194DB148A2F",
+                "284C712E-9F72-46B8-AF7A-4FB416299AF2",
+            ]:
+                subprocess.Popen(
+                    ["diskutil", "mount", disk_uuid],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+            time.sleep(2)
+
+
     def handle_admin_tools(self):
         """Handle Admin Tools submenu (password-protected, not fancy — just a speedbump)"""
         ADMIN_PASSWORD = "555"  # 🔒 change this to whatever you like
@@ -562,7 +583,7 @@ class DJJTBLauncher:
 
         while True:
             self.show_admin_tools_menu()
-            choice = djj.prompt_choice("\033[91mChoose an admin tool\033[0m", ['1', '2', '3', '4', '5', '6', '7', '8', '8a','0', '00'])
+            choice = djj.prompt_choice("\033[91mChoose an admin tool\033[0m", ['1', '2', '3', '4', '5', '6', '7', '8', '8a', '9', '0', '00'])
 
             if choice == "1":  # djjtb_scan.py
                 djj.run_command_in_tab(
@@ -612,6 +633,10 @@ class DJJTBLauncher:
                         stderr=subprocess.DEVNULL
                     )
                 time.sleep(2)
+            elif choice == "9":  # Stop ComfyUI
+                djj.run_command_in_tab(
+                    f"bash {self.project_path}/djjtb/ai_tools/comfyui_stop.command"
+                )
             elif choice == "0":
                 break
             elif choice == "00":
@@ -641,15 +666,15 @@ class DJJTBLauncher:
         while True:
             self.show_main_menu()
             choice = djj.prompt_choice("\033[93mChoose a category\033[0m",
-                                     ['1', '2', '3', '4', '5', '6', '7', '8', '9','10', 'a' , 'ad', 'c', 'x'])
-            
+                                     ['1', '2', '3', '4', '5', '6', '7', '8', '9','10', '11', 'a' , 'ad', 'c', 'x'])
+
             if choice == "1":
                 self.handle_media_tools()
             elif choice == "2":
                 self.handle_ai_tools()
             elif choice == "3":
                 self.handle_file_tools()
-            elif choice in ["4", "5", "6", "7", "8", "9","10"]:
+            elif choice in ["4", "5", "6", "7", "8", "9","10", "11"]:
                 self.handle_quick_tools(choice)
             elif choice == "a":  # App Launcher
                 command = f"cd {self.project_path}; python3 -m djjtb.app_launcher"
