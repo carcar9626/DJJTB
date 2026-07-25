@@ -8,8 +8,6 @@ from scenedetect.detectors import AdaptiveDetector
 
 os.system('clear')
 
-VIDEO_EXTENSIONS = ('.mp4', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.webm')
-
 def clean_path(path_str):
     """Clean input path by removing quotes and extra spaces."""
     return path_str.strip().strip('\'"')
@@ -33,37 +31,6 @@ def get_video_duration(video_path):
         print(f"\033[93mError parsing video duration:\033[0m {e}", file=sys.stderr)
         raise
 
-def collect_videos_from_folder(input_path, subfolders=False):
-    """Collect videos from folder(s) using consistent logic"""
-    input_path_obj = pathlib.Path(input_path)
-
-    videos = []
-    if input_path_obj.is_dir():
-        if subfolders:
-            for root, _, files in os.walk(input_path):
-                videos.extend(pathlib.Path(root) / f for f in files if pathlib.Path(f).suffix.lower() in VIDEO_EXTENSIONS)
-        else:
-            videos = [f for f in input_path_obj.glob('*') if f.suffix.lower() in VIDEO_EXTENSIONS and f.is_file()]
-
-    return sorted([str(v) for v in videos], key=str.lower)
-
-def collect_videos_from_paths(file_paths):
-    """Collect videos from space-separated file paths"""
-    videos = []
-    paths = file_paths.strip().split()
-
-    for path in paths:
-        path = clean_path(path)
-        path_obj = pathlib.Path(path)
-
-        if path_obj.is_file() and path_obj.suffix.lower() in VIDEO_EXTENSIONS:
-            videos.append(str(path_obj))
-        elif path_obj.is_dir():
-            # If it's a directory, collect videos from it
-            folder_videos = collect_videos_from_folder(str(path_obj), subfolders=False)
-            videos.extend(folder_videos)
-    
-    return sorted(videos, key=str.lower)
 
 def get_video_input():
     """Get video input using consistent pattern from reference script"""
@@ -93,17 +60,17 @@ def get_video_input():
         ) == '1'
         print()
         
-        videos = collect_videos_from_folder(src_dir, include_sub)
-        
+        videos = djj.collect_videos_from_folder(src_dir, include_sub)
+
     else:
         # File/folder paths mode
         file_paths = input("📁 \033[93mEnter file/folder paths (space-separated): \n -> \033[0m").strip()
-        
+
         if not file_paths:
             print("❌ \033[93mNo paths provided.\033[0m")
             return []
-        
-        videos = collect_videos_from_paths(file_paths)
+
+        videos = djj.collect_videos_from_paths(file_paths)
         print()
     
     if not videos:

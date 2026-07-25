@@ -1,6 +1,6 @@
 # DJJTB — utils.py Modularization / Dedup Refactor Plan
 
-**Status:** in progress — Phases 0-2 done, Phase 3 next
+**Status:** in progress — Phases 0-3 done, Phase 4 next
 **Created:** 2026-07-25
 **Purpose:** living checklist for incrementally moving duplicated per-script
 logic (`collect_images_from_folder`/`collect_videos_from_folder`
@@ -226,10 +226,54 @@ counts are unchanged except for the Output-pruning case.
 
 ## Phase 3 — Video collect-function dedup: normal-risk files
 
-**Status:** `[ ]` not started
+**Status:** `[x]` done (2026-07-25)
 **Depends on:** Phase 0 (needs `djj.collect_videos_from_folder`/`_from_paths`
 to exist)
 **Risk:** medium — extension-list changes, one file returns a different type
+
+**Done note (2026-07-25):** All 3 done, each landed differently based on what
+reading the actual code showed:
+- `video_processor.py`: kept thin local wrappers rather than a full swap.
+  `collect_videos_from_folder` delegates the folder-walk to
+  `djj.collect_videos_from_folder` but still special-cases a bare file-path
+  input (confirmed real: `get_videos_input()`'s prompt says "Enter folder
+  path" via `djj.get_path_input`, which doesn't validate file-vs-dir, so a
+  user pasting a file path needs this safety net) and re-wraps results as
+  `Path` objects — `run_reencode`/`run_speed_change`/`run_crop` all use
+  `.stem`/`.parent`/`.name` on every video downstream, confirmed by grep
+  before touching. `collect_videos_from_paths` was **not** delegated to
+  `djj.collect_videos_from_paths` at all — this mode's prompt is explicitly
+  "file paths" and it warns-and-skips any directory handed to it, which is
+  the opposite of `djj`'s auto-expand behavior; only the extension list now
+  comes from `djj.VIDEO_EXTENSIONS`. Local `VIDEO_EXTENSIONS` constant
+  removed. 488→479 lines.
+- `video_frame_bridge.py`: same Path-wrapper treatment for the video-side
+  trio (confirmed same `.stem`/`.parent`/`.name` reliance throughout, e.g.
+  `resolve_session_dirs`) — `collect_videos_from_folder` delegates to `djj`
+  and re-wraps as `Path`; `collect_videos_from_paths`/`_from_txt` stayed
+  local (they already correctly expand directories via the local
+  `collect_videos_from_folder` wrapper, so no behavior change needed there,
+  just the extension list source). Image side was a clean full swap like
+  Phase 1/2 — `collect_images_from_folder`/`_from_paths` deleted outright,
+  `collect_images_from_txt` kept as thin wrapper, `extensions=IMAGE_EXTENSIONS`
+  (still gif-excluded, same reasoning as Phase 1) passed through. Local
+  `VIDEO_EXTS` constant removed. 901→877 lines.
+- `video_splitter.py`: the easy one, exactly as predicted — extension list
+  already matched the canonical union and both local functions already
+  returned strings and already expanded directories the same way `djj`
+  does, so this was a straight delete-and-call-`djj.*` swap, no wrapper
+  needed. `clean_path()` kept (still used for a single-folder-path input
+  elsewhere in the file, unrelated to the deleted functions). 427→394 lines.
+
+All three files ended up **wider** on extensions than before (now the
+7-item canonical union) since none had a specific reason found in the code
+to stay narrower — flagged per the plan's caution, no objection raised.
+Smoke-tested all 3 together: Path-vs-string return types, the bare-file-path
+special case, the skip-vs-expand directory-handling difference between
+`video_processor.py` and `video_frame_bridge.py`'s paths functions (this
+was the trickiest thing to get right — they look like the same function but
+are deliberately not), Output-dir pruning, and the image-side gif exclusion
+all verified against a real temp folder.
 
 **Files:** `djjtb/media_tools/video_tools/video_processor.py`,
 `djjtb/media_tools/video_tools/video_frame_bridge.py`,

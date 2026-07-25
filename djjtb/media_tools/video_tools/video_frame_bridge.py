@@ -11,7 +11,6 @@ import djjtb.utils as djj
 
 os.system('clear')
 
-VIDEO_EXTS = ('.mp4', '.mkv', '.webm', '.mov')
 IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp')
 LOG_DIR = Path("~/Documents/Scripts/DJJTB/djjtb/logs").expanduser()
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -131,17 +130,13 @@ def parse_finder_paths(raw_input):
 
 
 def collect_videos_from_folder(folder_path, include_sub=False):
-    folder = pathlib.Path(folder_path)
-    videos = []
-    if include_sub:
-        for root, _, files in os.walk(folder):
-            for f in files:
-                if pathlib.Path(f).suffix.lower() in VIDEO_EXTS:
-                    videos.append(pathlib.Path(root) / f)
-    else:
-        videos = [f for f in folder.glob('*')
-                  if f.suffix.lower() in VIDEO_EXTS and f.is_file()]
-    return sorted(videos, key=lambda p: str(p).lower())
+    """Folder walking delegates to djj.collect_videos_from_folder; wrapped
+    back into Path objects since the rest of this file relies on
+    .stem/.parent/.name on every collected video throughout."""
+    return sorted(
+        (Path(p) for p in djj.collect_videos_from_folder(str(folder_path), include_subfolders=include_sub)),
+        key=lambda p: str(p).lower()
+    )
 
 
 def collect_videos_from_paths(raw_input, include_sub=False):
@@ -151,7 +146,7 @@ def collect_videos_from_paths(raw_input, include_sub=False):
         if not p.exists():
             print(f"\033[93m⚠️  Path not found, skipping: {p}\033[0m")
             continue
-        if p.is_file() and p.suffix.lower() in VIDEO_EXTS:
+        if p.is_file() and p.suffix.lower() in djj.VIDEO_EXTENSIONS:
             videos.append(p)
         elif p.is_dir():
             videos.extend(collect_videos_from_folder(p, include_sub))
@@ -165,7 +160,7 @@ def collect_videos_from_txt(include_sub=False):
     videos = []
     for path in paths:
         p = pathlib.Path(path)
-        if p.is_file() and p.suffix.lower() in VIDEO_EXTS:
+        if p.is_file() and p.suffix.lower() in djj.VIDEO_EXTENSIONS:
             videos.append(p)
         elif p.is_dir():
             videos.extend(collect_videos_from_folder(p, include_sub))
@@ -464,25 +459,6 @@ def run_video_to_frames():
 # Mode 2: Frames → Video
 # ══════════════════════════════════════════════════════════════════════════
 
-def collect_images_from_folder(input_path):
-    """Collect images from a folder (no subfolders)."""
-    input_path_obj = pathlib.Path(input_path)
-    images = [f for f in input_path_obj.glob('*') if f.suffix.lower() in IMAGE_EXTENSIONS and f.is_file()]
-    return sorted([str(v) for v in images], key=lambda x: x.lower())
-
-
-def collect_images_from_paths(raw_input):
-    """Collect images from space-separated file/folder paths."""
-    images = []
-    for path_str in raw_input.strip().split():
-        path_obj = pathlib.Path(path_str.strip('\'"'))
-        if path_obj.is_file() and path_obj.suffix.lower() in IMAGE_EXTENSIONS:
-            images.append(str(path_obj))
-        elif path_obj.is_dir():
-            images.extend(collect_images_from_folder(str(path_obj)))
-    return sorted(images, key=lambda x: x.lower())
-
-
 def collect_images_from_txt():
     """Collect images from a txt file of paths."""
     paths = djj.get_paths_from_txt("📄 Enter txt file path")
@@ -494,7 +470,7 @@ def collect_images_from_txt():
         if path_obj.is_file() and path_obj.suffix.lower() in IMAGE_EXTENSIONS:
             images.append(str(path))
         elif path_obj.is_dir():
-            images.extend(collect_images_from_folder(str(path)))
+            images.extend(djj.collect_images_from_folder(str(path), extensions=IMAGE_EXTENSIONS))
     return sorted(set(images), key=lambda x: x.lower())
 
 
@@ -678,14 +654,14 @@ def run_frames_to_video():
                 print(f"   📁 {os.path.basename(sf)}  ({len(imgs)} images)")
             print()
         else:
-            images = collect_images_from_folder(folder_path)
+            images = djj.collect_images_from_folder(folder_path, extensions=IMAGE_EXTENSIONS)
 
     elif input_mode == '2':
         raw = input("📁 \033[93mEnter image paths (space-separated):\033[0m\n -> ").strip()
         if not raw:
             print("❌ \033[93mNo paths provided.\033[0m")
             return
-        images = collect_images_from_paths(raw)
+        images = djj.collect_images_from_paths(raw, extensions=IMAGE_EXTENSIONS)
 
     else:
         images = collect_images_from_txt()

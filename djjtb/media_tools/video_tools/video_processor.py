@@ -9,7 +9,6 @@ import djjtb.utils as djj
 
 os.system('clear')
 
-VIDEO_EXTENSIONS = ('.mp4', '.mkv', '.mov', '.avi', '.webm')
 LOG_DIR = Path("~/Documents/Scripts/DJJTB/djjtb/logs").expanduser()
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -32,15 +31,18 @@ def get_op_logger(op_name):
 # ─── Shared: video collection ──────────────────────────────────────────────
 
 def collect_videos_from_folder(input_path, subfolders=False):
+    """
+    Folder walking delegates to djj.collect_videos_from_folder (dedup target).
+    Kept local: accepting a bare file path as input_path (safety net for
+    when djj.get_path_input's "Enter folder path" prompt gets a file path
+    instead), and returning Path objects — the rest of this file relies on
+    .stem/.parent/.name throughout run_reencode/run_speed_change/run_crop.
+    """
     input_path_obj = Path(input_path).expanduser().resolve()
-    if input_path_obj.is_file() and input_path_obj.suffix.lower() in VIDEO_EXTENSIONS:
+    if input_path_obj.is_file() and input_path_obj.suffix.lower() in djj.VIDEO_EXTENSIONS:
         videos = [input_path_obj]
     elif input_path_obj.is_dir():
-        if subfolders:
-            videos = [Path(root) / f for root, _, files in os.walk(input_path_obj)
-                      for f in files if Path(f).suffix.lower() in VIDEO_EXTENSIONS]
-        else:
-            videos = [f for f in input_path_obj.glob('*') if f.suffix.lower() in VIDEO_EXTENSIONS and f.is_file()]
+        videos = [Path(p) for p in djj.collect_videos_from_folder(str(input_path_obj), include_subfolders=subfolders)]
     else:
         print("\033[91mError: Input must be a video file or directory.\033[0m", file=sys.stderr)
         return []
@@ -51,10 +53,17 @@ def collect_videos_from_folder(input_path, subfolders=False):
 
 
 def collect_videos_from_paths(raw_input):
+    """
+    Not delegated to djj.collect_videos_from_paths: that function expands
+    directories found in the input, but this mode is explicitly file-paths-
+    only (its prompt says so) and warns + skips any directory it's handed
+    instead — a deliberate behavior difference, not something to dedup away.
+    Only the extension list comes from djj now.
+    """
     videos = []
     for path_str in raw_input.strip().split():
         path_obj = Path(path_str.strip('\'"')).expanduser().resolve()
-        if path_obj.is_file() and path_obj.suffix.lower() in VIDEO_EXTENSIONS:
+        if path_obj.is_file() and path_obj.suffix.lower() in djj.VIDEO_EXTENSIONS:
             videos.append(path_obj)
         elif path_obj.is_dir():
             print(f"\033[93m⚠️ Skipping directory in file list:\033[0m {path_str}")
