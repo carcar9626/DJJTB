@@ -10,13 +10,11 @@ VIDEO_BITRATE = '15000k'             # Used with h264_videotoolbox only
 VIDEO_CRF = '18'                     # Used with libx264 only
 VIDEO_PRESET = 'fast'                # Used with libx264 only
 
+VIDEO_EXTENSIONS = ('.mp4', '.mov', '.mkv', '.avi', '.webm')
 
-def clean_path(path_str):
-    return path_str.strip().strip('\'"')
 
 def is_video_file(filename):
-    extensions = ['.mp4', '.mov', '.mkv', '.avi', '.webm']
-    return any(filename.lower().endswith(ext) for ext in extensions)
+    return filename.lower().endswith(VIDEO_EXTENSIONS)
 
 def run_ffmpeg(cmd):
     try:
@@ -166,27 +164,14 @@ def reverse_and_merge(video_path, index, total, speed_factor, input_base, encode
 
 def collect_videos_from_folder(input_path, subfolders=False):
     input_path_obj = Path(input_path)
-    video_extensions = ('.mp4', '.mov', '.mkv', '.avi', '.webm')
     videos = []
     if input_path_obj.is_dir():
         if subfolders:
             for root, _, files in os.walk(input_path):
-                videos.extend(Path(root) / f for f in files if Path(f).suffix.lower() in video_extensions)
+                videos.extend(Path(root) / f for f in files if Path(f).suffix.lower() in VIDEO_EXTENSIONS)
         else:
-            videos = [f for f in input_path_obj.glob('*') if f.suffix.lower() in video_extensions and f.is_file()]
+            videos = [f for f in input_path_obj.glob('*') if f.suffix.lower() in VIDEO_EXTENSIONS and f.is_file()]
     return sorted([str(v) for v in videos], key=str.lower)
-
-def collect_videos_from_paths(file_paths):
-    videos = []
-    paths = file_paths.strip().split()
-    for path in paths:
-        path = clean_path(path)
-        path_obj = Path(path)
-        if path_obj.is_file() and is_video_file(path_obj.name):
-            videos.append(str(path_obj))
-        elif path_obj.is_dir():
-            videos.extend(collect_videos_from_folder(str(path_obj), subfolders=False))
-    return sorted(videos, key=str.lower)
 
 def ask_speed_factor():
     answer = djj.prompt_choice(
@@ -238,7 +223,7 @@ def main():
         elif input_mode == '2':
             raw_files = djj.get_multifile_input(
                 "📁 Enter video paths",
-                extensions=('.mp4', '.mov', '.mkv', '.avi', '.webm')
+                extensions=VIDEO_EXTENSIONS
             )
             videos = [f for f in raw_files if is_video_file(f)]
             if videos:
