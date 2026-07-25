@@ -13,6 +13,7 @@ from pathlib import Path
 # Add the project root to Python path
 sys.path.insert(0, str(Path(__file__).parent))
 import djjtb.utils as djj
+import djjtb.ai_tools.hermes_helper as hh
 
 # ── Boot-launch detection ─────────────────────────────────────────────────────
 # Stamp file records the last time djjtb launched the grabbers.
@@ -138,15 +139,14 @@ class DJJTBLauncher:
         print()
         print("\033[1;93m🎬 VIDEO TOOLS 🎬\033[0m")
         print("\033[92m--------------------------------------------------\033[0m")
-        print(" 💰 \033[4;93m1\033[0m  Video Re-encoder 📼➡︎📀")
+        print(" 💰 \033[4;93m1\033[0m  Video Processor (Re-encode/Speed/Crop) 📼🐇🩳")
         print(" 💰 \033[4;93m2\033[0m  Reverse Merge ↪️ ⇔↩️")
         print(" 💰 \033[4;93m3\033[0m  Slideshow Watermark 📹 🆔")
-        print(" 💰 \033[4;93m4\033[0m  Video Cropper 👖➡︎🩳")
-        print(" 💰 \033[4;93m5\033[0m  Group Merger 📹 🧲")
-        print(" 💰 \033[4;93m6\033[0m  Video Splitter 📹 ✂️  ⏱️")
-        print(" 💰 \033[4;93m7\033[0m  Speed Changer 🐇⬌🐢")
-        print(" 💰 \033[4;93m8\033[0m  Frame Extractor 📹➡︎🌃🌆🎆🎇")
-        print(" 💰 \033[4;93m9\033[0m  GIFs Converter 📹⬌🌃🌆🎆🎇")
+        print(" 💰 \033[4;93m4\033[0m  Group Merger 📹 🧲")
+        print(" 💰 \033[4;93m5\033[0m  Video Splitter 📹 ✂️  ⏱️")
+        print(" 💰 \033[4;93m6\033[0m  Frame Extractor 📹➡︎🌃🌆🎆🎇")
+        print(" 💰 \033[4;93m7\033[0m  GIFs Converter 📹⬌🌃🌆🎆🎇")
+        print(" 💰 \033[4;93m8\033[0m  Images to Video Compiler 🌃🌆🎆🎇➡︎📹")
         print()
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰 \033[4;93m0\033[0m  ⏪ Back to MEDIA TOOLS")
@@ -161,10 +161,10 @@ class DJJTBLauncher:
         print("\033[1;93m🖼️  IMAGES TOOLS 🖼️\033[0m")
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰 \033[4;93m1\033[0m  Image Processor 🩷⬌💓 ↔️🔄 ✋🏼🤲🏼")
-        print(" 💰 \033[4;93m2\033[0m  Collage Creation 🧩 🎇")
+        # print(" 💰 \033[4;93m2\033[0m  Collage Creation 🧩 🎇")  # retired — superseded by Image Processor's Pairing/Collage mode; moved to old_versions
         print(" 💰 \033[4;93m3\033[0m  Slideshow Maker 🎑➡︎📽️")
         print(" 💰 \033[4;93m4\033[0m  Webp to MP4 Converter 👾➡︎📹")
-        print(" 💰 \033[4;93m5\033[0m  Images to Video Compiler 🌃🌆🎆🎇➡︎📹")
+        # print(" 💰 \033[4;93m5\033[0m  Images to Video Compiler 🌃🌆🎆🎇➡︎📹")  # moved to Video Tools (choice 10)
         print()
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰 \033[4;93m0\033[0m  ⏪ Back to MEDIA TOOLS")
@@ -177,32 +177,41 @@ class DJJTBLauncher:
         print()
         print("\033[1;93m 🤖 AI TOOLS 🛠️\033[0m")
         print("\033[92m--------------------------------------------------\033[0m")
-        #print(" 1. Prompt Randomizer 📝 🔀")
-        #print(" 2. ComfyUI ☀️ 💻")
-        #print(" 3. Merge Loras 👫➡︎🧍🏼‍♂️")
-        print(" 💰 \033[4;93m1\033[0m  Codeformer 😶‍🌫️➡︎😝")
+        print(" 💰 \033[4;93m1\033[0m  Upscaler AI 🔼")
         print(" 💰 \033[4;93m2\033[0m  JoyTag Tagger (AI) 🏷️")
-        print(" 💰 \033[4;93m3\033[0m  Image Tagger (AI) 🔖")
+        print(" 💰 \033[4;93m3\033[0m  Image Finder (AI) 🔎")
         print(" 💰 \033[4;93m4\033[0m  FaceFusion (NSFW Patched) 👿➡︎😇")
         print(" 💰 \033[4;93m5\033[0m  FaceFusion WebUI 🌐 👿➡︎😇")
         print(" 💰 \033[4;93m6\033[0m  JoyCaption (AI) 🏷️")
-        print(" 💰\033[4;93m6a\033[0m  JoyCaption Ollama (AI) 🏷️")
-        print(" 💰 \033[4;93m7\033[0m  Image Upscaler (4x_UltraSharp 💓 💗 🩷")
-        print(" 💰\033[4;93m7a\033[0m  Codeformer x 4x_UltraSharp 💓 💗 🩷")
-        # print(" 💰 \033[4;93m6\033[0m  WM Remover Auto-Detect(AI) 🤖 💋 🧼")
-        # print(" 💰 \033[4;93m7\033[0m  WM Remover from Reference (AI) 👷🏻‍♂️ 💋 🧼")
-        print(" 💰 \033[4;93m8\033[0m  IOPaint - lama cleaner (WebUI) 🦙 🧼")
-#        print(" 💰\033[4;93m9\033[0m  Image Upscaler (Real-Esrgan4x) 💓 💗 🩷")
-#        print("💰\033[4;93m10\033[0m  Image Upscaler (RealSR 4x) 👶🏼 👦🏻 🤦🏽‍♂️")
-        print(" 💰 \033[4;93m9\033[0m  Image Finder (AI) 🔎")
-        print(" 💰\033[4;93m10\033[0m  Image Caption Generator (AI)(Florence) 🩻📜")
-        # print(" 💰\033[4;93m11\033[0m  Kohya_SS (AI)(SD Lora Trainer) 🏋🏻")
-        print(" 💰\033[4;93m11\033[0m  Prompt Assembler 📝")
-        print(" 💰\033[4;93m12\033[0m  Comfyui Batch Process ▶️")
-        print(" 💰\033[4;93m13\033[0m  OpenCode (Local AI Agent) 🖥️🤖")
-        print(" 💰\033[4;93m14\033[0m  Open WebUI 🌐🧠")
-        print(" 💰\033[4;93m15\033[0m  Vocab + Mask Generator 🔤")
-        print(" 💰\033[4;93m16\033[0m  Category Sorter (AI)(CLIP) 🗂️")
+        print(" 💰 \033[4;93m7\033[0m  JoyCaption Ollama (AI) 🏷️")
+        print(" 💰 \033[4;93m8\033[0m  Prompt Assembler 📝")
+        print(" 💰 \033[4;93m9\033[0m  Comfyui Batch Process ▶️")
+        print(" 💰\033[4;93m10\033[0m  OpenCode (Local AI Agent) 🖥️🤖")
+        print(" 💰\033[4;93m11\033[0m  Vocab + Mask Generator 🔤")
+        print(" 💰\033[4;93m12\033[0m  Category Sorter (AI)(CLIP) 🗂️")
+        print(" 💰\033[4;93m13\033[0m  Open WebUI 🌐🧠")
+        print()
+        print("\033[1;93m 🤖  AI AGENTS  🤖\033[0m")
+        print("\033[92m--------------------------------------------------\033[0m")
+        print(" 💰 \033[4;93mHM\033[0m  Hermes Helper 🪽🤖")
+        print()
+        print("\033[1;93m ⚙️  ➡️  ⤵️  🔀 🔁 🔄 🔃 ↔️  ⚙️\033[0m")
+        print("\033[92m--------------------------------------------------\033[0m")
+        print(" 💰 \033[4;93mCU\033[0m  ComfyUI")
+        print(" 💰 \033[4;93mCH\033[0m  chaiNNer")
+        print(" 💰 \033[4;93mCW\033[0m  chaiNNer Workflows")
+        print(" 💰\033[4;93mATK\033[0m  AI-TOOLKIT")
+        print(" 💰 \033[4;93mCJ\033[0m  Prompt Lib CSV to JSON")
+        print(" 💰 \033[4;93mJC\033[0m  Prompt Lib JSON to CSV")
+        
+        print("\033[92m--------------------------------------------------\033[0m")
+        print(" 💰 \033[4;93m0\033[0m  ⏪ Back")
+        print(" 💰\033[4;93m00\033[0m  ⏮️  MAIN MENU")
+        print("\033[92m--------------------------------------------------\033[0m")
+
+    def show_chainner_workflows_menu(self):
+        """Display chaiNNer Workflows submenu"""
+        os.system('clear')
         print()
         print("\033[1;93m ⛓️  chaiNNer Workflows ⚙️\033[0m")
         print("\033[92m--------------------------------------------------\033[0m")
@@ -216,19 +225,33 @@ class DJJTBLauncher:
         print(" 💰\033[4;93mC7\033[0m  Stack Only")
         # print(" 💰\033[4;93mC8\033[0m  Batch Background Removal")
         print()
-        print("\033[1;93m ⚙️  ➡️  ⤵️  🔀 🔁 🔄 🔃 ↔️  ⚙️\033[0m")
-        print("\033[92m--------------------------------------------------\033[0m")
-        print(" 💰 \033[4;93mCU\033[0m  ComfyUI")
-        print(" 💰 \033[4;93mCH\033[0m  chaiNNer")
-        print(" 💰\033[4;93mATK\033[0m  AI-TOOLKIT")
-        print(" 💰 \033[4;93mCJ\033[0m  Prompt Lib CSV to JSON")
-        print(" 💰 \033[4;93mJC\033[0m  Prompt Lib JSON to CSV")
-        
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰 \033[4;93m0\033[0m  ⏪ Back")
         print(" 💰\033[4;93m00\033[0m  ⏮️  MAIN MENU")
         print("\033[92m--------------------------------------------------\033[0m")
-    
+
+    def show_hermes_helper_menu(self):
+        """Display Hermes Helper submenu"""
+        os.system('clear')
+        print()
+        print("\033[1;93m 🪽 HERMES HELPER 🤖\033[0m")
+        print("\033[92m--------------------------------------------------\033[0m")
+        print(" 💰 \033[4;93m1\033[0m  Start Gateway ▶️")
+        print(" 💰 \033[4;93m2\033[0m  Stop Gateway 🛑")
+        print(" 💰 \033[4;93m3\033[0m  Restart Gateway 🔄")
+        print(" 💰 \033[4;93m4\033[0m  Add/Remove Working Folders 📁")
+        print(" 💰 \033[4;93m5\033[0m  Status / Health Check 🩺")
+        print(" 💰 \033[4;93m6\033[0m  Dashboard 🌐")
+        print(" 💰 \033[4;93m7\033[0m  Desktop 🖥️")
+        print(" 💰 \033[4;93m8\033[0m  TUI ⌨️")
+        print(" 💰 \033[4;93m9\033[0m  Doctor 🔬")
+        print(" 💰\033[4;93m10\033[0m  Model Switch 🔀")
+        print()
+        print("\033[92m--------------------------------------------------\033[0m")
+        print(" 💰 \033[4;93m0\033[0m  ⏪ Back to AI TOOLS")
+        print(" 💰\033[4;93m00\033[0m  ⏮️  MAIN MENU")
+        print("\033[92m--------------------------------------------------\033[0m")
+
     def show_file_tools_menu(self):
         """Display file tools menu"""
         os.system('clear')
@@ -264,7 +287,7 @@ class DJJTBLauncher:
         print(" 💰 \033[4;93m7\033[0m  VLC Screenshot Renamer 📸")
         print(" 💰 \033[4;93m8\033[0m  Mount Movies 4 & 8 💽")
         print(" 💰\033[4;93m8a\033[0m  Unmount Movies 4 & 8 ⏏️")
-        print(" 💰 \033[4;93m9\033[0m  Stop ComfyUI 🛑")
+        # print(" 💰 \033[4;93m9\033[0m  Stop ComfyUI 🛑")
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰 \033[4;93m0\033[0m  ⏪ Back")
         print(" 💰\033[4;93m00\033[0m ⏮️  MAIN MENU")
@@ -280,27 +303,25 @@ class DJJTBLauncher:
             self.show_video_tools_menu()
             
             choice = djj.prompt_choice("\033[93mChoose a Tool\033[0m" if first_entry else "\033[93mChoose another option\033[0m",
-                                     ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '0', '00'])
+                                     ['1', '2', '3', '4', '5', '6', '7', '8', '0', '00'])
             first_entry = False
-            
+
             if choice == "1":
-                djj.run_script_in_tab("djjtb.media_tools.video_tools.video_re-encoder", self.venv_path, self.project_path)
+                djj.run_script_in_tab("djjtb.media_tools.video_tools.video_processor", self.venv_path, self.project_path)
             elif choice == "2":
                 djj.run_script_in_tab("djjtb.media_tools.video_tools.video_reverse_merge", self.venv_path, self.project_path)
             elif choice == "3":
                 djj.run_script_in_tab("djjtb.media_tools.video_tools.video_slideshow_watermark", self.venv_path, self.project_path)
             elif choice == "4":
-                djj.run_script_in_tab("djjtb.media_tools.video_tools.video_cropper", self.venv_path, self.project_path)
-            elif choice == "5":
                 djj.run_script_in_tab("djjtb.media_tools.video_tools.video_group_merger", self.venv_path, self.project_path)
-            elif choice == "6":
+            elif choice == "5":
                 djj.run_script_in_tab("djjtb.media_tools.video_tools.video_splitter", self.venv_path, self.project_path)
-            elif choice == "7":
-                djj.run_script_in_tab("djjtb.media_tools.video_tools.video_speed_changer", self.venv_path, self.project_path)
-            elif choice == "8":
+            elif choice == "6":
                 djj.run_script_in_tab("djjtb.media_tools.video_tools.video_frame_extractor", self.venv_path, self.project_path)
-            elif choice == "9":
+            elif choice == "7":
                 djj.run_script_in_tab("djjtb.media_tools.video_tools.video_gif_converter", self.venv_path, self.project_path)
+            elif choice == "8":
+                djj.run_script_in_tab("djjtb.media_tools.video_tools.image_video_compiler", self.venv_path, self.project_path)
             elif choice == "0":
                 break
             elif choice == "00":
@@ -325,13 +346,15 @@ class DJJTBLauncher:
             if choice == "1":
                 djj.run_script_in_tab("djjtb.media_tools.image_tools.image_processor", self.venv_path, self.project_path)
             elif choice == "2":
-                djj.run_script_in_tab("djjtb.media_tools.image_tools.image_collage_creator", self.venv_path, self.project_path)
+                # Retired — moved to old_versions/. See comment on the menu print line above.
+                pass
             elif choice == "3":
                 djj.run_script_in_tab("djjtb.media_tools.image_tools.image_slideshow_maker", self.venv_path, self.project_path)
             elif choice == "4":
                 djj.run_script_in_tab("djjtb.media_tools.image_tools.image_webp_to_mp4", self.venv_path, self.project_path)
             elif choice == "5":
-                djj.run_script_in_tab("djjtb.media_tools.image_tools.image_video_compiler", self.venv_path, self.project_path)
+                # Moved to Video Tools (choice 10) — see djjtb.media_tools.video_tools.image_video_compiler
+                pass
             elif choice == "0":
                 break
             elif choice == "00":
@@ -385,7 +408,7 @@ class DJJTBLauncher:
         while True:
             self.show_ai_tools_menu()
             choice = djj.prompt_choice("\033[93mChoose an AI tool\033[0m",
-                                     ['1','1b', '2', '3', '4', '5', '6', '6a', '7', '7a','8','9','10','11','12','13','14','15','16','c0','c1' ,'c2' , 'c3', 'c4','c5','c6', 'c7', 'c8','cu','ch','cj', 'jc','atk', '0', '00'])
+                                     ['1','2','3','4','5','6','7','8','9','10','11','12','13','hm','cu','ch','cw','cj', 'jc','atk', '0', '00'])
             """
             if choice == "1":  # Prompt Randomizer
                 djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path}/djjtb/ai_tools/; python3 -m djjtb.media_tools.ai_tools.prompt_randomizer")
@@ -395,68 +418,45 @@ class DJJTBLauncher:
                 # Run in current terminal
                 os.system(f"source {self.venv_path}; cd {self.project_path}/; python3 -m djjtb.ai_tools.merge_loras.py")
             """
-            if choice == "1":  # Codeformer
-                djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path}/; python3 -m djjtb.ai_tools.codeformer_runner")
-            elif choice == "1b":  # Upscaler
-                djj.run_command_in_tab(f"source /Users/home/Documents/ai_models/upscalers/upsvenv/bin/activate; cd {self.project_path}/; python3 -m djjtb.ai_tools.upscaler_runner")
+            if choice == "1":  # Upscaler AI (CF + UPS combined runner)
+                djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path}/; python3 -m djjtb.ai_tools.cf_ups_runner")
             elif choice == "2":  # Joytag
                 command = f"source /Users/home/Documents/ai_models/joytag/jtvenv/bin/activate; cd {self.project_path}/; python3 -m djjtb.ai_tools.joytag_tagger"
                 djj.open_terminal_with_settings(command, "tagger", "525, 120, 1460, 700")
-            elif choice == "3":  # Image Tagger (AI)
-                command = (f"source {self.venv_path}; cd {self.project_path}; python3 -m djjtb.ai_tools.image_tagger")
-                djj.open_terminal_with_settings(command, "tagger", "525, 120, 1460, 700")
+            elif choice == "3":  # Image Finder
+                djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path}/; python3 -m djjtb.ai_tools.image_finder")
             elif choice == "4":  # FaceFusion
                 djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path}/; python3 -m djjtb.ai_tools.facefusion_runner")
             elif choice == "5":  # FaceFusion webUI
                 command = (f"{self.project_path}/djjtb/ai_tools/run_facefusion.command")
                 djj.open_terminal_with_settings(command, "tagger", "525, 120, 1225, 700")
-            elif choice == "6":  # Watermark Remover Auto-Detect
+            elif choice == "6":  # JoyCaption
                 djj.run_command_in_tab(
                   f"source /Users/home/Documents/ai_models/joycaption/jcvenv/bin/activate; "
                   f"cd {self.project_path}/; python3 -m djjtb.ai_tools.joycaption_runner"
               )
-
-                # djj.run_command_in_tab(f"source /Users/home/Documents/ai_models/watermark_remover/wmrmvenv/bin/activate; cd {self.project_path}/; python3 -m djjtb.ai_tools.watermark_remover_auto")
-            elif choice == "6a":  # JoyCaption via Ollama (GGUF, no dedicated venv needed)
+            elif choice == "7":  # JoyCaption via Ollama (GGUF, no dedicated venv needed)
                 djj.run_script_in_tab("djjtb.ai_tools.joycaption_runner_ollama", self.venv_path, self.project_path)
-            elif choice == "7":
-                djj.run_command_in_tab(f"source /Users/home/Documents/ai_models/upscalers/upsvenv/bin/activate; cd {self.project_path}/; python3 -m djjtb.ai_tools.upscaler_runner")
-            elif choice == "7a":  # or whatever slot number you pick
-                djj.run_command_in_tab(
-                  f"source /Users/home/Documents/ai_models/upscalers/upsvenv/bin/activate; "
-                  f"cd {self.project_path}/; python3 -m djjtb.ai_tools.cf_ups_runner"
-              )
-                # djj.run_command_in_tab(f"cd {self.project_path}/; python3 -m djjtb.ai_tools.watermark_remover_ref")
-            elif choice == "8":  # IOPaint
-                command = (f"{self.project_path}/djjtb/ai_tools/run_iopaint.command")
-                djj.open_terminal_with_settings(command, "tagger", "525, 120, 1225, 700")
-#            elif choice == "9":  # Image Upscaler - realesrgan_runner.py
-#                djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path}/; python3 -m djjtb.ai_tools.realesrgan_runner")
-#            elif choice == "10":  # Image Upscaler - realsr_runner.py
-#                djj.run_command_in_tab(f"cd {self.project_path}/; python3 -m djjtb.ai_tools.realsr_runner")
-            elif choice == "9":  # Image Finder
-                djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path}/; python3 -m djjtb.ai_tools.image_finder")
-            elif choice == "10":  # Image Caption Generator
-                command = f"source cd {self.project_path}/; python3 -m djjtb.ai_tools.image_caption_generator"
-                djj.open_terminal_with_settings(command, "tagger", "525, 120, 1460, 700")
-            elif choice == "11":  # Prompt Assembler
+            elif choice == "8":  # Prompt Assembler
                 command = ("/Users/home/Documents/Scripts/FLOW_TOOLS/prompt_assembler/LOCAL/prompt_assembler_runner.command")
                 djj.open_terminal_with_settings(command, "comfyui", "1000, 120, 1700, 700")
-            # elif choice == "12":  # Kohya_ss webUI
-            #     command = (f"{self.project_path}/djjtb/ai_tools/run_kohya_ss.command")
-            #     djj.open_terminal_with_settings(command, "tagger", "525, 120, 1225, 700")
-            elif choice == "12":  # ComfyUI batch
+            elif choice == "9":  # ComfyUI batch
                 djj.run_script_in_tab("djjtb.ai_tools.comfyui.comfyui_batch", self.venv_path, self.project_path)
-            elif choice == "13":  # OpenCode
+            elif choice == "10":  # OpenCode
                 command = f"cd {self.project_path}; opencode"
                 djj.open_terminal_with_settings(command, "home_profile", "1000, 120, 1700, 700")
-            elif choice == "14":  # Open WebUI
-                command = (f"{self.project_path}/djjtb/ai_tools/open_webui_runner.command")
-                djj.open_terminal_with_settings(command, "home_profile", "525, 120, 1460, 700")
-            elif choice == "15":  # Vocab + Mask Generator
+            elif choice == "11":  # Vocab + Mask Generator
                 djj.run_script_in_tab("djjtb.ai_tools.vocab_mask_generator", self.venv_path, self.project_path)
-            elif choice == "16":  # Category Sorter
+            elif choice == "12":  # Category Sorter
                 djj.run_script_in_tab("djjtb.ai_tools.category_sorter.category_sorter", self.venv_path, self.project_path)
+            elif choice == "13":  # Open WebUI — just starts the docker container + opens the web app, no terminal needed
+                subprocess.run(["docker", "start", "open-webui"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.run(["open", "/Users/home/Applications/Open WebUI.app"])
+                djj.wait_with_skip(2, "Launching Open WebUI")
+            elif choice == "hm":  # Hermes Helper
+                result = self.handle_hermes_helper()
+                if result == "main_menu":
+                    return
             elif choice == "cu":
                 command = (f"{self.project_path}/djjtb/ai_tools/comfyui_runner.command")
                 djj.open_terminal_with_settings(command, "comfyui", "1000, 120, 1700, 700")
@@ -466,39 +466,112 @@ class DJJTBLauncher:
             elif choice == "ch":
                 djj.open_path("/Applications/chaiNNer.app")
                 djj.wait_with_skip(3, "Returning to AI Tools menu")
+            elif choice == "cw":
+                result = self.handle_chainner_workflows()
+                if result == "main_menu":
+                    return
             elif choice == "cj":
                 djj.run_script_in_tab("djjtb.ai_tools.comfyui.csv_to_prompt_library", self.venv_path, self.project_path)
             elif choice == "jc":
                 djj.run_script_in_tab("djjtb.ai_tools.comfyui.json_to_prompt_csv", self.venv_path, self.project_path)
-            elif choice == "c0":
-                djj.open_path("/Users/home/Documents/ai_models/chaiNNer_workflows/facerestore_upscale_UT_stacked.chn")
-                djj.wait_with_skip(3, "Returning to AI Tools menu")
-            elif choice == "c1":
-                djj.open_path("/Users/home/Documents/ai_models/chaiNNer_workflows/upscale_facerestore.chn")
-                djj.wait_with_skip(3, "Returning to AI Tools menu")
-            elif choice == "c2":
-                djj.open_path("/Users/home/Documents/ai_models/chaiNNer_workflows/upscale_only.chn")
-                djj.wait_with_skip(3, "Returning to AI Tools menu")
-            elif choice == "c3":
-                djj.open_path("/Users/home/Documents/ai_models/chaiNNer_workflows/facerestore_only.chn")
-                djj.wait_with_skip(3, "Returning to AI Tools menu")
-            elif choice == "c4":
-                djj.open_path("/Users/home/Documents/ai_models/chaiNNer_workflows/crop.chn")
-                djj.wait_with_skip(3, "Returning to AI Tools menu")
-            elif choice == "c5":
-                djj.open_path("/Users/home/Documents/ai_models/chaiNNer_workflows/resize.chn")
-                djj.wait_with_skip(3, "Returning to AI Tools menu")
-            elif choice == "c6":
-                djj.open_path("/Users/home/Documents/ai_models/chaiNNer_workflows/watermark_remover.chn")
-                djj.wait_with_skip(3, "Returning to AI Tools menu")
-            elif choice == "c7":
-                djj.open_path("/Users/home/Documents/ai_models/chaiNNer_workflows/stack.chn")
-            elif choice == "c8":
-                djj.open_path("/Users/home/Documents/ai_models/chaiNNer_workflows/bg_remove.chn")
-                djj.wait_with_skip(3, "Returning to AI Tools menu")
             elif choice in ["0", "00"]:
                 break
-    
+
+    def handle_hermes_helper(self):
+        """Handle Hermes Helper submenu"""
+        while True:
+            self.show_hermes_helper_menu()
+            choice = djj.prompt_choice("\033[93mChoose an option\033[0m",
+                                     ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '0', '00'])
+
+            if choice == "1":  # Start Gateway
+                if not hh.docker_running():
+                    print("\033[93m⚠️  Docker Desktop doesn't appear to be running. Start it first.\033[0m")
+                    djj.wait_with_skip(3, "Returning to Hermes Helper menu")
+                else:
+                    port = hh.read_api_port()
+                    if hh.port_listening(port):
+                        print(f"\033[93m⚠️  Something's already listening on port {port} — gateway may already be running.\033[0m")
+                        djj.wait_with_skip(3, "Returning to Hermes Helper menu")
+                    else:
+                        hh.launch_gateway_window()
+            elif choice == "2":  # Stop Gateway
+                ok, msg = hh.stop_gateway()
+                color = "\033[92m" if ok else "\033[93m"
+                print(f"{color}{msg}\033[0m")
+                djj.wait_with_skip(3, "Returning to Hermes Helper menu")
+            elif choice == "3":  # Restart Gateway
+                ok, msg = hh.restart_gateway()
+                color = "\033[92m" if ok else "\033[93m"
+                print(f"{color}{msg}\033[0m")
+                djj.wait_with_skip(3, "Returning to Hermes Helper menu")
+            elif choice == "4":  # Add/Remove Working Folders
+                djj.run_script_in_tab("djjtb.ai_tools.hermes_helper", self.venv_path, self.project_path)
+            elif choice == "5":  # Status / Health Check
+                print(hh.status_report())
+                djj.wait_with_skip(5, "Returning to Hermes Helper menu")
+            elif choice == "6":  # Dashboard
+                subprocess.Popen([hh.HERMES_BIN, "dashboard"], stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL, start_new_session=True)
+                djj.wait_with_skip(2, "Launching Dashboard")
+            elif choice == "7":  # Desktop
+                subprocess.Popen([hh.HERMES_BIN, "desktop"], stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL, start_new_session=True)
+                djj.wait_with_skip(2, "Launching Desktop")
+            elif choice == "8":  # TUI
+                djj.open_terminal_with_settings(f"{hh.HERMES_BIN} --tui", hh.GATEWAY_PROFILE, hh.GATEWAY_BOUNDS)
+            elif choice == "9":  # Doctor
+                djj.run_command_in_tab(f"{hh.HERMES_BIN} doctor")
+            elif choice == "10":  # Model Switch
+                djj.run_command_in_tab(f"{hh.HERMES_BIN} model")
+            elif choice == "0":
+                return None
+            elif choice == "00":
+                djj.switch_to_terminal_tab("1")
+                return "main_menu"
+
+    def handle_chainner_workflows(self):
+        """Handle chaiNNer Workflows submenu"""
+        while True:
+            self.show_chainner_workflows_menu()
+            choice = djj.prompt_choice("\033[93mChoose a workflow\033[0m",
+                                     ['c0', 'c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8', '0', '00'])
+
+            if choice == "c0":
+                djj.open_path("/Users/home/Documents/ai_models/chaiNNer_workflows/facerestore_upscale_UT_stacked.chn")
+                djj.wait_with_skip(3, "Returning to chaiNNer Workflows menu")
+            elif choice == "c1":
+                djj.open_path("/Users/home/Documents/ai_models/chaiNNer_workflows/upscale_facerestore.chn")
+                djj.wait_with_skip(3, "Returning to chaiNNer Workflows menu")
+            elif choice == "c2":
+                djj.open_path("/Users/home/Documents/ai_models/chaiNNer_workflows/upscale_only.chn")
+                djj.wait_with_skip(3, "Returning to chaiNNer Workflows menu")
+            elif choice == "c3":
+                djj.open_path("/Users/home/Documents/ai_models/chaiNNer_workflows/facerestore_only.chn")
+                djj.wait_with_skip(3, "Returning to chaiNNer Workflows menu")
+            elif choice == "c4":
+                djj.open_path("/Users/home/Documents/ai_models/chaiNNer_workflows/crop.chn")
+                djj.wait_with_skip(3, "Returning to chaiNNer Workflows menu")
+            elif choice == "c5":
+                djj.open_path("/Users/home/Documents/ai_models/chaiNNer_workflows/resize.chn")
+                djj.wait_with_skip(3, "Returning to chaiNNer Workflows menu")
+            elif choice == "c6":
+                djj.open_path("/Users/home/Documents/ai_models/chaiNNer_workflows/watermark_remover.chn")
+                djj.wait_with_skip(3, "Returning to chaiNNer Workflows menu")
+            elif choice == "c7":
+                djj.open_path("/Users/home/Documents/ai_models/chaiNNer_workflows/stack.chn")
+                djj.wait_with_skip(3, "Returning to chaiNNer Workflows menu")
+            elif choice == "c8":
+                djj.open_path("/Users/home/Documents/ai_models/chaiNNer_workflows/bg_remove.chn")
+                djj.wait_with_skip(3, "Returning to chaiNNer Workflows menu")
+            elif choice == "0":
+                break
+            elif choice == "00":
+                djj.switch_to_terminal_tab("1")
+                return "main_menu"
+
+        return None
+
     def handle_file_tools(self):
         """Handle file tools submenu"""
         while True:
@@ -583,7 +656,7 @@ class DJJTBLauncher:
 
         while True:
             self.show_admin_tools_menu()
-            choice = djj.prompt_choice("\033[91mChoose an admin tool\033[0m", ['1', '2', '3', '4', '5', '6', '7', '8', '8a', '9', '0', '00'])
+            choice = djj.prompt_choice("\033[91mChoose an admin tool\033[0m", ['1', '2', '3', '4', '5', '6', '7', '8', '8a', '0', '00'])  # '9' (Stop ComfyUI) commented out below
 
             if choice == "1":  # djjtb_scan.py
                 djj.run_command_in_tab(
@@ -633,10 +706,10 @@ class DJJTBLauncher:
                         stderr=subprocess.DEVNULL
                     )
                 time.sleep(2)
-            elif choice == "9":  # Stop ComfyUI
-                djj.run_command_in_tab(
-                    f"bash {self.project_path}/djjtb/ai_tools/comfyui_stop.command"
-                )
+            # elif choice == "9":  # Stop ComfyUI (disabled for now; comfyui_stop.command still exists)
+            #     djj.run_command_in_tab(
+            #         f"bash {self.project_path}/djjtb/ai_tools/comfyui_stop.command"
+            #     )
             elif choice == "0":
                 break
             elif choice == "00":
