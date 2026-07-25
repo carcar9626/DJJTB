@@ -2,11 +2,12 @@ import os
 import sys
 import subprocess
 import pathlib
-import logging
 import tempfile
 import djjtb.utils as djj
 
 os.system('clear')
+
+VIDEO_EXTENSIONS = ('.mp4', '.mkv', '.webm', '.mov')
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -14,23 +15,13 @@ def clean_path(path_str):
     return path_str.strip().strip('\'"')
 
 def is_valid_video(filename):
-    return filename.lower().endswith(('.mp4', '.mov', '.webm', '.mkv'))
+    return filename.lower().endswith(VIDEO_EXTENSIONS)
 
 def collect_videos_from_folder(input_path):
     """Collect videos from a single folder (no recursion)."""
     input_path_obj = pathlib.Path(input_path)
-    video_extensions = ('.mp4', '.mkv', '.webm', '.mov')
-    videos = [f for f in input_path_obj.glob('*') if f.suffix.lower() in video_extensions and f.is_file()]
+    videos = [f for f in input_path_obj.glob('*') if f.suffix.lower() in VIDEO_EXTENSIONS and f.is_file()]
     return sorted([str(v) for v in videos], key=str.lower)
-
-def collect_videos_recursive(input_path):
-    """Collect all videos recursively from a folder (flat list)."""
-    videos = []
-    for root, _, files in os.walk(input_path):
-        for f in files:
-            if pathlib.Path(f).suffix.lower() in ('.mp4', '.mkv', '.webm', '.mov'):
-                videos.append(os.path.join(root, f))
-    return sorted(videos, key=str.lower)
 
 def collect_subfolders_with_videos(parent_path):
     """
@@ -168,6 +159,38 @@ def create_background_video(video_path, output_path, target_width, target_height
     result = subprocess.run(bg_cmd, capture_output=True, text=True)
     return temp_bg_video if result.returncode == 0 else None
 
+def _bg_overlay_cmd(bg_video, video, target_width, target_height, temp_output):
+    """Composite the (scaled) source video over its blurred background."""
+    return [
+        "ffmpeg", "-y", "-i", bg_video, "-i", video,
+        "-filter_complex",
+        f"[1:v]scale='if(gt(iw/ih,{target_width}/{target_height}),{target_width},-2)':'if(gt(iw/ih,{target_width}/{target_height}),-2,{target_height})'[scaled];"
+        f"[0:v][scaled]overlay=(W-w)/2:(H-h)/2[outv]",
+        "-map", "[outv]", "-map", "1:a?",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+        "-c:a", "aac", "-b:a", "128k", "-r", "30", "-pix_fmt", "yuv420p",
+        temp_output
+    ]
+
+def _crop_scale_cmd(video, crop_filter, target_width, target_height, temp_output):
+    return [
+        "ffmpeg", "-y", "-i", video,
+        "-vf", f"{crop_filter},scale={target_width}:{target_height}",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+        "-c:a", "aac", "-b:a", "128k", "-r", "30", "-pix_fmt", "yuv420p",
+        temp_output
+    ]
+
+def _scale_pad_cmd(video, target_width, target_height, temp_output):
+    return [
+        "ffmpeg", "-y", "-i", video,
+        "-vf", f"scale='if(gt(iw/ih,{target_width}/{target_height}),{target_width},-2)':'if(gt(iw/ih,{target_width}/{target_height}),-2,{target_height})',"
+               f"pad={target_width}:{target_height}:({target_width}-iw)/2:({target_height}-ih)/2:color=black",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+        "-c:a", "aac", "-b:a", "128k", "-r", "30", "-pix_fmt", "yuv420p",
+        temp_output
+    ]
+
 def process_video_for_sizing(video, sizing_method, crop_aspect, target_width, target_height, temp_output, output_dir):
     """Re-encode a single video to match target dimensions/method."""
     _, curr_width, curr_height, _ = get_video_info(video)
@@ -177,67 +200,20 @@ def process_video_for_sizing(video, sizing_method, crop_aspect, target_width, ta
         needs_padding = will_need_padding_after_crop(crop_aspect, curr_width, curr_height, target_width, target_height)
         if needs_padding:
             bg_video = create_background_video(video, temp_output, target_width, target_height)
-            if bg_video:
-                cmd = [
-                    "ffmpeg", "-y", "-i", bg_video, "-i", video,
-                    "-filter_complex",
-                    f"[1:v]scale='if(gt(iw/ih,{target_width}/{target_height}),{target_width},-2)':'if(gt(iw/ih,{target_width}/{target_height}),-2,{target_height})'[scaled];"
-                    f"[0:v][scaled]overlay=(W-w)/2:(H-h)/2[outv]",
-                    "-map", "[outv]", "-map", "1:a?",
-                    "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-                    "-c:a", "aac", "-b:a", "128k", "-r", "30", "-pix_fmt", "yuv420p",
-                    temp_output
-                ]
-            else:
-                crop_filter, _, _ = build_crop_filter(crop_aspect, curr_width, curr_height)
-                cmd = [
-                    "ffmpeg", "-y", "-i", video,
-                    "-vf", f"{crop_filter},scale={target_width}:{target_height}",
-                    "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-                    "-c:a", "aac", "-b:a", "128k", "-r", "30", "-pix_fmt", "yuv420p",
-                    temp_output
-                ]
+        if bg_video:
+            cmd = _bg_overlay_cmd(bg_video, video, target_width, target_height, temp_output)
         else:
             crop_filter, _, _ = build_crop_filter(crop_aspect, curr_width, curr_height)
-            cmd = [
-                "ffmpeg", "-y", "-i", video,
-                "-vf", f"{crop_filter},scale={target_width}:{target_height}",
-                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-                "-c:a", "aac", "-b:a", "128k", "-r", "30", "-pix_fmt", "yuv420p",
-                temp_output
-            ]
+            cmd = _crop_scale_cmd(video, crop_filter, target_width, target_height, temp_output)
 
     elif sizing_method.endswith('_blur'):
         bg_video = create_background_video(video, temp_output, target_width, target_height)
         if bg_video:
-            cmd = [
-                "ffmpeg", "-y", "-i", bg_video, "-i", video,
-                "-filter_complex",
-                f"[1:v]scale='if(gt(iw/ih,{target_width}/{target_height}),{target_width},-2)':'if(gt(iw/ih,{target_width}/{target_height}),-2,{target_height})'[scaled];"
-                f"[0:v][scaled]overlay=(W-w)/2:(H-h)/2[outv]",
-                "-map", "[outv]", "-map", "1:a?",
-                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-                "-c:a", "aac", "-b:a", "128k", "-r", "30", "-pix_fmt", "yuv420p",
-                temp_output
-            ]
+            cmd = _bg_overlay_cmd(bg_video, video, target_width, target_height, temp_output)
         else:
-            cmd = [
-                "ffmpeg", "-y", "-i", video,
-                "-vf", f"scale='if(gt(iw/ih,{target_width}/{target_height}),{target_width},-2)':'if(gt(iw/ih,{target_width}/{target_height}),-2,{target_height})',"
-                       f"pad={target_width}:{target_height}:({target_width}-iw)/2:({target_height}-ih)/2:color=black",
-                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-                "-c:a", "aac", "-b:a", "128k", "-r", "30", "-pix_fmt", "yuv420p",
-                temp_output
-            ]
+            cmd = _scale_pad_cmd(video, target_width, target_height, temp_output)
     else:  # _pad
-        cmd = [
-            "ffmpeg", "-y", "-i", video,
-            "-vf", f"scale='if(gt(iw/ih,{target_width}/{target_height}),{target_width},-2)':'if(gt(iw/ih,{target_width}/{target_height}),-2,{target_height})',"
-                   f"pad={target_width}:{target_height}:({target_width}-iw)/2:({target_height}-ih)/2:color=black",
-            "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-            "-c:a", "aac", "-b:a", "128k", "-r", "30", "-pix_fmt", "yuv420p",
-            temp_output
-        ]
+        cmd = _scale_pad_cmd(video, target_width, target_height, temp_output)
 
     result = subprocess.run(cmd, capture_output=True, text=True)
 
@@ -284,7 +260,7 @@ def merge_videos_to_file(videos, output_file, sizing_method, crop_aspect, target
                     escaped = video.replace("'", "'\\''")
                     f.write(f"file '{escaped}'\n")
 
-        if use_reencode or needs_processing:
+        if use_reencode:
             cmd = [
                 "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", concat_file,
                 "-c:v", "libx264", "-preset", "fast", "-crf", "23",
@@ -292,6 +268,10 @@ def merge_videos_to_file(videos, output_file, sizing_method, crop_aspect, target
                 output_file
             ]
         else:
+            # Safe to stream-copy here: when needs_processing is True, every
+            # entry in concat_file is one of our own temp segments, already
+            # normalized to identical codec/dims/fps/pix_fmt by
+            # process_video_for_sizing — exactly what -c copy concat requires.
             cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", concat_file, "-c", "copy", output_file]
 
         result = subprocess.run(cmd, capture_output=True, text=True)
