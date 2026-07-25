@@ -7,6 +7,9 @@ from collections import defaultdict
 import djjtb.utils as djj
 os.system('clear')
 
+VIDEO_EXTS = (".mp4", ".mov", ".webm")
+IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
+
 # Block 1 – FFmpeg Helper
 def get_video_info(video_path):
     """Returns (duration, width, height, fps) from a video file."""
@@ -39,11 +42,6 @@ def get_video_info(video_path):
     except Exception as e:
         print(f"❌ ffprobe failed on {video_path}: {e}")
         return None, None, None, None
-
-# Keep old name as a shim so nothing breaks if referenced elsewhere
-def get_video_dimensions(video_path):
-    duration, width, height, fps = get_video_info(video_path)
-    return duration, width, height
 
 def get_image_dimensions(image_path):
     """Get image dimensions using ffprobe."""
@@ -217,10 +215,8 @@ def process_slideshow_only_folder(folder, image_duration, image_duration2, num_s
     Process a single subfolder for Slideshow Only mode.
     Finds 1 video (for duration reference) and all images, then builds slideshows.
     """
-    valid_exts = (".mp4", ".mov", ".webm")
-    image_exts = (".jpg", ".jpeg", ".png", ".webp")
 
-    videos = [f for f in os.listdir(folder) if f.lower().endswith(valid_exts)]
+    videos = [f for f in os.listdir(folder) if f.lower().endswith(VIDEO_EXTS)]
     if len(videos) != 1:
         print(f"⚠️ Skipping {folder}: needs exactly 1 video as duration reference.")
         return
@@ -230,7 +226,7 @@ def process_slideshow_only_folder(folder, image_duration, image_duration2, num_s
 
     images = sorted([
         os.path.join(folder, f) for f in os.listdir(folder)
-        if f.lower().endswith(image_exts)
+        if f.lower().endswith(IMAGE_EXTS)
     ])
     if not images:
         print(f"⚠️ No images found in {folder}, skipping.")
@@ -258,10 +254,8 @@ def process_slideshow_only_flat(parent, image_duration, image_duration2, num_sli
     """
     Flat mode for Slideshow Only: each video pairs with matching-stem images.
     """
-    valid_exts = (".mp4", ".mov", ".webm")
-    image_exts = (".jpg", ".jpeg", ".png", ".webp")
 
-    videos = sorted([f for f in os.listdir(parent) if f.lower().endswith(valid_exts)])
+    videos = sorted([f for f in os.listdir(parent) if f.lower().endswith(VIDEO_EXTS)])
     total = len(videos)
 
     if total == 0:
@@ -278,7 +272,7 @@ def process_slideshow_only_flat(parent, image_duration, image_duration2, num_sli
 
         images = sorted([
             os.path.join(parent, f) for f in os.listdir(parent)
-            if f.lower().endswith(image_exts) and Path(f).stem.startswith(video_stem)
+            if f.lower().endswith(IMAGE_EXTS) and Path(f).stem.startswith(video_stem)
         ])
         if not images:
             print(f"\033[93m⚠️ No matching images for\033[0m {video_file}\033[93m, skipping.\033[0m")
@@ -304,9 +298,7 @@ def process_slideshow_only_flat(parent, image_duration, image_duration2, num_sli
 
 # Block 6 – Original Slideshow + Watermark processors
 def process_folder(folder, image_duration, scale_ratio, overlay_position, is_flat_mode, parent=None):
-    valid_exts = (".mp4", ".mov", ".webm")
-    image_exts = (".jpg", ".jpeg", ".png", ".webp")
-    videos = [f for f in os.listdir(folder) if f.lower().endswith(valid_exts)]
+    videos = [f for f in os.listdir(folder) if f.lower().endswith(VIDEO_EXTS)]
     if len(videos) != 1:
         print(f"⚠️ Skipping {folder}: needs exactly 1 video.")
         return
@@ -316,7 +308,7 @@ def process_folder(folder, image_duration, scale_ratio, overlay_position, is_fla
 
     images = sorted([
         os.path.join(folder, f) for f in os.listdir(folder)
-        if f.lower().endswith(image_exts)
+        if f.lower().endswith(IMAGE_EXTS)
     ])
     if not images:
         print(f"⚠️ No matching images in {folder}, skipping.")
@@ -351,9 +343,7 @@ def process_folder(folder, image_duration, scale_ratio, overlay_position, is_fla
     print()
 
 def process_flat_mode(parent, image_duration, scale_ratio, overlay_position):
-    valid_exts = (".mp4", ".mov", ".webm")
-    image_exts = (".jpg", ".jpeg", ".png", ".webp")
-    videos = [f for f in os.listdir(parent) if f.lower().endswith(valid_exts)]
+    videos = [f for f in os.listdir(parent) if f.lower().endswith(VIDEO_EXTS)]
 
     total = len(videos)
     for idx, video_file in enumerate(videos, 1):
@@ -364,7 +354,7 @@ def process_flat_mode(parent, image_duration, scale_ratio, overlay_position):
 
         images = sorted([
             os.path.join(parent, f) for f in os.listdir(parent)
-            if f.lower().endswith(image_exts) and Path(f).stem.startswith(video_stem)
+            if f.lower().endswith(IMAGE_EXTS) and Path(f).stem.startswith(video_stem)
         ])
         if not images:
             print(f"\033[93m⚠️ No matching images for\033[0m {video_file}, \033[93mskipping.\033[0m")
@@ -393,8 +383,6 @@ def process_flat_mode(parent, image_duration, scale_ratio, overlay_position):
         output_path = watermarked_dir / f"{video_stem}_watermarked.mp4"
         overlay_watermark(video_path, slideshow_path, output_path, scale_ratio, video_width, video_height, overlay_position)
 
-        shutil.rmtree(temp_dir, ignore_errors=True)
-
         print(f"✅ Done: {output_path}")
         print()
 
@@ -405,11 +393,9 @@ def process_flat_mode(parent, image_duration, scale_ratio, overlay_position):
 
 def process_join_folder(folder, position, audio_choice):
     """Subfolder mode: expects exactly 1 image + 1 video per subfolder."""
-    valid_exts = (".mp4", ".mov", ".webm")
-    image_exts = (".jpg", ".jpeg", ".png", ".webp")
 
-    videos = [f for f in os.listdir(folder) if f.lower().endswith(valid_exts)]
-    images = [f for f in os.listdir(folder) if f.lower().endswith(image_exts)]
+    videos = [f for f in os.listdir(folder) if f.lower().endswith(VIDEO_EXTS)]
+    images = [f for f in os.listdir(folder) if f.lower().endswith(IMAGE_EXTS)]
 
     if len(videos) != 1 or len(images) != 1:
         print(f"  ⚠️  Skipping {Path(folder).name}: needs exactly 1 image + 1 video "
@@ -436,10 +422,8 @@ def process_join_folder(folder, position, audio_choice):
 
 def process_join_flat(parent, position, audio_choice):
     """Flat mode: pairs image+video by matching stem, like existing flat modes."""
-    valid_exts = (".mp4", ".mov", ".webm")
-    image_exts = (".jpg", ".jpeg", ".png", ".webp")
 
-    videos = sorted([f for f in os.listdir(parent) if f.lower().endswith(valid_exts)])
+    videos = sorted([f for f in os.listdir(parent) if f.lower().endswith(VIDEO_EXTS)])
     total = len(videos)
 
     if total == 0:
@@ -458,7 +442,7 @@ def process_join_flat(parent, position, audio_choice):
 
         matched_images = sorted([
             os.path.join(parent, f) for f in os.listdir(parent)
-            if f.lower().endswith(image_exts) and Path(f).stem.startswith(video_stem)
+            if f.lower().endswith(IMAGE_EXTS) and Path(f).stem.startswith(video_stem)
         ])
 
         if not matched_images:
@@ -487,10 +471,8 @@ def process_slideshow_join_folder(folder, image_duration, position, audio_choice
     then joins it to the video.
     Output: parent/Output/Slideshow_Joined/
     """
-    valid_exts = (".mp4", ".mov", ".webm")
-    image_exts = (".jpg", ".jpeg", ".png", ".webp")
 
-    videos = [f for f in os.listdir(folder) if f.lower().endswith(valid_exts)]
+    videos = [f for f in os.listdir(folder) if f.lower().endswith(VIDEO_EXTS)]
     if len(videos) != 1:
         print(f"  ⚠️  Skipping {Path(folder).name}: needs exactly 1 video (found {len(videos)})")
         return
@@ -500,7 +482,7 @@ def process_slideshow_join_folder(folder, image_duration, position, audio_choice
 
     images = sorted([
         os.path.join(folder, f) for f in os.listdir(folder)
-        if f.lower().endswith(image_exts)
+        if f.lower().endswith(IMAGE_EXTS)
     ])
     if not images:
         print(f"  ⚠️  No images found in {Path(folder).name}, skipping.")
@@ -541,10 +523,8 @@ def process_slideshow_join_flat(parent, image_duration, position, audio_choice, 
     Pairs video with matching-stem images.
     Output: parent/Output/Slideshow_Joined/
     """
-    valid_exts = (".mp4", ".mov", ".webm")
-    image_exts = (".jpg", ".jpeg", ".png", ".webp")
 
-    videos = sorted([f for f in os.listdir(parent) if f.lower().endswith(valid_exts)])
+    videos = sorted([f for f in os.listdir(parent) if f.lower().endswith(VIDEO_EXTS)])
     total = len(videos)
     if total == 0:
         print("⚠️  No videos found in folder.")
@@ -563,7 +543,7 @@ def process_slideshow_join_flat(parent, image_duration, position, audio_choice, 
 
         images = sorted([
             os.path.join(parent, f) for f in os.listdir(parent)
-            if f.lower().endswith(image_exts) and Path(f).stem.startswith(video_stem)
+            if f.lower().endswith(IMAGE_EXTS) and Path(f).stem.startswith(video_stem)
         ])
         if not images:
             print(f"  ⚠️  No matching images for {video_file}, skipping.")
@@ -602,10 +582,8 @@ def process_collage_join_folder(folder, position, audio_choice,
     Creates a collage from all images, then joins it to the video.
     Output: parent/Output/Collage_Joined/
     """
-    valid_exts = (".mp4", ".mov", ".webm")
-    image_exts = (".jpg", ".jpeg", ".png", ".webp")
 
-    videos = [f for f in os.listdir(folder) if f.lower().endswith(valid_exts)]
+    videos = [f for f in os.listdir(folder) if f.lower().endswith(VIDEO_EXTS)]
     if len(videos) != 1:
         print(f"  ⚠️  Skipping {Path(folder).name}: needs exactly 1 video (found {len(videos)})")
         return
@@ -615,7 +593,7 @@ def process_collage_join_folder(folder, position, audio_choice,
 
     images = sorted([
         os.path.join(folder, f) for f in os.listdir(folder)
-        if f.lower().endswith(image_exts)
+        if f.lower().endswith(IMAGE_EXTS)
     ])
     if not images:
         print(f"  ⚠️  No images found in {Path(folder).name}, skipping.")
@@ -652,10 +630,8 @@ def process_collage_join_flat(parent, position, audio_choice,
     Pairs video with matching-stem images, collages them, then joins.
     Output: parent/Output/Collage_Joined/
     """
-    valid_exts = (".mp4", ".mov", ".webm")
-    image_exts = (".jpg", ".jpeg", ".png", ".webp")
 
-    videos = sorted([f for f in os.listdir(parent) if f.lower().endswith(valid_exts)])
+    videos = sorted([f for f in os.listdir(parent) if f.lower().endswith(VIDEO_EXTS)])
     total = len(videos)
     if total == 0:
         print("⚠️  No videos found in folder.")
@@ -674,7 +650,7 @@ def process_collage_join_flat(parent, position, audio_choice,
 
         images = sorted([
             os.path.join(parent, f) for f in os.listdir(parent)
-            if f.lower().endswith(image_exts) and Path(f).stem.startswith(video_stem)
+            if f.lower().endswith(IMAGE_EXTS) and Path(f).stem.startswith(video_stem)
         ])
         if not images:
             print(f"  ⚠️  No matching images for {video_file}, skipping.")
