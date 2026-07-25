@@ -3,6 +3,8 @@ import subprocess
 import sys
 import pathlib
 import djjtb.utils as djj
+from scenedetect import open_video, SceneManager
+from scenedetect.detectors import AdaptiveDetector
 
 os.system('clear')
 
@@ -132,6 +134,104 @@ def build_split_cmd(video_path, start_time, remaining_time, output_file, audio_c
         "ffmpeg", "-y", "-ss", str(start_time), "-i", str(video_path),
         "-t", str(remaining_time), "-c:v", "libx264"
     ] + audio_options + [str(output_file)]
+
+def detect_scenes(video_path, min_scene_duration):
+    """
+    Detect scenes via PySceneDetect (AdaptiveDetector), then merge any
+    scene shorter than min_scene_duration into its neighbor -- otherwise
+    fast-cut montage footage (e.g. GRWM-style outfit-change clips) explodes
+    into dozens of sub-second fragments instead of a few usable scenes.
+    Returns a list of (start_seconds, end_seconds) tuples.
+    """
+    video = open_video(str(video_path))
+    scene_manager = SceneManager()
+    scene_manager.add_detector(AdaptiveDetector())
+    scene_manager.detect_scenes(video=video)
+    scenes = scene_manager.get_scene_list()
+
+    if not scenes:
+        return []
+
+    merged = []
+    group_start = scenes[0][0]
+    group_end = scenes[0][1]
+    for start, end in scenes[1:]:
+        if group_end.get_seconds() - group_start.get_seconds() < min_scene_duration:
+            group_end = end
+        else:
+            merged.append((group_start.get_seconds(), group_end.get_seconds()))
+            group_start = start
+            group_end = end
+    merged.append((group_start.get_seconds(), group_end.get_seconds()))
+
+    if len(merged) > 1:
+        last_start, last_end = merged[-1]
+        if last_end - last_start < min_scene_duration:
+            prev_start, prev_end = merged[-2]
+            merged[-2] = (prev_start, last_end)
+            merged.pop()
+
+    return merged
+
+def split_video_by_scenes(videos, min_scene_duration, audio_choice):
+    """Split videos at auto-detected scene boundaries."""
+    if not videos:
+        return [], [], None
+
+    print()
+    print("\033[93mDetecting scenes...\033[0m")
+
+    successful = []
+    failed = []
+    output_dirs = set()
+    total_videos = len(videos)
+
+    for i, video_path in enumerate(videos, 1):
+        video_path_obj = pathlib.Path(video_path)
+        logger = None
+        try:
+            video_name = video_path_obj.stem
+            output_dir = video_path_obj.parent / "Output" / "Scene_Split" / video_name
+            output_dir.mkdir(parents=True, exist_ok=True)
+            logger = djj.setup_logging(str(output_dir), "video_split")
+            output_dirs.add(str(output_dir))
+
+            print(f"\r\033[93mAnalyzing\033[0m {i}\033[93m/\033[0m{total_videos}: {video_path_obj.name}...", end='', flush=True)
+            scenes = detect_scenes(video_path, min_scene_duration)
+
+            if not scenes:
+                logger.error(f"No scenes detected for {video_path_obj.name}")
+                print(f"\n\033[93mNo scenes detected for\033[0m {video_path_obj.name}\033[93m, skipping.\033[0m")
+                failed.append((video_path_obj.name, None, "No scenes detected"))
+                continue
+
+            num_scenes = len(scenes)
+            for j, (start_time, end_time) in enumerate(scenes):
+                clip_duration = end_time - start_time
+                output_file = output_dir / f"{video_name}-scene{j+1:04d}.mp4"
+
+                progress = ((i - 1 + (j + 1) / num_scenes) / total_videos) * 100
+                status_line = f"\033[93mSplitting\033[0m {i}\033[93m/\033[0m{total_videos} \033[93mvideos\033[0m, \033[93mscenes\033[0m {j+1}\033[93m/\033[0m{num_scenes} ({progress:.1f}%)"
+                print(f"\r\033[93m{status_line}\033[0m", end='', flush=True)
+
+                try:
+                    ffmpeg_cmd = build_split_cmd(video_path, start_time, clip_duration, output_file, audio_choice)
+                    result = subprocess.run(ffmpeg_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                    successful.append((video_path_obj.name, j+1))
+                except subprocess.CalledProcessError as e:
+                    failed.append((video_path_obj.name, j+1, str(e)))
+                    logger.error(f"Error generating {output_file}: {e}")
+                    print(f"\r{status_line}... (failed)    ", end='', flush=True)
+
+        except Exception as e:
+            failed.append((video_path_obj.name, None, str(e)))
+            if logger:
+                logger.error(f"Failed to process {video_path_obj.name}: {e}")
+            print(f"\r\033[93mProcessing\033[0m {i}\033[93m/\033[0m{total_videos} \033[93mvideos\033[0m ({i/total_videos*100:.1f}%)... \033[93m(failed) \033[0m   ", end='', flush=True)
+
+    print("\r" + " " * 80 + "\r", end='', flush=True)
+
+    return successful, failed, output_dirs
 
 def split_video_by_duration(videos, clip_duration, audio_choice):
     """Split videos into clips of specified duration, with output in each video's parent folder."""
@@ -270,28 +370,41 @@ if __name__ == "__main__":
             continue
 
         # Choose splitting method
-        split_method = djj.prompt_choice("\033[93mSplit method?\033[0m\n1. By Duration, 2. By Portions ", ['1', '2'], default='1')
+        split_method = djj.prompt_choice(
+            "\033[93mSplit method?\033[0m\n1. By Duration, 2. By Portions, 3. By Scene Detection (auto) ",
+            ['1', '2', '3'],
+            default='1'
+        )
         print()
 
         if split_method == '1':
             # Duration-based splitting
             clip_duration = djj.get_float_input("Clip Duration in seconds (ie. 8): ", min_val=0.1)
             print()
-        else:
+        elif split_method == '2':
             # Portion-based splitting
             num_portions = djj.get_int_input("\033[93mNumber of portions:\n(ie. 4)\033[0m: ", min_val=2)
+            print()
+        else:
+            # Scene-detection splitting
+            min_scene_duration = djj.get_float_input(
+                "\033[93mMinimum scene length in seconds (ie. 2.0):\033[0m ",
+                min_val=0.1, max_val=30.0
+            )
             print()
 
         audio_choice = djj.prompt_choice("\033[93mAudio handling?\033[0m\n1. Keep Original Audio\n2. Strip Audio\n3. Add Silent Audio Track)\n", ['1', '2', '3'], default='1')
         print()
 
         print("\033[93m-------------\033[0m")
-        
+
         if split_method == '1':
             successful, failed, output_dirs = split_video_by_duration(videos, clip_duration, audio_choice)
-        else:
+        elif split_method == '2':
             successful, failed, output_dirs = split_video_by_portions(videos, num_portions, audio_choice)
-        
+        else:
+            successful, failed, output_dirs = split_video_by_scenes(videos, min_scene_duration, audio_choice)
+
         print("\n" * 1)
         print("\033[93mSplitting Summary\033[0m")
         print("-------------")
