@@ -301,6 +301,8 @@ class DJJTBLauncher:
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰 \033[4;93m1\033[0m  Video to GIF Converter 📹⬌🌃🌆🎆🎇")
         print(" 💰 \033[4;93m2\033[0m  Image Collage Creator 🧩 🎇")
+        print(" 💰 \033[4;93m3\033[0m  Image Caption Generator 🏷️")
+        print(" 💰 \033[4;93m4\033[0m  Image Tagger (CLIP) 🏷️")
         print()
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰 \033[4;93m0\033[0m  ⏪ Back")
@@ -317,13 +319,17 @@ class DJJTBLauncher:
             self.show_archived_menu()
 
             choice = djj.prompt_choice("\033[93mChoose a Tool\033[0m" if first_entry else "\033[93mChoose another option\033[0m",
-                                     ['1', '2', '0', '00'])
+                                     ['1', '2', '3', '4', '0', '00'])
             first_entry = False
 
             if choice == "1":
                 djj.run_script_in_tab("djjtb.archived.video_gif_converter", self.venv_path, self.project_path)
             elif choice == "2":
                 djj.run_script_in_tab("djjtb.archived.image_collage_creator", self.venv_path, self.project_path)
+            elif choice == "3":
+                djj.run_script_in_tab("djjtb.archived.image_caption_generator", self.venv_path, self.project_path)
+            elif choice == "4":
+                djj.run_script_in_tab("djjtb.archived.image_tagger", self.venv_path, self.project_path)
             elif choice == "0":
                 break
             elif choice == "00":
