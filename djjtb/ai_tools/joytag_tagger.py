@@ -373,22 +373,6 @@ def setup_database(db_path):
     conn.commit()
     return conn
 
-def collect_images_from_folder(input_path, include_subfolders=False):
-    """Collect images from folder(s) - following DJJTB pattern."""
-    input_path_obj = pathlib.Path(input_path)
-    
-    images = []
-    if input_path_obj.is_dir():
-        if include_subfolders:
-            for root, _, files in os.walk(input_path):
-                images.extend(pathlib.Path(root) / f for f in files
-                            if pathlib.Path(f).suffix.lower() in SUPPORTED_EXTS)
-        else:
-            images = [f for f in input_path_obj.glob('*')
-                    if f.suffix.lower() in SUPPORTED_EXTS and f.is_file() and f.exists()]
-    
-    return sorted([str(v) for v in images], key=str.lower)
-
 def process_image_batch(image_paths: List[str], processor: JoyTagProcessor,
                        confidence_threshold: float, logger) -> List[Dict]:
     """Process a batch of images and return results"""
@@ -632,7 +616,7 @@ def main():
         
         # Collect images
         print("Scanning for images...")
-        all_images = collect_images_from_folder(folder_path, include_sub)
+        all_images = djj.collect_images_from_folder(folder_path, include_sub, extensions=SUPPORTED_EXTS)
         all_images = djj.apply_skip_list(all_images, root=folder_path)
         print()
 

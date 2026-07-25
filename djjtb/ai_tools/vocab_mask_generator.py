@@ -245,30 +245,6 @@ def create_hidden_symlink(link_path, target_path):
 
 # ─── Input Collection (standard DJJTB pattern) ────────────────────────────────
 
-def collect_images_from_folder(input_path, include_subfolders=False):
-    input_path_obj = Path(input_path)
-    images = []
-    if input_path_obj.is_dir():
-        if include_subfolders:
-            for root, _, filenames in os.walk(input_path):
-                images.extend(Path(root) / f for f in filenames if Path(f).suffix.lower() in SUPPORTED_EXTS)
-        else:
-            images = [f for f in input_path_obj.glob('*') if f.suffix.lower() in SUPPORTED_EXTS and f.is_file()]
-    return sorted([str(f) for f in images], key=str.lower)
-
-
-def collect_images_from_paths(file_paths):
-    images = []
-    for path in file_paths.strip().split():
-        path = path.strip('\'"')
-        path_obj = Path(path)
-        if path_obj.is_file() and path_obj.suffix.lower() in SUPPORTED_EXTS:
-            images.append(str(path_obj))
-        elif path_obj.is_dir():
-            images.extend(collect_images_from_folder(str(path_obj), include_subfolders=False))
-    return sorted(images, key=str.lower)
-
-
 def collect_images_from_txt():
     paths = djj.get_paths_from_txt("Enter txt file path")
     if not paths:
@@ -279,7 +255,7 @@ def collect_images_from_txt():
         if path_obj.is_file() and path_obj.suffix.lower() in SUPPORTED_EXTS:
             images.append(str(path_obj))
         elif path_obj.is_dir():
-            images.extend(collect_images_from_folder(str(path_obj), include_subfolders=False))
+            images.extend(djj.collect_images_from_folder(str(path_obj), include_subfolders=False, extensions=SUPPORTED_EXTS))
     return sorted(set(images), key=str.lower)
 
 
@@ -303,13 +279,13 @@ def get_valid_inputs():
             default='2'
         ) == '1'
         print()
-        valid_paths = collect_images_from_folder(src_path, include_sub)
+        valid_paths = djj.collect_images_from_folder(src_path, include_sub, extensions=SUPPORTED_EXTS)
     elif input_mode == '2':
         file_paths = input("📁 \033[93mEnter image paths (space-separated):\033[0m\n -> ").strip()
         if not file_paths:
             print("❌ \033[93mNo file paths provided.\033[0m")
             sys.exit(1)
-        valid_paths = collect_images_from_paths(file_paths)
+        valid_paths = djj.collect_images_from_paths(file_paths, extensions=SUPPORTED_EXTS)
         print()
     else:
         valid_paths = collect_images_from_txt()

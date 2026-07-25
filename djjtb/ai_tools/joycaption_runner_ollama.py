@@ -101,34 +101,6 @@ def format_time(seconds: float) -> str:
     return f"{seconds/3600:.1f}h"
 
 
-def collect_images_from_folder(folder: str, include_subfolders: bool = False) -> List[str]:
-    p = pathlib.Path(folder)
-    images = []
-    if include_subfolders:
-        for root, _, files in os.walk(folder):
-            for f in files:
-                if pathlib.Path(f).suffix.lower() in SUPPORTED_EXTS:
-                    images.append(os.path.join(root, f))
-    else:
-        images = [
-            str(f) for f in p.glob("*")
-            if f.suffix.lower() in SUPPORTED_EXTS and f.is_file()
-        ]
-    return sorted(images, key=str.lower)
-
-
-def collect_images_from_paths(raw_input: str) -> List[str]:
-    images = []
-    for path_str in raw_input.strip().split():
-        path_str = path_str.strip("'\"")
-        path_obj = pathlib.Path(path_str)
-        if path_obj.is_file() and path_obj.suffix.lower() in SUPPORTED_EXTS:
-            images.append(str(path_obj))
-        elif path_obj.is_dir():
-            images.extend(collect_images_from_folder(str(path_obj)))
-    return sorted(images, key=str.lower)
-
-
 def collect_images_from_txt() -> List[str]:
     """Collect images from a txt file listing paths (files and/or folders)."""
     txt_path = djj.get_path_input("Enter txt file path")
@@ -145,7 +117,7 @@ def collect_images_from_txt() -> List[str]:
         if path_obj.is_file() and path_obj.suffix.lower() in SUPPORTED_EXTS:
             images.append(str(path_obj))
         elif path_obj.is_dir():
-            images.extend(collect_images_from_folder(str(path_obj)))
+            images.extend(djj.collect_images_from_folder(str(path_obj), extensions=SUPPORTED_EXTS))
     return sorted(set(images), key=str.lower)
 
 
@@ -422,14 +394,14 @@ def main():
                 ["1", "2"], default="2"
             ) == "1"
             print()
-            images = collect_images_from_folder(src_path, include_sub)
+            images = djj.collect_images_from_folder(src_path, include_sub, extensions=SUPPORTED_EXTS)
             images = djj.apply_skip_list(images, root=src_path)
         elif input_mode == "2":
             raw = input("📁 \033[93mEnter image paths (space-separated):\033[0m\n -> ").strip()
             if not raw:
                 print("❌ \033[93mNo file paths provided.\033[0m")
                 continue
-            images = collect_images_from_paths(raw)
+            images = djj.collect_images_from_paths(raw, extensions=SUPPORTED_EXTS)
             if images:
                 src_path = str(pathlib.Path(images[0]).parent)
             print()

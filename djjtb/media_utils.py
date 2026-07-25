@@ -240,11 +240,15 @@ def is_valid_image_file(file_path):
         return False
 
 
-def collect_images_from_folder(folder_path, include_subfolders=False):
+def collect_images_from_folder(folder_path, include_subfolders=False, extensions=None):
     """
     Collect images from a folder, never descending into Output dirs.
     Non-recursive mode only lists the folder's immediate contents.
+    extensions defaults to IMAGE_EXTENSIONS; pass a narrower tuple to
+    exclude formats a particular caller can't handle (e.g. animated .gif).
     """
+    if extensions is None:
+        extensions = IMAGE_EXTENSIONS
     folder_path_obj = pathlib.Path(folder_path)
 
     images = []
@@ -253,18 +257,22 @@ def collect_images_from_folder(folder_path, include_subfolders=False):
             for root, dirs, files in os.walk(folder_path):
                 # Prune Output folders in-place so walk never descends into them
                 dirs[:] = [d for d in dirs if d.lower() != 'output']
-                images.extend(pathlib.Path(root) / f for f in files if pathlib.Path(f).suffix.lower() in IMAGE_EXTENSIONS)
+                images.extend(pathlib.Path(root) / f for f in files if pathlib.Path(f).suffix.lower() in extensions)
         else:
-            images = [f for f in folder_path_obj.glob('*') if f.suffix.lower() in IMAGE_EXTENSIONS and f.is_file()]
+            images = [f for f in folder_path_obj.glob('*') if f.suffix.lower() in extensions and f.is_file()]
 
     return sorted([str(v) for v in images], key=str.lower)
 
 
-def collect_images_from_paths(raw_input):
+def collect_images_from_paths(raw_input, extensions=None):
     """
     Collect images from space-separated paths (supports drag-and-drop).
     Handles quoted paths, escaped spaces, files and folders mixed together.
+    extensions defaults to IMAGE_EXTENSIONS; pass a narrower tuple to
+    exclude formats a particular caller can't handle (e.g. animated .gif).
     """
+    if extensions is None:
+        extensions = IMAGE_EXTENSIONS
     images = []
     raw = raw_input.strip()
 
@@ -294,10 +302,10 @@ def collect_images_from_paths(raw_input):
             continue
         try:
             path_obj = pathlib.Path(path_str).expanduser().resolve()
-            if path_obj.is_file() and path_obj.suffix.lower() in IMAGE_EXTENSIONS:
+            if path_obj.is_file() and path_obj.suffix.lower() in extensions:
                 images.append(str(path_obj))
             elif path_obj.is_dir():
-                images.extend(collect_images_from_folder(str(path_obj), include_subfolders=False))
+                images.extend(collect_images_from_folder(str(path_obj), include_subfolders=False, extensions=extensions))
             else:
                 print(f"  ⚠️  \033[93mNot found or unsupported:\033[0m {path_str}")
         except Exception as e:

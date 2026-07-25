@@ -1,6 +1,6 @@
 # DJJTB — utils.py Modularization / Dedup Refactor Plan
 
-**Status:** in progress — Phase 0 done, Phase 1 next
+**Status:** in progress — Phases 0-1 done, Phase 2 next
 **Created:** 2026-07-25
 **Purpose:** living checklist for incrementally moving duplicated per-script
 logic (`collect_images_from_folder`/`collect_videos_from_folder`
@@ -131,9 +131,29 @@ folder with videos and a nested `Output/` subfolder (confirm pruning works).
 
 ## Phase 1 — Image collect-function dedup: `ai_tools/`
 
-**Status:** `[ ]` not started
+**Status:** `[x]` done (2026-07-25)
 **Depends on:** nothing (djj image-side functions already exist)
 **Risk:** medium — extension-list behavior change, see below
+
+**Done note (2026-07-25):** Resolved the `.gif` question by adding an
+`extensions=None` override param to `djj.collect_images_from_folder`/
+`collect_images_from_paths` in `media_utils.py` (defaults to
+`IMAGE_EXTENSIONS` when omitted — every pre-existing caller is unaffected),
+then had all 3 files pass their own `SUPPORTED_EXTS` explicitly. No behavior
+change for any of the three tools — `.gif` stays excluded exactly as before,
+Output-dir pruning is now picked up as a bonus. `vocab_mask_generator.py`'s
+and `joycaption_runner_ollama.py`'s local `collect_images_from_folder`/
+`_from_paths` were deleted outright and call sites now use `djj.*` directly;
+`collect_images_from_txt` in both files was kept as a thin local wrapper
+(it's a different shape — takes no args, calls `djj.get_paths_from_txt`
+itself — not one of the two functions this phase targeted) but its internal
+folder-expansion call now goes through `djj.collect_images_from_folder`
+too. `joytag_tagger.py` only had the one function; removed, one call site
+updated. Line counts: 507→483, 830→814, 570→542. Smoke-tested with a real
+temp folder (`.jpg`/`.png`/`.gif` mix) confirming the narrow-extensions
+override actually excludes `.gif` while the default (no override) still
+includes it, plus import-time checks on all 3 edited modules confirming no
+local `collect_images_from_folder` remains anywhere.
 
 **Files:** `djjtb/ai_tools/vocab_mask_generator.py`,
 `djjtb/ai_tools/joytag_tagger.py`,
