@@ -144,9 +144,8 @@ class DJJTBLauncher:
         print(" 💰 \033[4;93m3\033[0m  Slideshow Watermark 📹 🆔")
         print(" 💰 \033[4;93m4\033[0m  Group Merger 📹 🧲")
         print(" 💰 \033[4;93m5\033[0m  Video Splitter 📹 ✂️  ⏱️")
-        print(" 💰 \033[4;93m6\033[0m  Frame Extractor 📹➡︎🌃🌆🎆🎇")
+        print(" 💰 \033[4;93m6\033[0m  Video ⟷ Frame Bridge 📹⬌🌃🌆🎆🎇")
         print(" 💰 \033[4;93m7\033[0m  GIFs Converter 📹⬌🌃🌆🎆🎇")
-        print(" 💰 \033[4;93m8\033[0m  Images to Video Compiler 🌃🌆🎆🎇➡︎📹")
         print()
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰 \033[4;93m0\033[0m  ⏪ Back to MEDIA TOOLS")
@@ -303,7 +302,7 @@ class DJJTBLauncher:
             self.show_video_tools_menu()
             
             choice = djj.prompt_choice("\033[93mChoose a Tool\033[0m" if first_entry else "\033[93mChoose another option\033[0m",
-                                     ['1', '2', '3', '4', '5', '6', '7', '8', '0', '00'])
+                                     ['1', '2', '3', '4', '5', '6', '7', '0', '00'])
             first_entry = False
 
             if choice == "1":
@@ -317,11 +316,9 @@ class DJJTBLauncher:
             elif choice == "5":
                 djj.run_script_in_tab("djjtb.media_tools.video_tools.video_splitter", self.venv_path, self.project_path)
             elif choice == "6":
-                djj.run_script_in_tab("djjtb.media_tools.video_tools.video_frame_extractor", self.venv_path, self.project_path)
+                djj.run_script_in_tab("djjtb.media_tools.video_tools.video_frame_bridge", self.venv_path, self.project_path)
             elif choice == "7":
                 djj.run_script_in_tab("djjtb.media_tools.video_tools.video_gif_converter", self.venv_path, self.project_path)
-            elif choice == "8":
-                djj.run_script_in_tab("djjtb.media_tools.video_tools.image_video_compiler", self.venv_path, self.project_path)
             elif choice == "0":
                 break
             elif choice == "00":
@@ -353,7 +350,7 @@ class DJJTBLauncher:
             elif choice == "4":
                 djj.run_script_in_tab("djjtb.media_tools.image_tools.image_webp_to_mp4", self.venv_path, self.project_path)
             elif choice == "5":
-                # Moved to Video Tools (choice 10) — see djjtb.media_tools.video_tools.image_video_compiler
+                # Moved to Video Tools, then merged into video_frame_bridge.py (choice 6)
                 pass
             elif choice == "0":
                 break
