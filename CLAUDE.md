@@ -22,7 +22,7 @@ A personal macOS Python toolbox. ~70 interactive CLI scripts for media (video/im
 - `djjtb/ai_tools/` — AI runners. Many of these shell out to external CLIs (ComfyUI, Kohya, FaceFusion, iopaint, etc.) via `*.command` files; some are Python-only.
 - `djjtb/quick_tools/`, `djjtb/file_tools/` — standalone utilities.
 - `djjtb/helpers/` — one-off dev/migration scripts (Florence fixes, XMP mergers, vlc renamer, kohya guide, push scripts). Not part of the menu.
-- `djjtb/archived/` — a third tier distinct from `old_versions/`: tools that still work and are worth keeping runnable, just rarely used, so they'd otherwise be forgotten. Wired into their own "🗄️ ARCHIVED" submenu off the **main** menu (shortcut `AC`, directly below `A` App Launcher — not nested under Media/Video Tools), via `handle_archived_tools()`/`show_archived_menu()` in `djjtb.py`. Contrast with `old_versions/`, which stays reserved for genuinely superseded/broken code with no menu entry at all. Currently holds `video_gif_converter.py` (moved out of Video Tools' main list — "what good is GIF nowadays") and `image_collage_creator.py` (moved here from `old_versions/` — it's superseded by `image_processor.py`'s Pairing/Collage mode for the common case, but the standalone workflow is still occasionally wanted). Add future rarely-used-but-not-dead tools here rather than letting them vanish into `old_versions/` un-discoverable.
+- `djjtb/archived/` — a third tier distinct from `old_versions/`: tools that still work and are worth keeping runnable, just rarely used, so they'd otherwise be forgotten. Wired into their own "🗄️ ARCHIVED" submenu off the **main** menu (shortcut `AC`, directly below `A` App Launcher — not nested under Media/Video Tools), via `handle_archived_tools()`/`show_archived_menu()` in `djjtb.py`. Contrast with `old_versions/`, which stays reserved for genuinely superseded/broken code with no menu entry at all. Currently holds `video_gif_converter.py` (moved out of Video Tools' main list — "what good is GIF nowadays"), `image_collage_creator.py` (moved here from `old_versions/` — it's superseded by `image_processor.py`'s Pairing/Collage mode for the common case, but the standalone workflow is still occasionally wanted), and `image_caption_generator.py` + `image_tagger.py` (moved here from `old_versions/` during the bak/old_versions cleanup — outdated but still occasionally useful, same reasoning). Add future rarely-used-but-not-dead tools here rather than letting them vanish into `old_versions/` un-discoverable.
 - Root-level: `requirements.txt` (pinned), `run_djjtb_py.command` (double-click launcher), `DJJTB.app/`, `safetensors_sources.csv`, `lora_metadata_reader.py`, `extract_safetensors_sources.py`.
 
 ## Run / Launch
@@ -62,23 +62,21 @@ Or double-click `run_djjtb_py.command`.
 | Tool | Venv python | Script / entry point | Runner in `djjtb/ai_tools/` |
 |---|---|---|---|
 | FaceFusion | `ai_models/facefusion/ffvenv/bin/python3` | `ai_models/facefusion/facefusion.py` | `facefusion_runner.py`, `run_facefusion.command` |
-| CodeFormer | `ai_models/CodeFormer/cfvenv/bin/python3` | `ai_models/CodeFormer/inference_codeformer.py` | `codeformer_runner.py` |
+| CodeFormer + Upscaler (combo) | `ai_models/CodeFormer/cfvenv/bin/python3` + `ai_models/upscalers/upsvenv/bin/python3` | `ai_models/CodeFormer/inference_codeformer.py` + an inline upscale script run via `upsvenv` | `cf_ups_runner.py` (menu: AI Tools → "Upscaler AI") |
 | ComfyUI (server) | `ai_models/ComfyUI_App/ComfyUI/cfuivenv/bin/python3` | `ai_models/ComfyUI_App/ComfyUI/main.py` | `comfyui_runner.command` |
 | JoyTag | `ai_models/joytag/jtvenv/bin/python` | in-process ONNX inference, no separate script invoked | `joytag_tagger.py` |
 | JoyCaption | `ai_models/joycaption/jcvenv/bin/python3` | runs in-process inside jcvenv | `joycaption_runner.py` |
-| Image Caption Generator (Florence) | `ai_models/watermark_remover/wmrmvenv/bin/python` ⚠️ see flag below | self (re-execs into the venv via `os.execve`) | `image_caption_generator.py` |
 | Image Finder | — runs in DJJTB's own venv, no separate `ai_models` venv | self | `image_finder.py` |
-| Image Tagger | — runs in DJJTB's own venv, no separate `ai_models` venv | self | `image_tagger.py` |
 | Open WebUI | — no venv, Docker container (`docker start open-webui`) | — | `open_webui_runner.command` |
+
+Standalone `codeformer_runner.py` and `upscaler_runner.py` no longer exist — both fully retired during the `djjtb/bak`/`old_versions` cleanup, superseded by the combined `cf_ups_runner.py` row above (confirmed intentional, not an accident: the two were already redundant with the combo runner). Unlike the Watermark Remover retirement below, these weren't parked in `old_versions/` — they're gone from disk, recoverable only via git history if ever needed again.
 
 ### Present, not on the active list — cleanup candidates
 
 Paths resolve on disk, but not in daily use — decide keep/delete per tool, don't assume either way:
 
 - **Watermark Remover — retired.** All 4 variants (`watermark_remover_auto.py`, `watermark_remover_ref.py`, `watermark_remover_pkfpl.py`, `watermark_remover_unified.py`) plus `watermark_remover_settings.txt.py` moved to `djjtb/old_versions/` — slow, imprecise (brush-style, not true inpainting), and superseded by batch inpainting via Qwen Edit. Not wired into `djjtb.py`'s menu. Their shared venv, `ai_models/watermark_remover/wmrmvenv` (**1.08GB**), is now orphaned — flagged for a future disk-space cleanup pass, not deleted yet.
-- **cf_ups_runner.py** (CodeFormer+Upscaler combo) — `ai_models/CodeFormer/cfvenv` + `ai_models/upscalers/upsvenv`, both resolve.
-- **codeformer_runner_liveprompt.py** — same venv as `codeformer_runner.py` (`cfvenv`), resolves.
-- **upscaler_runner.py** — `ai_models/upscalers/upsvenv/bin/python3`, resolves.
+- **codeformer_runner_liveprompt.py** — same `cfvenv` as the combo runner above, resolves; not wired into `djjtb.py`'s menu.
 - **gfpgan_runner.py** — `ai_models/GFPGAN/gfvenv/bin/python3` + `inference_gfpgan.py`, resolves.
 - **iopaint** — `run_iopaint.command` (own `iovenv`) and `run_iopaint_ff_host.command` (uses `watermark_remover/wmrmvenv` instead) both resolve; unclear which is canonical.
 - **AI-Toolkit / Ostris ("ATK")** — `ai_models/ai-toolkit/.venv/bin/python3` + `run_mac.zsh`, resolves.
