@@ -1,12 +1,12 @@
 import os
 import subprocess
 import sys
-import time
 import pathlib
-import logging
 import djjtb.utils as djj
 
 os.system('clear')
+
+VIDEO_EXTENSIONS = ('.mp4', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.webm')
 
 def clean_path(path_str):
     """Clean input path by removing quotes and extra spaces."""
@@ -34,29 +34,27 @@ def get_video_duration(video_path):
 def collect_videos_from_folder(input_path, subfolders=False):
     """Collect videos from folder(s) using consistent logic"""
     input_path_obj = pathlib.Path(input_path)
-    video_extensions = ('.mp4', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.webm')
-    
+
     videos = []
     if input_path_obj.is_dir():
         if subfolders:
             for root, _, files in os.walk(input_path):
-                videos.extend(pathlib.Path(root) / f for f in files if pathlib.Path(f).suffix.lower() in video_extensions)
+                videos.extend(pathlib.Path(root) / f for f in files if pathlib.Path(f).suffix.lower() in VIDEO_EXTENSIONS)
         else:
-            videos = [f for f in input_path_obj.glob('*') if f.suffix.lower() in video_extensions and f.is_file()]
-    
+            videos = [f for f in input_path_obj.glob('*') if f.suffix.lower() in VIDEO_EXTENSIONS and f.is_file()]
+
     return sorted([str(v) for v in videos], key=str.lower)
 
 def collect_videos_from_paths(file_paths):
     """Collect videos from space-separated file paths"""
     videos = []
     paths = file_paths.strip().split()
-    video_extensions = ('.mp4', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.webm')
-    
+
     for path in paths:
         path = clean_path(path)
         path_obj = pathlib.Path(path)
-        
-        if path_obj.is_file() and path_obj.suffix.lower() in video_extensions:
+
+        if path_obj.is_file() and path_obj.suffix.lower() in VIDEO_EXTENSIONS:
             videos.append(str(path_obj))
         elif path_obj.is_dir():
             # If it's a directory, collect videos from it
@@ -120,6 +118,21 @@ def get_video_input():
     
     return videos
 
+def build_split_cmd(video_path, start_time, remaining_time, output_file, audio_choice):
+    """Build the ffmpeg command for one split clip, based on audio choice."""
+    if audio_choice == '3':  # Add silent audio track
+        return [
+            "ffmpeg", "-y", "-ss", str(start_time), "-i", str(video_path),
+            "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
+            "-t", str(remaining_time), "-c:v", "libx264", "-c:a", "aac", "-shortest",
+            str(output_file)
+        ]
+    audio_options = djj.get_audio_options(audio_choice)
+    return [
+        "ffmpeg", "-y", "-ss", str(start_time), "-i", str(video_path),
+        "-t", str(remaining_time), "-c:v", "libx264"
+    ] + audio_options + [str(output_file)]
+
 def split_video_by_duration(videos, clip_duration, audio_choice):
     """Split videos into clips of specified duration, with output in each video's parent folder."""
     if not videos:
@@ -165,21 +178,7 @@ def split_video_by_duration(videos, clip_duration, audio_choice):
                 print(f"\r\033[93m{status_line}\033[0m", end='', flush=True)
                 
                 try:
-                    # Build FFmpeg command based on audio choice
-                    audio_options = djj.get_audio_options(audio_choice)
-                    
-                    if audio_choice == '3':  # Silent audio track
-                        ffmpeg_cmd = [
-                            "ffmpeg", "-y", "-ss", str(start_time), "-i", str(video_path),
-                            "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
-                            "-t", str(remaining_time), "-c:v", "libx264", "-c:a", "aac", "-shortest", str(output_file)
-                        ]
-                    else:
-                        ffmpeg_cmd = [
-                            "ffmpeg", "-y", "-ss", str(start_time), "-i", str(video_path),
-                            "-t", str(remaining_time), "-c:v", "libx264"
-                        ] + audio_options + [str(output_file)]
-                    
+                    ffmpeg_cmd = build_split_cmd(video_path, start_time, remaining_time, output_file, audio_choice)
                     result = subprocess.run(ffmpeg_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
                     successful.append((video_path_obj.name, j+1))
                 except subprocess.CalledProcessError as e:
@@ -208,6 +207,7 @@ def split_video_by_portions(videos, num_portions, audio_choice):
     
     for i, video_path in enumerate(videos, 1):
         video_path_obj = pathlib.Path(video_path)
+        logger = None
         try:
             video_name = video_path_obj.stem
             # Modified: Remove the video_name folder level for portion mode
@@ -237,21 +237,7 @@ def split_video_by_portions(videos, num_portions, audio_choice):
             
                 print(f"\r\033[93mSplitting Videos\033[0m {i}\033[93m/\033[0m{len(videos)} , \033[93mParts\033[0m {part_num}\033[93m/\033[0m{num_portions} ({percent}%)...", end='', flush=True)
                 try:
-                    # Build FFmpeg command based on audio choice
-                    if audio_choice == '3':  # Add Silent Audio Track
-                        ffmpeg_cmd = [
-                            "ffmpeg", "-y", "-ss", str(start_time), "-i", str(video_path),
-                            "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
-                            "-t", str(remaining_time), "-c:v", "libx264", "-c:a", "aac", "-shortest",
-                            str(output_file)
-                        ]
-                    else:
-                        audio_options = djj.get_audio_options(audio_choice)
-                        ffmpeg_cmd = [
-                            "ffmpeg", "-y", "-ss", str(start_time), "-i", str(video_path),
-                            "-t", str(remaining_time), "-c:v", "libx264"
-                        ] + audio_options + [str(output_file)]
-                
+                    ffmpeg_cmd = build_split_cmd(video_path, start_time, remaining_time, output_file, audio_choice)
                     result = subprocess.run(ffmpeg_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
                     successful.append((video_path_obj.name, j+1))
                 except subprocess.CalledProcessError as e:
@@ -261,7 +247,8 @@ def split_video_by_portions(videos, num_portions, audio_choice):
                     print(f"\r\033[93mProcessing\033[0m {i}\033[93m/\033[0m{len(videos)} \033[93mvideos,\033[0m \033[93mpart\033[0m {j+1}\033[93m/\033[0m{num_portions} ({progress:.1f}%)... (failed)    ", end='', flush=True)
         except Exception as e:
             failed.append((video_path_obj.name, None, str(e)))
-            logger.error(f"\033[93mFailed to process\033[0m {video_path_obj.name}: {e}")
+            if logger:
+                logger.error(f"\033[93mFailed to process\033[0m {video_path_obj.name}: {e}")
             print(f"\033[93m\rProcessing \033[0m{i}\033[93m/\033[0m{len(videos)} \033[93mvideos\033[0m ({i/len(videos)*100:.1f}%)...\033[93m (failed) \033[0m   ", end='', flush=True)
     
     print("\r" + " " * 80 + "\r", end='', flush=True)
@@ -315,13 +302,12 @@ if __name__ == "__main__":
             print("📁 \033[93mOutput folders:\033[0m")
             for output_dir in sorted(output_dirs):
                 print(f"  {output_dir}")
-                
+            print("\n" * 2)
+            djj.prompt_open_folder(output_dir)
         else:
             print("\033[93mNo output folders created.\033[0m")
-        print("\n" * 2)
+            print("\n" * 2)
 
-        djj.prompt_open_folder(output_dir)
-        
         action = djj.what_next()
         if action == 'exit':
             break
