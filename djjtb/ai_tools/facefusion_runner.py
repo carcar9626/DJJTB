@@ -415,38 +415,52 @@ def get_target_input(mode):
             
         return [str(target_path_obj)], 'single_file', None
 
-def get_output_path_and_suffix(source_files, target_files, mode):
-    """Determine output path and get suffix preference based on inputs"""
-    
+def get_output_path_and_suffix(source_files, target_files, mode, target_folder_path=None):
+    """Determine output path and get suffix preference based on inputs.
+
+    Returns output_mode alongside output_path: 'mirror' means each target file's
+    output should land next to that specific file (target_file.parent / "FF"),
+    not all lumped into one folder computed from a single target. 'fixed' means
+    output_path itself is the single destination for everything.
+    """
+
     output_choice = djj.prompt_choice(
         "\033[33mOutput location:\033[0m\n1. Same folder as sources (creates 'FF' subfolder)\n2. Same folder as targets (creates 'FF' subfolder)\n3. Default — target folder / FF (default)\n4. Custom Path\n",
         ['1', '2', '3', '4'],
         default='3'
     )
     print()
-    
+
+    output_mode = 'fixed'
+
     if output_choice == '1':
         # Same as source folder
         base_path = pathlib.Path(source_files[0]).parent
         output_path = base_path / "FF"
-        
-    elif output_choice == '2':
-        # Same as target folder
-        base_path = pathlib.Path(target_files[0]).parent
+
+    elif output_choice in ('2', '3'):
+        # Same as target folder(s) — mirror each target file's own parent folder,
+        # since targets pulled in "with subfolders" can span multiple directories.
+        output_mode = 'mirror'
+        if target_folder_path:
+            base_path = pathlib.Path(target_folder_path)
+        else:
+            try:
+                base_path = pathlib.Path(os.path.commonpath([str(pathlib.Path(t).parent) for t in target_files]))
+            except ValueError:
+                base_path = pathlib.Path(target_files[0]).parent
         output_path = base_path / "FF"
-        
-    elif output_choice == '3':
-        # Default — FF subfolder right inside the target file's parent
-        output_path = pathlib.Path(target_files[0]).parent / "FF"
-        
+
     else:  # output_choice == '4'
         # Custom path
         custom_path = djj.get_path_input("Enter custom output folder path")
         output_path = pathlib.Path(custom_path)
-    
-    # Create the output directory
+
+    # Create the output directory (in 'mirror' mode this is just the base used
+    # for Source/Target copies and the end-of-run folder open; per-file FF
+    # folders are created on demand)
     output_path.mkdir(parents=True, exist_ok=True)
-    
+
     # Get suffix preference
     suffix_choice = djj.prompt_choice(
         "\033[33mAdd '_FF' suffix to filenames?\033[0m\n1. Yes\n2. No",
@@ -461,7 +475,15 @@ def get_output_path_and_suffix(source_files, target_files, mode):
         default='2'
     ) == '1'
 
-    return str(output_path), suffix_choice, include_source_name
+    return str(output_path), output_mode, suffix_choice, include_source_name
+
+
+def get_target_ff_dir(target_file, output_mode, output_path):
+    """Destination FF directory for a given target file. Mirrors the target's
+    own parent folder in 'mirror' mode; otherwise uses the single fixed output_path."""
+    if output_mode == 'mirror':
+        return pathlib.Path(target_file).parent / "FF"
+    return pathlib.Path(output_path)
 
 def generate_output_filename(source_file, target_file, output_path, add_suffix=True, include_source_name=True):
     """Generate output filename: targetname_sourcename_FF.ext (source name optional)"""
@@ -527,7 +549,7 @@ def process_single_headless(source_file, target_file, output_file,
     except Exception as e:
         return False, str(e)
 
-def process_face_swap(mode, source_files, target_files, output_path, add_suffix, tag_source,
+def process_face_swap(mode, source_files, target_files, output_path, output_mode, add_suffix, tag_source,
                       target_action, face_enhancer=None,
                       face_enhancer_blend=FACE_ENHANCER_DEFAULT_BLEND,
                       expression_restorer=False, expression_restorer_factor=EXPRESSION_RESTORER_DEFAULT_FACTOR,
@@ -608,7 +630,9 @@ def process_face_swap(mode, source_files, target_files, output_path, add_suffix,
         for i, target_file in enumerate(target_files):
             target_name = os.path.basename(target_file)
             print(f"\033[93mProcessing [{i+1}/{len(target_files)}]:\033[0m {target_name}")
-            output_file = generate_output_filename(source_file, target_file, output_path, add_suffix, include_source_name)
+            dest_dir = get_target_ff_dir(target_file, output_mode, output_path)
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            output_file = generate_output_filename(source_file, target_file, dest_dir, add_suffix, include_source_name)
             success, error_msg = process_single_headless(
                 source_file, target_file, output_file,
                 face_enhancer, face_enhancer_blend,
@@ -656,28 +680,32 @@ def process_face_swap(mode, source_files, target_files, output_path, add_suffix,
     else:  # mode == '4' — multiple sources × multiple targets
         from datetime import datetime
         today_str = datetime.now().strftime("%Y-%m-%d")
-        target_parent_folder = pathlib.Path(target_files[0]).parent.name
 
         for source_idx, source_file in enumerate(source_files):
             source_name = pathlib.Path(source_file).stem
-            date_folder = pathlib.Path(output_path) / today_str
-            source_output_path = date_folder / f"{source_name}-{target_parent_folder}"
-            source_output_path.mkdir(parents=True, exist_ok=True)
 
             print(f"\n\033[1;93m📁 Processing source [{source_idx+1}/{len(source_files)}]:\033[0m {os.path.basename(source_file)}")
-            print(f"\033[93m   Output folder:\033[0m {today_str}/{source_name}-{target_parent_folder}/")
             print(f"\033[93m   Targets:\033[0m {len(target_files)} file(s)")
             print()
 
             for target_idx, target_file in enumerate(target_files):
                 target_name = pathlib.Path(target_file).stem
                 target_ext  = pathlib.Path(target_file).suffix
+                target_parent_folder = pathlib.Path(target_file).parent.name
+
+                # Mirror each target's own parent folder so mixed-subfolder batches
+                # don't all collapse into whichever target happened to be first
+                dest_root = get_target_ff_dir(target_file, output_mode, output_path)
+                date_folder = dest_root / today_str
+                source_output_path = date_folder / f"{source_name}-{target_parent_folder}"
+                source_output_path.mkdir(parents=True, exist_ok=True)
+
                 base_name = f"{target_name}_{source_name}" if include_source_name else target_name
                 output_filename = (f"{base_name}_FF{target_ext}" if add_suffix
                                    else f"{base_name}{target_ext}")
                 output_file = str(source_output_path / output_filename)
 
-                print(f"\033[93m  [{target_idx+1}/{len(target_files)}] Processing:\033[0m {source_name} → {target_name}")
+                print(f"\033[93m  [{target_idx+1}/{len(target_files)}] Processing:\033[0m {source_name} → {target_name}  \033[90m({today_str}/{source_name}-{target_parent_folder}/)\033[0m")
 
                 success, error_msg = process_single_headless(
                     source_file, target_file, output_file,
@@ -831,7 +859,7 @@ def main():
         print("Choose Your Options:")
         
         # Get output path and suffix preference
-        output_path, add_suffix, include_source_name = get_output_path_and_suffix(source_files, target_files, mode)
+        output_path, output_mode, add_suffix, include_source_name = get_output_path_and_suffix(source_files, target_files, mode, target_folder_path)
         
         # Ask about target file handling
         target_action = djj.prompt_choice(
@@ -851,7 +879,7 @@ def main():
         os.system('clear')
         
         # Process face swaps using appropriate method
-        process_face_swap(mode, source_files, target_files, output_path, add_suffix, tag_source,
+        process_face_swap(mode, source_files, target_files, output_path, output_mode, add_suffix, tag_source,
                           target_action, face_enhancer, face_enhancer_blend,
                           use_expression_restorer, expression_restorer_factor,
                           include_source_name)

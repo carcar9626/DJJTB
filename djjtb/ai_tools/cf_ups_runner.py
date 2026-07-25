@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """
 CF + UPS Runner — DJJTB
-Combined CodeFormer face restore + 4x-UltraSharp upscaler
+Combined CodeFormer face restore + selectable RRDBNet upscaler
 
 Modes:
-  1. Codeformer Only   → input/CF/          suffix _CF
+  1. Codeformer Only   → input/CF/          suffix _CF   (images + video)
   2. Upscale Only      → input/UPS/         suffix _UT
   3. CF → UPS          → input/Output/CFUP/ suffix _CU  (intermediate → Output/CF/ _CF)
   4. UPS → CF          → input/Output/UPCF/ suffix _UC  (intermediate → Output/UPS/ _UT)
 
 Finalize step (sharpen + grain + optional resize) applies to every saved output.
 For chain modes, if the user opts to save the intermediate it is finalized before saving.
+
+Modes 2–4 prompt for which upscaler model to use (folder picker over UPSCALER_FOLDER,
+filtered to UPSCALER_CHOICES). Mode 1 is CodeFormer-only and never touches the upscaler.
 """
 
 import os
@@ -23,7 +26,9 @@ import djjtb.utils as djj
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 
-SUPPORTED_EXTS = ('.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp')
+IMAGE_EXTS    = ('.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp')
+VIDEO_EXTS    = ('.mp4', '.mov', '.avi')
+SUPPORTED_EXTS = IMAGE_EXTS  # default (image-only) collection set; Mode 1 adds VIDEO_EXTS
 
 # CodeFormer
 CF_SCRIPT  = "/Users/home/Documents/ai_models/CodeFormer/inference_codeformer.py"
@@ -31,10 +36,16 @@ CF_PYTHON  = "/Users/home/Documents/ai_models/CodeFormer/cfvenv/bin/python3"
 CF_DIR     = "/Users/home/Documents/ai_models/CodeFormer"
 CF_TAG     = "CF"
 
-# Upscaler
-UPS_MODEL  = "/Users/home/Documents/ai_models/upscalers/4x-UltraSharp.pth"
+# Upscaler — curated selection from a folder that also holds unrelated/face-restore
+# checkpoints (GFPGAN, a duplicate CodeFormer weight, etc.) we don't want to expose here.
+UPSCALER_FOLDER = "/Users/home/Documents/ai_models/upscalers"
+UPSCALER_CHOICES = {
+    "4x-UltraSharp.pth":     {"label": "4x-UltraSharp — general/portrait, old-arch ESRGAN",     "arch": "old", "scale": 4},
+    "RealESRGAN_x4plus.pth": {"label": "RealESRGAN x4plus — general/photo, new-arch RRDBNet",   "arch": "new", "scale": 4},
+    "RealESRGAN_x4.pth":     {"label": "RealESRGAN x4 — general, new-arch RRDBNet",             "arch": "new", "scale": 4},
+    "RealESRGAN_x2.pth":     {"label": "RealESRGAN x2 — new-arch RRDBNet, pixel-unshuffle",     "arch": "new", "scale": 2},
+}
 UPS_PYTHON = "/Users/home/Documents/ai_models/upscalers/upsvenv/bin/python3"
-UPS_SCALE  = 4
 UPS_TAG    = "UPS"
 
 TAG_PATH   = "/opt/homebrew/bin/tag"
@@ -51,6 +62,7 @@ import numpy as np
 import cv2
 
 model_path     = os.environ["UPS_MODEL_PATH"]
+model_arch     = os.environ.get("UPS_ARCH", "old")   # 'old' (4x-UltraSharp) or 'new' (RealESRGAN)
 input_path     = os.environ["UPS_INPUT"]
 output_path    = os.environ["UPS_OUTPUT"]
 suffix         = os.environ["UPS_SUFFIX"]
@@ -62,6 +74,8 @@ blend_strength = float(os.environ.get("UPS_BLEND", "1.0"))
 post_mode      = os.environ.get("UPS_POST", "none")
 grain_strength = float(os.environ.get("UPS_GRAIN", "0.03"))
 edge_sharpen   = float(os.environ.get("UPS_SHARPEN", "0.5"))
+
+# ── Old-arch RRDBNet (original ESRGAN key naming — 4x-UltraSharp) ────────────
 
 class ResidualDenseBlock_5C(nn.Module):
     def __init__(self, nf=64, gc=32, bias=True):
@@ -99,7 +113,7 @@ class _Trunk(nn.Module):
         )
     def forward(self, x): return self.sub(x)
 
-class RRDBNet(nn.Module):
+class RRDBNetOld(nn.Module):
     def __init__(self, in_nc=3, out_nc=3, nf=64, nb=23, gc=32):
         super().__init__()
         self.model = nn.ModuleList([
@@ -125,6 +139,63 @@ class RRDBNet(nn.Module):
         fea = self.lrelu(self.model[8](fea))
         return self.model[10](fea)
 
+# ── New-arch RRDBNet (basicsr key naming — RealESRGAN_x4plus / x4 / x2) ──────
+# x2 uses pixel-unshuffle pre-processing (3ch -> 12ch, half spatial res) then
+# the SAME two upsample stages as x4, netting 2x overall instead of 4x.
+
+def pixel_unshuffle(x, scale):
+    b, c, h, w = x.size()
+    x_view = x.view(b, c, h // scale, scale, w // scale, scale)
+    return x_view.permute(0, 1, 3, 5, 2, 4).reshape(b, c * (scale ** 2), h // scale, w // scale)
+
+class ResidualDenseBlockNew(nn.Module):
+    def __init__(self, nf=64, gc=32):
+        super().__init__()
+        self.conv1 = nn.Conv2d(nf,        gc, 3, 1, 1)
+        self.conv2 = nn.Conv2d(nf+gc,     gc, 3, 1, 1)
+        self.conv3 = nn.Conv2d(nf+gc*2,   gc, 3, 1, 1)
+        self.conv4 = nn.Conv2d(nf+gc*3,   gc, 3, 1, 1)
+        self.conv5 = nn.Conv2d(nf+gc*4,   nf, 3, 1, 1)
+        self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
+    def forward(self, x):
+        x1 = self.lrelu(self.conv1(x))
+        x2 = self.lrelu(self.conv2(torch.cat((x, x1), 1)))
+        x3 = self.lrelu(self.conv3(torch.cat((x, x1, x2), 1)))
+        x4 = self.lrelu(self.conv4(torch.cat((x, x1, x2, x3), 1)))
+        x5 = self.conv5(torch.cat((x, x1, x2, x3, x4), 1))
+        return x5 * 0.2 + x
+
+class RRDBNew(nn.Module):
+    def __init__(self, nf=64, gc=32):
+        super().__init__()
+        self.rdb1 = ResidualDenseBlockNew(nf, gc)
+        self.rdb2 = ResidualDenseBlockNew(nf, gc)
+        self.rdb3 = ResidualDenseBlockNew(nf, gc)
+    def forward(self, x):
+        out = self.rdb1(x); out = self.rdb2(out); out = self.rdb3(out)
+        return out * 0.2 + x
+
+class RRDBNetNew(nn.Module):
+    def __init__(self, in_nc=3, out_nc=3, nf=64, nb=23, gc=32, net_scale=4):
+        super().__init__()
+        self.net_scale = net_scale
+        first_in = in_nc * 4 if net_scale == 2 else in_nc
+        self.conv_first = nn.Conv2d(first_in, nf, 3, 1, 1)
+        self.body        = nn.Sequential(*[RRDBNew(nf, gc) for _ in range(nb)])
+        self.conv_body   = nn.Conv2d(nf, nf, 3, 1, 1)
+        self.conv_up1    = nn.Conv2d(nf, nf, 3, 1, 1)
+        self.conv_up2    = nn.Conv2d(nf, nf, 3, 1, 1)
+        self.conv_hr     = nn.Conv2d(nf, nf, 3, 1, 1)
+        self.conv_last   = nn.Conv2d(nf, out_nc, 3, 1, 1)
+        self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
+    def forward(self, x):
+        feat = pixel_unshuffle(x, 2) if self.net_scale == 2 else x
+        feat = self.conv_first(feat)
+        feat = feat + self.conv_body(self.body(feat))
+        feat = self.lrelu(self.conv_up1(nn.functional.interpolate(feat, scale_factor=2, mode='nearest')))
+        feat = self.lrelu(self.conv_up2(nn.functional.interpolate(feat, scale_factor=2, mode='nearest')))
+        return self.conv_last(self.lrelu(self.conv_hr(feat)))
+
 device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
 print(f"Device: {device}")
 
@@ -136,7 +207,11 @@ elif isinstance(ckpt, dict) and "params" in ckpt:
 else:
     state_dict = ckpt
 
-model = RRDBNet(); model.load_state_dict(state_dict, strict=True)
+if model_arch == "new":
+    model = RRDBNetNew(net_scale=scale)
+else:
+    model = RRDBNetOld()
+model.load_state_dict(state_dict, strict=True)
 model.eval(); model = model.to(device)
 
 def upscale_chunk(img_t, model, device):
@@ -306,7 +381,7 @@ def tag_files(file_paths, tag_name):
         print(f"\033[93m🏷️  Tagged\033[0m {tagged} \033[93mfile(s) with '\033[92m{tag_name}\033[0m'")
 
 
-def collect_files_from_folder(input_path, subfolders=False):
+def collect_files_from_folder(input_path, subfolders=False, extensions=SUPPORTED_EXTS):
     p = pathlib.Path(input_path)
     files = []
     if p.is_dir():
@@ -314,19 +389,19 @@ def collect_files_from_folder(input_path, subfolders=False):
         for root, _, filenames in walk:
             files.extend(
                 pathlib.Path(root) / f for f in filenames
-                if pathlib.Path(f).suffix.lower() in SUPPORTED_EXTS
+                if pathlib.Path(f).suffix.lower() in extensions
             )
     return sorted([str(f) for f in files], key=str.lower)
 
 
-def collect_files_from_paths(raw):
+def collect_files_from_paths(raw, extensions=SUPPORTED_EXTS):
     files = []
     for path_str in raw.strip().split():
         p = pathlib.Path(path_str.strip('\'"'))
-        if p.is_file() and p.suffix.lower() in SUPPORTED_EXTS:
+        if p.is_file() and p.suffix.lower() in extensions:
             files.append(str(p))
         elif p.is_dir():
-            files.extend(collect_files_from_folder(p))
+            files.extend(collect_files_from_folder(p, extensions=extensions))
     return sorted(files, key=str.lower)
 
 
@@ -338,7 +413,7 @@ def cleanup_cf_extras(output_path):
             shutil.rmtree(d, ignore_errors=True)
 
 
-def find_cf_output(cf_output_dir, original_stem, cf_suffix):
+def find_cf_output(cf_output_dir, original_stem, cf_suffix, video=False):
     """
     Recursively scan cf_output_dir for CF output matching original_stem.
 
@@ -348,17 +423,18 @@ def find_cf_output(cf_output_dir, original_stem, cf_suffix):
       - Single file: may write {stem}__{suffix}.png with double underscore
       - Folder mode: writes {stem}_{suffix}.png directly
 
-    Strategy: find any image file whose stem STARTS WITH original_stem
-    (case-insensitive). Among those, prefer the one whose stem is longest
-    (most specific match). Return None only if nothing starts with the stem.
+    Strategy: find any file (of the appropriate type) whose stem STARTS WITH
+    original_stem (case-insensitive). Among those, prefer the one whose stem
+    is longest (most specific match). Return None only if nothing matches.
+    Pass video=True to look for a video output instead of an image.
     """
     base = pathlib.Path(cf_output_dir)
     original_lower = original_stem.lower()
-    image_exts = {'.png', '.jpg', '.jpeg', '.tiff', '.tif', '.bmp'}
+    match_exts = set(VIDEO_EXTS) if video else {'.png', '.jpg', '.jpeg', '.tiff', '.tif', '.bmp'}
 
     candidates = []
     for path in base.rglob("*"):
-        if path.is_file() and path.suffix.lower() in image_exts:
+        if path.is_file() and path.suffix.lower() in match_exts:
             if path.stem.lower().startswith(original_lower):
                 candidates.append(path)
 
@@ -367,15 +443,15 @@ def find_cf_output(cf_output_dir, original_stem, cf_suffix):
         return max(candidates, key=lambda p: len(p.stem))
 
     # Nothing found — print diagnostic
-    image_files = [p for p in base.rglob("*")
-                   if p.is_file() and p.suffix.lower() in image_exts]
-    if image_files:
+    found_files = [p for p in base.rglob("*")
+                   if p.is_file() and p.suffix.lower() in match_exts]
+    if found_files:
         print(f"  \033[93m⚠️  CF lookup miss for '{original_stem}'\033[0m")
         print(f"     Files in {cf_output_dir}:")
-        for f in image_files[:5]:
+        for f in found_files[:5]:
             print(f"       {f.relative_to(base)}")
-        if len(image_files) > 5:
-            print(f"       ... and {len(image_files)-5} more")
+        if len(found_files) > 5:
+            print(f"       ... and {len(found_files)-5} more")
     else:
         print(f"  \033[93m⚠️  CF output dir is empty: {cf_output_dir}\033[0m")
     return None
@@ -432,19 +508,21 @@ def run_cf_folder(input_dir, output_dir, weight, suffix, upscale_factor=1):
 
 # ─── UPS Engine ───────────────────────────────────────────────────────────────
 
-def run_ups_single(input_path, output_dir, suffix, tile_size, resize_edge,
-                   blend_strength, post_mode, grain_strength, edge_sharpen, timeout=600):
-    """Run 4x-UltraSharp on one file via inline inference script."""
+def run_ups_single(input_path, output_dir, suffix, model_path, model_arch, model_scale,
+                   tile_size, resize_edge, blend_strength, post_mode, grain_strength,
+                   edge_sharpen, timeout=600):
+    """Run the selected upscaler model on one file via inline inference script."""
     t0 = time.time()
     env = os.environ.copy()
     env.update({
-        "UPS_MODEL_PATH":  UPS_MODEL,
+        "UPS_MODEL_PATH":  model_path,
+        "UPS_ARCH":        model_arch,
         "UPS_INPUT":       str(input_path),
         "UPS_OUTPUT":      str(output_dir),
         "UPS_SUFFIX":      suffix,
         "UPS_TILE":        str(tile_size),
         "UPS_TILE_PAD":    "10",
-        "UPS_SCALE":       str(UPS_SCALE),
+        "UPS_SCALE":       str(model_scale),
         "UPS_RESIZE_EDGE": str(resize_edge),
         "UPS_BLEND":       f"{blend_strength:.2f}",
         "UPS_POST":        post_mode,
@@ -511,14 +589,17 @@ def verify_all():
         (CF_SCRIPT,  "CF inference script"),
         (pathlib.Path(CF_DIR) / "weights/facelib/detection_Resnet50_Final.pth", "CF detection model"),
         (pathlib.Path(CF_DIR) / "weights/CodeFormer/codeformer.pth",            "CF model weights"),
-        (UPS_PYTHON, "UPS venv python"),
-        (UPS_MODEL,  "4x-UltraSharp model"),
+        (UPS_PYTHON,      "UPS venv python"),
+        (UPSCALER_FOLDER, "Upscaler models folder"),
     ]
     for path, label in checks:
         if not pathlib.Path(path).exists():
             print(f"\033[93m⚠️  Missing:\033[0m {label}")
             print(f"   {path}")
             ok = False
+    if ok and not any((pathlib.Path(UPSCALER_FOLDER) / name).exists() for name in UPSCALER_CHOICES):
+        print(f"\033[93m⚠️  None of the curated upscaler models were found in:\033[0m {UPSCALER_FOLDER}")
+        ok = False
     if ok:
         # Quick torch check via upsvenv
         r = subprocess.run(
@@ -536,7 +617,14 @@ def verify_all():
 
 # ─── Input Collection ─────────────────────────────────────────────────────────
 
-def get_inputs():
+def get_inputs(mode='1'):
+    """
+    Collect input files. Mode 1 (CF Only) also accepts video — CF can run on
+    both. Modes 2-4 all touch the UPS engine, which is images-only, so video
+    is excluded there.
+    """
+    extensions = IMAGE_EXTS + VIDEO_EXTS if mode == '1' else IMAGE_EXTS
+
     input_mode = djj.prompt_choice(
         "\033[93mInput mode:\033[0m\n1. Folder path\n2. Space-separated file paths\n",
         ['1', '2'], default='1'
@@ -552,27 +640,27 @@ def get_inputs():
             ['1', '2'], default='2'
         ) == '1'
         print()
-        files = collect_files_from_folder(src_path, include_sub)
+        files = collect_files_from_folder(src_path, include_sub, extensions=extensions)
         files = djj.apply_skip_list(files, root=src_path)
     else:
         raw = input("📁 \033[93mEnter file paths (space-separated):\033[0m\n -> ").strip()
         if not raw:
             print("❌ No file paths provided.")
             sys.exit(1)
-        files = collect_files_from_paths(raw)
+        files = collect_files_from_paths(raw, extensions=extensions)
         files = djj.apply_skip_list(files)
         if files:
             src_path = str(pathlib.Path(files[0]).parent)
         print()
 
     if not files:
-        print("❌ No valid image files found.")
+        print("❌ No valid files found.")
         sys.exit(1)
 
     os.system('clear')
     print("\n\n🔍 Detecting files...")
     print()
-    print(f"\033[93m✅ Found\033[0m {len(files)} \033[93mimage(s)\033[0m")
+    print(f"\033[93m✅ Found\033[0m {len(files)} \033[93msupported file(s)\033[0m")
     print()
     return files, input_mode, src_path
 
@@ -601,8 +689,29 @@ def prompt_cf_options():
     return weight, save_faces, save_restored
 
 
+def prompt_upscaler_model():
+    """
+    Numbered folder picker (same UI as facefusion_runner's face picker), filtered
+    to the curated RRDBNet-compatible checkpoints in UPSCALER_FOLDER — hides
+    unrelated weights (GFPGAN, a stray CodeFormer copy, etc.) sitting in that folder.
+    Returns (model_path, arch, scale).
+    """
+    print("\033[1;93m🧠 Upscaler Model\033[0m")
+    picked = djj.pick_single_from_folder(
+        UPSCALER_FOLDER, ('.pth',), label="upscaler model",
+        only=set(UPSCALER_CHOICES.keys())
+    )
+    if picked is None:
+        print("❌ No upscaler model available.")
+        sys.exit(1)
+    meta = UPSCALER_CHOICES[picked.name]
+    print(f"\033[93m  {meta['label']}\033[0m  (net scale: {meta['scale']}x)")
+    print()
+    return str(picked), meta['arch'], meta['scale']
+
+
 def prompt_ups_options():
-    """Collect all UPS parameters."""
+    """Collect all UPS parameters (model choice is separate — see prompt_upscaler_model)."""
     print("\033[1;93m🔼 Upscaler Options\033[0m")
 
     tile_choice = djj.prompt_choice(
@@ -765,7 +874,12 @@ def run_pipeline_mode1(files, src_path, input_mode,
                        cf_weight, save_faces, save_restored,
                        post_mode, grain, sharpen, resize_edge,
                        tag_source):
-    """CF Only → finalize → src/CF/"""
+    """
+    CF Only → src/CF/
+    Images: CF → cv2 finalize (grain/sharpen/resize).
+    Video:  CF → copied straight through — finalize is a cv2 image op and can't
+    touch a video file, so video output skips post-processing entirely.
+    """
     dirs = resolve_output_dirs(src_path, '1')
     final_dir = dirs['final']
     final_dir.mkdir(parents=True, exist_ok=True)
@@ -778,25 +892,27 @@ def run_pipeline_mode1(files, src_path, input_mode,
     overall_start = time.time()
     print("\n\n\033[1;93m🤖 CodeFormer activating...\033[0m\n")
 
-    # Check if folder mode is possible (all images, single folder)
-    images_only = all(pathlib.Path(f).suffix.lower() in ('.jpg','.jpeg','.png','.tiff','.tif','.bmp') for f in files)
-    use_folder_mode = (input_mode == '1' and images_only)
+    image_files = [f for f in files if pathlib.Path(f).suffix.lower() in IMAGE_EXTS]
+    video_files = [f for f in files if pathlib.Path(f).suffix.lower() in VIDEO_EXTS]
+
+    # Folder mode only pays off for an all-image, single-folder batch
+    use_folder_mode = (input_mode == '1' and image_files and not video_files)
 
     success_count = error_count = 0
 
     if use_folder_mode:
-        print(f"\033[93m📁 Folder mode — {len(files)} image(s)\033[0m")
+        print(f"\033[93m📁 Folder mode — {len(image_files)} image(s)\033[0m")
         ok, elapsed = run_cf_folder(src_path, tmp_dir, cf_weight, "_CF")
         if ok:
-            success_count = len(files)
+            success_count += len(image_files)
         else:
-            error_count = len(files)
+            error_count += len(image_files)
         if not save_faces or not save_restored:
             cleanup_cf_extras(tmp_dir)
-    else:
-        for i, fp in enumerate(files):
+    elif image_files:
+        for i, fp in enumerate(image_files):
             fname = os.path.basename(fp)
-            print(f"\033[93m[{i+1}/{len(files)}]\033[0m {fname}")
+            print(f"\033[93m[{i+1}/{len(image_files)}]\033[0m {fname}")
             ok, out, elapsed = run_cf_single(fp, tmp_dir, cf_weight, "_CF")
             total = time.time() - overall_start
             if ok:
@@ -809,21 +925,46 @@ def run_pipeline_mode1(files, src_path, input_mode,
         if not save_faces or not save_restored:
             cleanup_cf_extras(tmp_dir)
 
-    # Finalize every CF output
-    print("\033[93m✨ Finalizing...\033[0m\n")
-    fin_success = fin_error = 0
-    for fp in files:
-        stem = pathlib.Path(fp).stem
-        cf_out = find_cf_output(tmp_dir, stem, "_CF")
-        if cf_out is None:
-            fin_error += 1
-            continue
-        ok, _, _ = run_finalize(cf_out, final_dir, "", post_mode, grain, sharpen, resize_edge)
-        # suffix="" because CF already appended _CF; finalize just copies/tweaks in place
-        if ok:
-            fin_success += 1
-        else:
-            fin_error += 1
+    if video_files:
+        print(f"\033[93m🎬 Processing {len(video_files)} video(s) individually...\033[0m\n")
+        for i, fp in enumerate(video_files):
+            fname = os.path.basename(fp)
+            print(f"\033[93m[{i+1}/{len(video_files)}]\033[0m {fname}")
+            ok, out, elapsed = run_cf_single(fp, tmp_dir, cf_weight, "_CF", timeout=1200)
+            total = time.time() - overall_start
+            if ok:
+                print(f"  ✅ \033[92mCF done\033[0m  {fmt_time(elapsed)}  (total {fmt_time(total)})")
+                success_count += 1
+            else:
+                print(f"  ❌ \033[93mCF failed\033[0m  {fmt_time(elapsed)}")
+                error_count += 1
+            print()
+        if not save_faces or not save_restored:
+            cleanup_cf_extras(tmp_dir)
+
+    # Finalize image outputs (grain/sharpen/resize via cv2)
+    if image_files:
+        print("\033[93m✨ Finalizing images...\033[0m\n")
+        for fp in image_files:
+            stem = pathlib.Path(fp).stem
+            cf_out = find_cf_output(tmp_dir, stem, "_CF")
+            if cf_out is None:
+                continue
+            # suffix="" because CF already appended _CF; finalize just copies/tweaks in place
+            run_finalize(cf_out, final_dir, "", post_mode, grain, sharpen, resize_edge)
+
+    # Video outputs: no finalize pass available — copy CF's output straight through
+    if video_files:
+        print("\033[93m🎬 Copying video output(s)...\033[0m\n")
+        for fp in video_files:
+            stem = pathlib.Path(fp).stem
+            cf_out = find_cf_output(tmp_dir, stem, "_CF", video=True)
+            if cf_out is None:
+                continue
+            try:
+                shutil.copy2(cf_out, final_dir / cf_out.name)
+            except Exception as e:
+                print(f"  ⚠️  Failed to copy {cf_out.name}: {e}")
 
     # Clean up temp raw CF outputs
     shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -835,6 +976,7 @@ def run_pipeline_mode1(files, src_path, input_mode,
 
 
 def run_pipeline_mode2(files, src_path,
+                       model_path, model_arch, model_scale, model_label,
                        tile_size, blend, post_mode, grain, sharpen, resize_edge,
                        tag_source):
     """UPS Only → finalize (inside UPS engine) → src/UPS/"""
@@ -847,6 +989,7 @@ def run_pipeline_mode2(files, src_path,
     post_label = {'none':'Off','natural':'Natural','custom':'Custom'}[post_mode]
 
     print("\n\n\033[1;93m🔼 Upscaler activating...\033[0m")
+    print(f"\033[93m  Model:\033[0m {model_label}")
     print(f"\033[93m  Strength:\033[0m {blend_label}  \033[93mPost:\033[0m {post_label}\n")
 
     success_count = error_count = 0
@@ -854,8 +997,8 @@ def run_pipeline_mode2(files, src_path,
         fname = os.path.basename(fp)
         print(f"\033[93m[{i+1}/{len(files)}]\033[0m {fname}")
         # UPS engine handles finalize internally
-        ok, out, elapsed = run_ups_single(fp, final_dir, "_UT", tile_size, resize_edge,
-                                          blend, post_mode, grain, sharpen)
+        ok, out, elapsed = run_ups_single(fp, final_dir, "_UT", model_path, model_arch, model_scale,
+                                          tile_size, resize_edge, blend, post_mode, grain, sharpen)
         total = time.time() - overall_start
         if ok:
             print(f"  ✅ \033[92mDone\033[0m  {fmt_time(elapsed)}  (total {fmt_time(total)})")
@@ -877,6 +1020,7 @@ def run_pipeline_mode3(files, src_path,
                        cf_save_post, cf_save_grain, cf_save_sharpen, cf_save_resize,
                        cf_pass_post, cf_pass_grain, cf_pass_sharpen, cf_pass_resize,
                        save_intermediate,
+                       model_path, model_arch, model_scale, model_label,
                        tile_size, blend,
                        final_post, final_grain, final_sharpen, final_resize,
                        tag_source):
@@ -973,14 +1117,14 @@ def run_pipeline_mode3(files, src_path,
     # ── Step 3: Upscale ───────────────────────────────────────────────────────
     blend_label = "100% AI" if blend >= 1.0 else f"{int(blend*100)}% AI"
     print(f"\n\033[1;93m🔼 Step 2 — Upscaling {len(ups_inputs)} file(s)...\033[0m")
-    print(f"\033[93m  Strength:\033[0m {blend_label}\n")
+    print(f"\033[93m  Model:\033[0m {model_label}  \033[93mStrength:\033[0m {blend_label}\n")
 
     ups_success = ups_fail = 0
     for i, fp in enumerate(ups_inputs):
         fname = os.path.basename(fp)
         print(f"\033[93m[{i+1}/{len(ups_inputs)}]\033[0m {fname}")
-        ok, out, elapsed = run_ups_single(fp, final_dir, "_CU", tile_size, final_resize,
-                                          blend, final_post, final_grain, final_sharpen)
+        ok, out, elapsed = run_ups_single(fp, final_dir, "_CU", model_path, model_arch, model_scale,
+                                          tile_size, final_resize, blend, final_post, final_grain, final_sharpen)
         total = time.time() - overall_start
         if ok:
             print(f"  ✅ \033[92mDone\033[0m  {fmt_time(elapsed)}  (total {fmt_time(total)})")
@@ -1008,6 +1152,7 @@ def run_pipeline_mode3(files, src_path,
 
 
 def run_pipeline_mode4(files, src_path,
+                       model_path, model_arch, model_scale, model_label,
                        tile_size, blend,
                        ups_save_post, ups_save_grain, ups_save_sharpen, ups_save_resize,
                        ups_pass_post, ups_pass_grain, ups_pass_sharpen, ups_pass_resize,
@@ -1035,7 +1180,7 @@ def run_pipeline_mode4(files, src_path,
     # ── Step 1: Upscale ───────────────────────────────────────────────────────
     blend_label = "100% AI" if blend >= 1.0 else f"{int(blend*100)}% AI"
     print(f"\n\n\033[1;93m🔼 Step 1 — Upscaling {len(files)} file(s)...\033[0m")
-    print(f"\033[93m  Strength:\033[0m {blend_label}\n")
+    print(f"\033[93m  Model:\033[0m {model_label}  \033[93mStrength:\033[0m {blend_label}\n")
 
     # Pass-through dir: UPS output without grain, fed to CF
     ups_passthrough_dir = pathlib.Path(src_path) / "Output" / ".ups_passthrough"
@@ -1049,8 +1194,8 @@ def run_pipeline_mode4(files, src_path,
         print(f"\033[93m[{i+1}/{len(files)}]\033[0m {fname}")
 
         # Always run UPS into passthrough dir first (no grain)
-        ok, out, elapsed = run_ups_single(fp, ups_passthrough_dir, "_UT", tile_size,
-                                          ups_pass_resize, blend, ups_pass_post,
+        ok, out, elapsed = run_ups_single(fp, ups_passthrough_dir, "_UT", model_path, model_arch, model_scale,
+                                          tile_size, ups_pass_resize, blend, ups_pass_post,
                                           ups_pass_grain, ups_pass_sharpen)
         total = time.time() - overall_start
         if ok:
@@ -1065,8 +1210,8 @@ def run_pipeline_mode4(files, src_path,
             if found:
                 # Save copy with grain to inter_dir if requested
                 if save_intermediate:
-                    run_ups_single(fp, inter_dir, "_UT", tile_size,
-                                   ups_save_resize, blend, ups_save_post,
+                    run_ups_single(fp, inter_dir, "_UT", model_path, model_arch, model_scale,
+                                   tile_size, ups_save_resize, blend, ups_save_post,
                                    ups_save_grain, ups_save_sharpen)
                 ups_outputs.append(str(found))
             else:
@@ -1158,14 +1303,14 @@ def main():
         print()
         print("\033[92m==================================================\033[0m")
         print("\033[1;93mCF + UPS Runner\033[0m")
-        print("CodeFormer face restore  ·  4x-UltraSharp upscale")
+        print("CodeFormer face restore  ·  selectable RRDBNet upscale")
         print("\033[92m==================================================\033[0m")
         print()
 
         # ── Mode selection ────────────────────────────────────────────────────
         mode = djj.prompt_choice(
             "\033[93mMode:\033[0m\n"
-            "1. Codeformer Only   (→ CF/    suffix _CF)\n"
+            "1. Codeformer Only   (→ CF/    suffix _CF, images + video)\n"
             "2. Upscale Only      (→ UPS/   suffix _UT)\n"
             "3. CF → UPS          (→ CFUP/  suffix _CU)\n"
             "4. UPS → CF          (→ UPCF/  suffix _UC)\n",
@@ -1174,7 +1319,7 @@ def main():
         print()
 
         # ── Input ─────────────────────────────────────────────────────────────
-        files, input_mode, src_path = get_inputs()
+        files, input_mode, src_path = get_inputs(mode)
         print("Choose Your Options:\n")
 
         # ── Collect options depending on mode ─────────────────────────────────
@@ -1194,7 +1339,9 @@ def main():
                                tag_source)
 
         elif mode == '2':
-            # UPS options (finalize is inside UPS engine)
+            # Model choice + UPS options (finalize is inside UPS engine)
+            model_path, model_arch, model_scale = prompt_upscaler_model()
+            model_label = UPSCALER_CHOICES[pathlib.Path(model_path).name]['label']
             tile_size, blend = prompt_ups_options()
             post_mode, grain, sharpen, resize_edge = prompt_finalize_options("UPS output")
             tag_source = djj.prompt_choice(
@@ -1203,6 +1350,7 @@ def main():
             ) == '1'
             os.system('clear')
             run_pipeline_mode2(files, src_path,
+                               model_path, model_arch, model_scale, model_label,
                                tile_size, blend, post_mode, grain, sharpen, resize_edge,
                                tag_source)
 
@@ -1222,7 +1370,9 @@ def main():
                 cf_save_post, cf_save_grain, cf_save_sharpen, cf_save_resize = 'none', 0.0, 0.0, 0
             # Pass-through post for CF→UPS handoff (no grain)
             cf_pass_post, cf_pass_grain, cf_pass_sharpen, cf_pass_resize = prompt_passthrough_options("CF → UPS handoff")
-            # UPS options
+            # Model choice + UPS options
+            model_path, model_arch, model_scale = prompt_upscaler_model()
+            model_label = UPSCALER_CHOICES[pathlib.Path(model_path).name]['label']
             tile_size, blend = prompt_ups_options()
             # Final finalize for CFUP output (grain included)
             final_post, final_grain, final_sharpen, final_resize = prompt_finalize_options("final CFUP output")
@@ -1236,12 +1386,15 @@ def main():
                                cf_save_post, cf_save_grain, cf_save_sharpen, cf_save_resize,
                                cf_pass_post, cf_pass_grain, cf_pass_sharpen, cf_pass_resize,
                                save_inter,
+                               model_path, model_arch, model_scale, model_label,
                                tile_size, blend,
                                final_post, final_grain, final_sharpen, final_resize,
                                tag_source)
 
         else:  # mode == '4'
-            # UPS options first
+            # Model choice + UPS options first
+            model_path, model_arch, model_scale = prompt_upscaler_model()
+            model_label = UPSCALER_CHOICES[pathlib.Path(model_path).name]['label']
             tile_size, blend = prompt_ups_options()
             # Save intermediate UPS version?
             save_inter = djj.prompt_choice(
@@ -1266,6 +1419,7 @@ def main():
             ) == '1'
             os.system('clear')
             run_pipeline_mode4(files, src_path,
+                               model_path, model_arch, model_scale, model_label,
                                tile_size, blend,
                                ups_save_post, ups_save_grain, ups_save_sharpen, ups_save_resize,
                                ups_pass_post, ups_pass_grain, ups_pass_sharpen, ups_pass_resize,

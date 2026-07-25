@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ComfyUI Batch Processor - DJJTB Edition
-Processes images through ComfyUI workflows using symlinks
+Processes images through ComfyUI workflows by staging copies in ComfyUI's input folder
 Supports single-input and dual-input (e.g. pose transfer) workflows,
 plus an icon-batch + IG carousel compositor mode.
 """
@@ -33,7 +33,7 @@ DEFAULT_WORKFLOW_FOLDER      = "/Volumes/Movies_2SSD/ComfyUI.bak/user/default/wo
 DEFAULT_WORKFLOW_FOLDER_QWEN = "/Volumes/Movies_2SSD/ComfyUI.bak/user/default/workflows/API/Qwen_CN"
 
 # Log file location
-LOG_FOLDER       = Path("/Users/home/Documents/Scripts/DJJTB_output/comfyui_batch_logs")
+LOG_FOLDER       = Path("/Users/home/Documents/Scripts/DJJTB/djjtb/logs/comfyui_batch_logs")
 JOB_COUNTER_FILE = LOG_FOLDER / "job_counter.txt"
 
 # Supported image formats
@@ -806,7 +806,7 @@ class ComfyUIBatchProcessor:
         self.comfyui_input_folder = Path(comfyui_input_folder)
         self.server_url           = COMFYUI_URL
         self.client_id            = "djjtb_batch_processor"
-        self.created_symlinks     = []
+        self.staged_inputs        = []
         self.job_id               = job_id
 
     # ── Workflow ──────────────────────────────────────────────────────────
@@ -845,7 +845,14 @@ class ComfyUIBatchProcessor:
                 node['widgets_values'][KSAMPLER_STEPS_IDX] = steps
         return workflow
 
-    # ── Symlinks ──────────────────────────────────────────────────────────
+    # ── Staged input copies ──────────────────────────────────────────────
+    # ComfyUI 0.28.2 added a symlink-escape containment check (GHSA-779p) on
+    # anything resolved via folder_paths.get_annotated_filepath/exists_annotated_filepath —
+    # it realpath()s the target and rejects anything that resolves outside
+    # the input folder. That's exactly what a symlink into /Volumes/... does,
+    # so plain symlinking here now gets rejected at prompt-validation time.
+    # Hard links aren't an option either (source lives on a different volume).
+    # Copying is the only thing that satisfies the new check.
 
     def create_symlink(self, image_path):
         image_path = Path(image_path)
@@ -856,27 +863,27 @@ class ComfyUIBatchProcessor:
                 return False, f"Source not found: {image_path}"
             if dest_path.exists() or dest_path.is_symlink():
                 dest_path.unlink()
-            dest_path.symlink_to(image_path)
-            self.created_symlinks.append(dest_path)
+            shutil.copy2(image_path, dest_path)
+            self.staged_inputs.append(dest_path)
             return True, None
         except Exception as e:
             return False, str(e)
 
     def cleanup_symlinks(self):
-        if not self.created_symlinks:
+        if not self.staged_inputs:
             return
         print()
-        print("🧹 \033[93mCleaning up symlinks...\033[0m")
+        print("🧹 \033[93mCleaning up staged copies...\033[0m")
         cleaned = 0
-        for sp in self.created_symlinks:
+        for sp in self.staged_inputs:
             try:
-                if sp.is_symlink():
+                if sp.exists() and not sp.is_symlink():
                     sp.unlink()
                     cleaned += 1
             except Exception as e:
                 print(f"   ⚠️  \033[93mCould not remove\033[0m {sp.name}: {e}")
         if cleaned > 0:
-            print(f"✅ \033[92mRemoved {cleaned} symlinks\033[0m")
+            print(f"✅ \033[92mRemoved {cleaned} staged copies\033[0m")
 
     # ── ComfyUI API ───────────────────────────────────────────────────────
 
@@ -929,7 +936,7 @@ class ComfyUIBatchProcessor:
             print(f"⚡ \033[92mSteps override:\033[0m {steps_override}")
         self._show_sample(images)
 
-        successful, failed, symlinked = 0, 0, 0
+        successful, failed, staged = 0, 0, 0
         self._section("Processing Images")
 
         for idx, image_path in enumerate(images, 1):
@@ -937,11 +944,11 @@ class ComfyUIBatchProcessor:
 
             ok, err = self.create_symlink(image_path)
             if not ok:
-                print(f"    ❌ \033[93mSymlink failed:\033[0m {err}")
+                print(f"    ❌ \033[93mCopy failed:\033[0m {err}")
                 failed += 1
                 continue
-            symlinked += 1
-            print(f"    ✅ \033[92mSymlinked\033[0m")
+            staged += 1
+            print(f"    ✅ \033[92mCopied\033[0m")
 
             wf = copy.deepcopy(base_workflow)
             wf = self.update_node_image(wf, node_id, image_path.name)
@@ -966,7 +973,7 @@ class ComfyUIBatchProcessor:
         print(f"⚙️  \033[93mWorkflow:\033[0m {Path(self.workflow_path).name}")
         if steps_override is not None:
             print(f"⚡ \033[93mSteps:\033[0m {steps_override} (overridden)")
-        print(f"🔗 \033[93mSymlinks created:\033[0m {symlinked}")
+        print(f"🔗 \033[93mCopies staged:\033[0m {staged}")
         print(f"✅ \033[92mSuccessfully queued:\033[0m {successful}")
         if failed > 0:
             print(f"❌ \033[93mFailed:\033[0m {failed}")
@@ -1004,18 +1011,18 @@ class ComfyUIBatchProcessor:
 
             ok, err = self.create_symlink(source_path)
             if not ok:
-                print(f"    ❌ \033[93mSource symlink failed:\033[0m {err}")
+                print(f"    ❌ \033[93mSource copy failed:\033[0m {err}")
                 failed += 1
                 continue
 
             if ref_path.resolve() != source_path.resolve():
                 ok, err = self.create_symlink(ref_path)
                 if not ok:
-                    print(f"    ❌ \033[93mRef symlink failed:\033[0m {err}")
+                    print(f"    ❌ \033[93mRef copy failed:\033[0m {err}")
                     failed += 1
                     continue
 
-            print(f"    ✅ \033[92mSymlinks created\033[0m")
+            print(f"    ✅ \033[92mCopies staged\033[0m")
 
             wf = copy.deepcopy(base_workflow)
             wf = self.update_node_image(wf, source_node_id, source_path.name)
@@ -1080,10 +1087,28 @@ class ComfyUIBatchProcessor:
         print("💡 \033[93mComfyUI will process these images one by one.\033[0m")
         print("   \033[93mMonitor progress in the ComfyUI interface.\033[0m")
         if cleanup_after:
+            # Submitting is fast (seconds) but ComfyUI processes the queue one job
+            # at a time and each job can take minutes — cleaning up right after the
+            # submit loop (the old behavior) deletes staged inputs for jobs still
+            # waiting in the queue, not yet processed, causing "No such file or
+            # directory" mid-run. Wait for the whole queue to actually drain first.
+            print()
+            print("⏳ \033[93mWaiting for ComfyUI to finish processing before cleanup...\033[0m")
+            waited = 0
+            while True:
+                running, pending = self.get_queue_status()
+                if running == 0 and pending == 0:
+                    break
+                if waited > 0 and waited % 60 == 0:
+                    print(f"   \033[93m...still processing\033[0m ({running} running, {pending} pending, "
+                          f"{waited}s elapsed)")
+                time.sleep(5)
+                waited += 5
+            print("✅ \033[92mQueue drained.\033[0m")
             self.cleanup_symlinks()
         else:
             print()
-            print("📌 \033[93mNote: Symlinks remain in ComfyUI input folder\033[0m")
+            print("📌 \033[93mNote: Staged copies remain in ComfyUI input folder\033[0m")
             print(f"   \033[93mLocation:\033[0m {self.comfyui_input_folder}")
         print("\033[93m" + "=" * 50 + "\033[0m")
         print()
@@ -1169,7 +1194,7 @@ def main():
 
         # ── Step 4: cleanup preference ─────────────────────────────────────
         cleanup_after = djj.prompt_choice(
-            "\033[93mCleanup symlinks after processing?\033[0m\n1. Yes\n2. No (leave for review)",
+            "\033[93mCleanup staged copies after processing?\033[0m\n1. Yes\n2. No (leave for review)",
             ['1', '2'],
             default='2'
         ) == '1'

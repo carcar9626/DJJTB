@@ -4,6 +4,7 @@ import subprocess
 import pathlib
 import tempfile
 import shutil
+import random
 from PIL import Image, ImageChops
 import numpy as np
 from scipy.ndimage import label, find_objects
@@ -521,6 +522,8 @@ def run_pad(images, is_folder_mode, first_folder):
     print_batch_summary("Padding Summary", successful, failed, skipped, output_dirs_used, output_dir,
                          log_filename="image_processor_pad_log.txt")
 
+    return output_dir
+
 
 def run_crop(images, is_folder_mode, first_folder):
     edges = get_crop_edges()
@@ -531,10 +534,13 @@ def run_crop(images, is_folder_mode, first_folder):
     print("-------------")
     successful, failed, skipped, output_dirs_used = crop_images(images, edges, trim_px)
 
+    output_dir = djj.get_output_directory(images, is_folder_mode=is_folder_mode, first_folder=first_folder, subfolder_name="Cropped")
     print_batch_summary(
         "Cropping Summary", successful, failed, skipped, output_dirs_used,
-        djj.get_output_directory(images, is_folder_mode=is_folder_mode, first_folder=first_folder, subfolder_name="Cropped")
+        output_dir
     )
+
+    return output_dir
 
 
 def run_crop_and_resize(images, is_folder_mode, first_folder):
@@ -548,10 +554,13 @@ def run_crop_and_resize(images, is_folder_mode, first_folder):
         images, edges, trim_px, dimension_type, desired_width, desired_height, manual_mode
     )
 
+    output_dir = djj.get_output_directory(images, is_folder_mode=is_folder_mode, first_folder=first_folder, subfolder_name="Cropped_Resized")
     print_batch_summary(
         "Crop + Resize Summary", successful, failed, skipped, output_dirs_used,
-        djj.get_output_directory(images, is_folder_mode=is_folder_mode, first_folder=first_folder, subfolder_name="Cropped_Resized")
+        output_dir
     )
+
+    return output_dir
 
 
 def run_resize_only(images, is_folder_mode, first_folder):
@@ -562,10 +571,13 @@ def run_resize_only(images, is_folder_mode, first_folder):
         images, dimension_type, desired_width, desired_height, manual_mode
     )
 
+    output_dir = djj.get_output_directory(images, is_folder_mode=is_folder_mode, first_folder=first_folder, subfolder_name="Resized")
     print_batch_summary(
         "Resize Summary", successful, failed, skipped, output_dirs_used,
-        djj.get_output_directory(images, is_folder_mode=is_folder_mode, first_folder=first_folder, subfolder_name="Resized")
+        output_dir
     )
+
+    return output_dir
 
 
 # ─── Rotate / Flip ────────────────────────────────────────────────────────────
@@ -669,6 +681,8 @@ def run_rotate_flip(images, base_path):
         log_filename="image_processor_rotate_flip_log.txt"
     )
 
+    return output_dir
+
 
 # ─── Convert Format ───────────────────────────────────────────────────────────
 
@@ -757,6 +771,8 @@ def run_convert(images, is_folder_mode, first_folder):
 
     print_batch_summary("Convert Summary", successful, failed, skipped, output_dirs_used, output_dir,
                          log_filename="image_processor_convert_log.txt")
+
+    return output_dir
 
 
 # ─── Strip Padding / Split Collage ────────────────────────────────────────────
@@ -883,6 +899,8 @@ def run_strip(images, is_folder_mode, first_folder):
         log_filename="image_processor_strip_log.txt",
         success_label="Parts produced", count_label=""
     )
+
+    return output_dir
 
 
 # ─── Image Pairing / Joining / Collage ───────────────────────────────────────
@@ -1140,25 +1158,37 @@ def process_all_groups(groups, durations, transition_duration, logger,
     return success_count, error_count, list(paired_folders), list(joined_folders), list(comp_joined_folders)
 
 
-def _ask_grouping_params():
+def _ask_grouping_params(top_mode=None):
     """
     Ask grouping mode + group size / match type + num chars.
     Shared by run_pairing's main flow and its Mode 3 re-collage loop.
+
+    Random grouping (mode '3': shuffle the pool, then chunk sequentially —
+    same chunking as Sequential, just on a shuffled list) is only offered
+    when top_mode == '3' (Collage only). Every other mode also pairs/joins
+    each group with a matching video, where group composition isn't just
+    cosmetic, so random grouping doesn't apply there.
     """
-    pairing_mode = djj.prompt_choice(
+    allow_random = (top_mode == '3')
+
+    prompt = (
         "\033[93mGrouping mode:\033[0m\n"
         "1. Sequential (by position)\n"
-        "2. Auto-match (by prefix/suffix)\n",
-        ['1', '2'],
-        default='1'
+        "2. Auto-match (by prefix/suffix)\n"
     )
+    choices = ['1', '2']
+    if allow_random:
+        prompt += "3. Random (shuffled)\n"
+        choices.append('3')
+
+    pairing_mode = djj.prompt_choice(prompt, choices, default='1')
     print()
 
     group_size = None
     match_type = None
     num_chars = None
 
-    if pairing_mode == '1':
+    if pairing_mode in ('1', '3'):
         group_size = djj.get_int_input("Images per group [default: 3]", min_val=1, default=3)
         print()
     else:
@@ -1173,6 +1203,19 @@ def _ask_grouping_params():
         print()
 
     return pairing_mode, group_size, match_type, num_chars
+
+
+def _build_groups_maybe_random(images, pairing_mode, group_size, match_type, num_chars):
+    """
+    Like djj.build_groups_for_images, but treats mode '3' as Random:
+    shuffle a copy of the pool, then chunk it sequentially (mode '1'
+    behavior) instead of taking the images in their existing order.
+    """
+    if pairing_mode == '3':
+        shuffled = list(images)
+        random.shuffle(shuffled)
+        return djj.build_groups_for_images(shuffled, '1', group_size, match_type, num_chars)
+    return djj.build_groups_for_images(images, pairing_mode, group_size, match_type, num_chars)
 
 
 def _ask_collage_direction_and_edge(edge_calc_image_path, dimension_error_label="first image"):
@@ -1272,7 +1315,7 @@ def run_pairing(images, input_mode, input_path, include_subfolders):
     # ── Grouping mode ────────────────────────────────────────────────────
     # Auto-match mode: group size comes from however many images actually
     # share a match key — no fixed count to ask for.
-    pairing_mode, group_size, match_type, num_chars = _ask_grouping_params()
+    pairing_mode, group_size, match_type, num_chars = _ask_grouping_params(top_mode)
 
     # ── Collage params (modes 3, 4, 5) ────────────────────────────────────
     collage_direction = None
@@ -1340,7 +1383,7 @@ def run_pairing(images, input_mode, input_path, include_subfolders):
     folder_groups = {}
     max_group_size = 0
     for folder_path, folder_images in folder_image_map.items():
-        groups = djj.build_groups_for_images(folder_images, pairing_mode, group_size, match_type, num_chars)
+        groups = _build_groups_maybe_random(folder_images, pairing_mode, group_size, match_type, num_chars)
         folder_groups[folder_path] = groups
         for g in groups:
             max_group_size = max(max_group_size, len(g))
@@ -1568,7 +1611,7 @@ def run_pairing(images, input_mode, input_path, include_subfolders):
         if recap != '1':
             break
 
-        rc_pairing_mode, rc_group_size, rc_match_type, rc_num_chars = _ask_grouping_params()
+        rc_pairing_mode, rc_group_size, rc_match_type, rc_num_chars = _ask_grouping_params(top_mode)
 
         rc_direction, rc_longest_edge = _ask_collage_direction_and_edge(
             _last_collage_out[0], dimension_error_label="image"
@@ -1585,7 +1628,7 @@ def run_pairing(images, input_mode, input_path, include_subfolders):
         os.makedirs(recap_dir, exist_ok=True)
         all_collage_folders.append(recap_dir)
 
-        rc_groups = djj.build_groups_for_images(
+        rc_groups = _build_groups_maybe_random(
             _last_collage_out, rc_pairing_mode, rc_group_size,
             rc_match_type, rc_num_chars
         )
@@ -1710,43 +1753,67 @@ def main():
             print("❌ \033[93mNo valid image files found.\033[0m")
             continue
 
-        print(f"✅ \033[93m{len(images)} image(s) found\033[0m")
-        print()
-
-        # ── Operation ─────────────────────────────────────────────────────────
-        operation = djj.prompt_choice(
-            "\033[93mOperation:\033[0m\n"
-            "1. Pad images\n"
-            "2. Crop edges (trim by pixel amount)\n"
-            "3. Crop edges + Resize (trim, then resize to target)\n"
-            "4. Resize only (no crop)\n"
-            "5. Rotate / Flip\n"
-            "6. Image Pairing / Joining / Collage...\n"
-            "7. Convert format\n"
-            "8. Strip padding / split collage\n",
-            ['1', '2', '3', '4', '5', '6', '7', '8'],
-            default='1'
-        )
-        print()
-
         is_folder_mode = (input_mode == '1')
 
-        if operation == '1':
-            run_pad(images, is_folder_mode, input_path)
-        elif operation == '2':
-            run_crop(images, is_folder_mode, input_path)
-        elif operation == '3':
-            run_crop_and_resize(images, is_folder_mode, input_path)
-        elif operation == '4':
-            run_resize_only(images, is_folder_mode, input_path)
-        elif operation == '5':
-            run_rotate_flip(images, input_path)
-        elif operation == '6':
-            run_pairing(images, input_mode, input_path, include_subfolders)
-        elif operation == '7':
-            run_convert(images, is_folder_mode, input_path)
-        else:
-            run_strip(images, is_folder_mode, input_path)
+        # ── Operation (chains onto its own output if you want to keep going) ───
+        while True:
+            print(f"✅ \033[93m{len(images)} image(s) found\033[0m")
+            print()
+
+            operation = djj.prompt_choice(
+                "\033[93mOperation:\033[0m\n"
+                "1. Pad images\n"
+                "2. Crop edges (trim by pixel amount)\n"
+                "3. Crop edges + Resize (trim, then resize to target)\n"
+                "4. Resize only (no crop)\n"
+                "5. Rotate / Flip\n"
+                "6. Image Pairing / Joining / Collage...\n"
+                "7. Convert format\n"
+                "8. Strip padding / split collage\n",
+                ['1', '2', '3', '4', '5', '6', '7', '8'],
+                default='1'
+            )
+            print()
+
+            output_dir = None
+            if operation == '1':
+                output_dir = run_pad(images, is_folder_mode, input_path)
+            elif operation == '2':
+                output_dir = run_crop(images, is_folder_mode, input_path)
+            elif operation == '3':
+                output_dir = run_crop_and_resize(images, is_folder_mode, input_path)
+            elif operation == '4':
+                output_dir = run_resize_only(images, is_folder_mode, input_path)
+            elif operation == '5':
+                output_dir = run_rotate_flip(images, input_path)
+            elif operation == '6':
+                run_pairing(images, input_mode, input_path, include_subfolders)
+            elif operation == '7':
+                output_dir = run_convert(images, is_folder_mode, input_path)
+            else:
+                output_dir = run_strip(images, is_folder_mode, input_path)
+
+            # Pairing (6) can produce more than one output folder depending on
+            # mode, so it's not offered as a chain source here.
+            chained_images = (
+                djj.collect_images_from_folder(output_dir, False)
+                if output_dir and os.path.isdir(output_dir) else []
+            )
+            if not chained_images:
+                break
+
+            chain_choice = djj.prompt_choice(
+                f"\033[93mRun another operation on these {len(chained_images)} output image(s)?\033[0m\n1. Yes\n2. No\n",
+                ['1', '2'],
+                default='2'
+            )
+            print()
+            if chain_choice != '1':
+                break
+
+            images = chained_images
+            input_path = output_dir
+            is_folder_mode = True
 
         action = djj.what_next()
         if action == 'exit':

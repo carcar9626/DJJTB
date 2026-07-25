@@ -107,14 +107,22 @@ def should_skip(path, skip_paths, skip_names, root=None):
     for check_path in paths_to_check:
         check = check_path
         while True:
+            is_root = bool(root_obj and check == root_obj)
             if skip_paths and str(check) in skip_paths:
                 return True
-            if skip_names and check.name.lower() in skip_names:
+            # Generic name-keyword matching doesn't apply to the explicit
+            # root itself — the caller chose that folder on purpose, so
+            # skipping it just because its own name matches a keyword
+            # (e.g. "Comp") would silently return zero results. Absolute
+            # skip_paths entries above are a stronger, deliberate rule and
+            # still apply even at the root; only the generic keyword list
+            # is exempted here.
+            if skip_names and not is_root and check.name.lower() in skip_names:
                 return True
-            parent = check.parent
             # Stop walking up at the root input folder
-            if root_obj and check == root_obj:
+            if is_root:
                 break
+            parent = check.parent
             if parent == check:
                 break
             check = parent
@@ -276,9 +284,11 @@ def open_path(path):
         print(f"\033[91m❌ Path does not exist:\033[0m {path}")
 
 
-def list_files_in_folder(folder, extensions):
+def list_files_in_folder(folder, extensions, only=None):
     """
     List files in folder (non-recursive) matching extensions, sorted by name.
+    If `only` is given (a set/collection of filenames), results are additionally
+    restricted to those names — use to curate a folder down to known-good files.
     Returns a list of pathlib.Path, or [] if the folder is missing or empty.
     """
     folder = pathlib.Path(folder)
@@ -286,7 +296,8 @@ def list_files_in_folder(folder, extensions):
         print(f"\033[93m⚠️  Folder not found:\033[0m {folder}")
         return []
     files = sorted(
-        [f for f in folder.iterdir() if f.is_file() and f.suffix.lower() in extensions],
+        [f for f in folder.iterdir() if f.is_file() and f.suffix.lower() in extensions
+         and (only is None or f.name in only)],
         key=lambda f: f.name.lower()
     )
     if not files:
@@ -294,12 +305,12 @@ def list_files_in_folder(folder, extensions):
     return files
 
 
-def pick_single_from_folder(folder, extensions, label="file"):
+def pick_single_from_folder(folder, extensions, label="file", only=None):
     """
     Show numbered list of files in folder, user picks one by number.
     Returns a pathlib.Path, or None on failure.
     """
-    files = list_files_in_folder(folder, extensions)
+    files = list_files_in_folder(folder, extensions, only=only)
     if not files:
         return None
 
