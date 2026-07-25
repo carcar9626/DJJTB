@@ -82,6 +82,7 @@ class DJJTBLauncher:
         print(" 💰 \033[4;93m3\033[0m  FILE TOOLS 🗄️ 🗂️   ")
         #
         print(" 💰 \033[4;93mA\033[0m  APP LAUNCHER 📱🚀")
+        print(" 💰\033[4;93mAC\033[0m  ARCHIVED 🗄️")
         print()
         print("\033[1;93m QUICK TOOLS\033[0m")
         print("\033[92m--------------------------------------------------\033[0m")
@@ -145,7 +146,6 @@ class DJJTBLauncher:
         print(" 💰 \033[4;93m4\033[0m  Group Merger 📹 🧲")
         print(" 💰 \033[4;93m5\033[0m  Video Splitter 📹 ✂️  ⏱️")
         print(" 💰 \033[4;93m6\033[0m  Video ⟷ Frame Bridge 📹⬌🌃🌆🎆🎇")
-        print(" 💰 \033[4;93m7\033[0m  GIFs Converter 📹⬌🌃🌆🎆🎇")
         print()
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰 \033[4;93m0\033[0m  ⏪ Back to MEDIA TOOLS")
@@ -160,7 +160,7 @@ class DJJTBLauncher:
         print("\033[1;93m🖼️  IMAGES TOOLS 🖼️\033[0m")
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰 \033[4;93m1\033[0m  Image Processor 🩷⬌💓 ↔️🔄 ✋🏼🤲🏼")
-        # print(" 💰 \033[4;93m2\033[0m  Collage Creation 🧩 🎇")  # retired — superseded by Image Processor's Pairing/Collage mode; moved to old_versions
+        # print(" 💰 \033[4;93m2\033[0m  Collage Creation 🧩 🎇")  # superseded by Image Processor's Pairing/Collage mode; kept runnable under ARCHIVED (main menu)
         print(" 💰 \033[4;93m3\033[0m  Slideshow Maker 🎑➡︎📽️")
         print(" 💰 \033[4;93m4\033[0m  Webp to MP4 Converter 👾➡︎📹")
         # print(" 💰 \033[4;93m5\033[0m  Images to Video Compiler 🌃🌆🎆🎇➡︎📹")  # moved to Video Tools (choice 10)
@@ -292,6 +292,44 @@ class DJJTBLauncher:
         print(" 💰\033[4;93m00\033[0m ⏮️  MAIN MENU")
         print("\033[92m--------------------------------------------------\033[0m")
 
+    def show_archived_menu(self):
+        """Display archived tools menu — rarely used, not superseded, kept runnable"""
+        os.system('clear')
+        print()
+        print()
+        print("\033[1;93m🗄️  ARCHIVED 🗄️\033[0m")
+        print("\033[92m--------------------------------------------------\033[0m")
+        print(" 💰 \033[4;93m1\033[0m  Video to GIF Converter 📹⬌🌃🌆🎆🎇")
+        print(" 💰 \033[4;93m2\033[0m  Image Collage Creator 🧩 🎇")
+        print()
+        print("\033[92m--------------------------------------------------\033[0m")
+        print(" 💰 \033[4;93m0\033[0m  ⏪ Back")
+        print(" 💰\033[4;93m00\033[0m  ⏮️  MAIN MENU")
+        print("\033[92m--------------------------------------------------\033[0m")
+
+    def handle_archived_tools(self):
+        """Handle Archived tools submenu — rarely-used tools kept off the main menus but still runnable"""
+        first_entry = True
+
+        while True:
+            if not first_entry:
+                djj.wait_with_skip(8, "Back to Main Menu")
+            self.show_archived_menu()
+
+            choice = djj.prompt_choice("\033[93mChoose a Tool\033[0m" if first_entry else "\033[93mChoose another option\033[0m",
+                                     ['1', '2', '0', '00'])
+            first_entry = False
+
+            if choice == "1":
+                djj.run_script_in_tab("djjtb.archived.video_gif_converter", self.venv_path, self.project_path)
+            elif choice == "2":
+                djj.run_script_in_tab("djjtb.archived.image_collage_creator", self.venv_path, self.project_path)
+            elif choice == "0":
+                break
+            elif choice == "00":
+                djj.switch_to_terminal_tab("1")
+                return
+
     def handle_video_tools(self):
         """Handle video tools submenu"""
         first_entry = True
@@ -302,7 +340,7 @@ class DJJTBLauncher:
             self.show_video_tools_menu()
             
             choice = djj.prompt_choice("\033[93mChoose a Tool\033[0m" if first_entry else "\033[93mChoose another option\033[0m",
-                                     ['1', '2', '3', '4', '5', '6', '7', '0', '00'])
+                                     ['1', '2', '3', '4', '5', '6', '0', '00'])
             first_entry = False
 
             if choice == "1":
@@ -317,8 +355,6 @@ class DJJTBLauncher:
                 djj.run_script_in_tab("djjtb.media_tools.video_tools.video_splitter", self.venv_path, self.project_path)
             elif choice == "6":
                 djj.run_script_in_tab("djjtb.media_tools.video_tools.video_frame_bridge", self.venv_path, self.project_path)
-            elif choice == "7":
-                djj.run_script_in_tab("djjtb.media_tools.video_tools.video_gif_converter", self.venv_path, self.project_path)
             elif choice == "0":
                 break
             elif choice == "00":
@@ -736,7 +772,7 @@ class DJJTBLauncher:
         while True:
             self.show_main_menu()
             choice = djj.prompt_choice("\033[93mChoose a category\033[0m",
-                                     ['1', '2', '3', '4', '5', '6', '7', '8', '9','10', '11', 'a' , 'ad', 'c', 'x'])
+                                     ['1', '2', '3', '4', '5', '6', '7', '8', '9','10', '11', 'a' , 'ac', 'ad', 'c', 'x'])
 
             if choice == "1":
                 self.handle_media_tools()
@@ -749,6 +785,8 @@ class DJJTBLauncher:
             elif choice == "a":  # App Launcher
                 command = f"cd {self.project_path}; python3 -m djjtb.app_launcher"
                 djj.open_terminal_with_settings(command, "djjtb", "738, 200, 1314, 958")
+            elif choice == "ac":  # Archived
+                self.handle_archived_tools()
             elif choice == "ad":  # Admin Tools
                 self.handle_admin_tools()
             elif choice == "c":
