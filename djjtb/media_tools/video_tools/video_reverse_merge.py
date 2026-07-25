@@ -59,6 +59,22 @@ def encoder_flags(encoder):
     else:
         return ['-preset', VIDEO_PRESET, '-crf', VIDEO_CRF]
 
+def get_atempo_chain(speed):
+    """Chain atempo filters so audio tracks any speed, not just ffmpeg's native 0.5-2.0 range."""
+    if speed == 1.0:
+        return ""
+    filters = []
+    remaining_speed = speed
+    while remaining_speed > 2.0:
+        filters.append("atempo=2.0")
+        remaining_speed /= 2.0
+    while remaining_speed < 0.5:
+        filters.append("atempo=0.5")
+        remaining_speed /= 0.5
+    if remaining_speed != 1.0:
+        filters.append(f"atempo={remaining_speed}")
+    return ",".join(filters)
+
 
 def reverse_and_merge(video_path, index, total, speed_factor, input_base, encoder, audio_choice):
     folder, filename = os.path.split(video_path)
@@ -84,7 +100,9 @@ def reverse_and_merge(video_path, index, total, speed_factor, input_base, encode
     if speed_factor and speed_factor != 1.0:
         vf_filter += f",setpts={1/speed_factor}*PTS"
         if audio_choice == '1':
-            af_filter += f",atempo={speed_factor}" if 0.5 <= speed_factor <= 2.0 else ""
+            atempo_chain = get_atempo_chain(speed_factor)
+            if atempo_chain:
+                af_filter += f",{atempo_chain}"
 
     # Step 1: Create reversed clip
     run_ffmpeg([
