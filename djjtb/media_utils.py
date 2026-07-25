@@ -325,6 +325,77 @@ def collect_images_from_path_list(paths, include_subfolders=False):
     return sorted(set(images), key=str.lower)
 
 
+# ─── Video Collection Helpers ─────────────────────────────────────────────────
+
+VIDEO_EXTENSIONS = ('.mp4', '.mov', '.mkv', '.avi', '.webm', '.wmv', '.flv')
+
+
+def collect_videos_from_folder(folder_path, include_subfolders=False):
+    """
+    Collect videos from a folder, never descending into Output dirs.
+    Non-recursive mode only lists the folder's immediate contents.
+    """
+    folder_path_obj = pathlib.Path(folder_path)
+
+    videos = []
+    if folder_path_obj.is_dir():
+        if include_subfolders:
+            for root, dirs, files in os.walk(folder_path):
+                # Prune Output folders in-place so walk never descends into them
+                dirs[:] = [d for d in dirs if d.lower() != 'output']
+                videos.extend(pathlib.Path(root) / f for f in files if pathlib.Path(f).suffix.lower() in VIDEO_EXTENSIONS)
+        else:
+            videos = [f for f in folder_path_obj.glob('*') if f.suffix.lower() in VIDEO_EXTENSIONS and f.is_file()]
+
+    return sorted([str(v) for v in videos], key=str.lower)
+
+
+def collect_videos_from_paths(raw_input):
+    """
+    Collect videos from space-separated paths (supports drag-and-drop).
+    Handles quoted paths, escaped spaces, files and folders mixed together.
+    """
+    videos = []
+    raw = raw_input.strip()
+
+    # Rebuild tokens: split on spaces, but re-join tokens that are escaped spaces
+    # (macOS drag-and-drop escapes spaces as '\ ')
+    tokens = []
+    current = ''
+    i = 0
+    while i < len(raw):
+        if raw[i] == '\\' and i + 1 < len(raw) and raw[i + 1] == ' ':
+            current += ' '
+            i += 2
+        elif raw[i] == ' ':
+            if current:
+                tokens.append(current)
+                current = ''
+            i += 1
+        else:
+            current += raw[i]
+            i += 1
+    if current:
+        tokens.append(current)
+
+    for token in tokens:
+        path_str = token.strip().strip('\'"')
+        if not path_str:
+            continue
+        try:
+            path_obj = pathlib.Path(path_str).expanduser().resolve()
+            if path_obj.is_file() and path_obj.suffix.lower() in VIDEO_EXTENSIONS:
+                videos.append(str(path_obj))
+            elif path_obj.is_dir():
+                videos.extend(collect_videos_from_folder(str(path_obj), include_subfolders=False))
+            else:
+                print(f"  ⚠️  \033[93mNot found or unsupported:\033[0m {path_str}")
+        except Exception as e:
+            print(f"  ⚠️  \033[93mError resolving path\033[0m '{path_str}': {e}")
+
+    return sorted(set(videos), key=str.lower)
+
+
 def get_output_directory(images, is_folder_mode=True, first_folder=None, subfolder_name="Padded"):
     """Determine output directory based on input mode."""
     if is_folder_mode and first_folder:

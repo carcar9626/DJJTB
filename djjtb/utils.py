@@ -1048,11 +1048,12 @@ def get_media_input(prompt_text="📁 Enter path", extensions=('.mp4', '.mkv', '
         
         return media_files
 
-def collect_media_files(input_path):
+def collect_media_files(input_path, extensions=None):
     """Helper function for get_media_input - collects media files from a directory"""
     input_path = pathlib.Path(input_path)
-    extensions = ('.mp4', '.mov', '.webm', '.mkv', '.mp3', '.aac', '.flac', '.wav', '.m4a')
-    
+    if extensions is None:
+        extensions = ('.mp4', '.mov', '.webm', '.mkv', '.mp3', '.aac', '.flac', '.wav', '.m4a')
+
     if input_path.is_file():
         return [str(input_path)] if input_path.suffix.lower() in extensions else []
     elif input_path.is_dir():
@@ -1229,6 +1230,9 @@ from djjtb.media_utils import (
     collect_images_from_folder,
     collect_images_from_paths,
     collect_images_from_path_list,
+    VIDEO_EXTENSIONS,
+    collect_videos_from_folder,
+    collect_videos_from_paths,
     get_output_directory,
     group_images_by_parent_folder,
     get_match_key,
