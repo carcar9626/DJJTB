@@ -20,54 +20,22 @@ def setup_logging(output_path):
         format='%(asctime)s - %(levelname)s - %(message)s'
     )
 
-def collect_images_from_folder(input_path, include_subfolders=False):
-    """Collect images from folder(s)."""
-    input_path_obj = pathlib.Path(input_path)
-    image_extensions = ('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp')
-    
-    images = []
-    if input_path_obj.is_dir():
-        if include_subfolders:
-            for root, _, files in os.walk(input_path):
-                images.extend(pathlib.Path(root) / f for f in files if pathlib.Path(f).suffix.lower() in image_extensions)
-        else:
-            images = [f for f in input_path_obj.glob('*') if f.suffix.lower() in image_extensions and f.is_file()]
-    
-    return sorted([str(v) for v in images], key=str.lower)
-
-def collect_images_from_paths(file_paths):
-    """Collect images from space-separated file paths."""
-    images = []
-    paths = file_paths.strip().split()
-    
-    for path in paths:
-        path = path.strip('\'"')
-        path_obj = pathlib.Path(path)
-        
-        if path_obj.is_file() and path_obj.suffix.lower() in ('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp'):
-            images.append(str(path_obj))
-        elif path_obj.is_dir():
-            images.extend(collect_images_from_folder(str(path_obj), include_subfolders=False))
-    
-    return sorted(images, key=str.lower)
-
 def collect_images_from_txt():
     """Collect images from txt file (files and folders)."""
-    image_extensions = ('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp')
     paths = djj.get_paths_from_txt("Enter txt file path")
-    
+
     if not paths:
         return []
-    
+
     images = []
     for path in paths:
         path_obj = pathlib.Path(path)
         if path_obj.is_file():
-            if path_obj.suffix.lower() in image_extensions:
+            if path_obj.suffix.lower() in djj.IMAGE_EXTENSIONS:
                 images.append(str(path))
         elif path_obj.is_dir():
-            images.extend(collect_images_from_folder(str(path), include_subfolders=False))
-    
+            images.extend(djj.collect_images_from_folder(str(path), include_subfolders=False))
+
     return sorted(set(images), key=str.lower)
 
 def group_images_by_parent_folder(image_paths):
@@ -416,17 +384,17 @@ if __name__ == '__main__':
             ) == '1'
             print()
             
-            images = collect_images_from_folder(folder_path, include_sub)
-            
+            images = djj.collect_images_from_folder(folder_path, include_sub)
+
         elif input_mode == '2':
             # File paths mode
             file_paths = input("📁 \033[93mEnter image paths (space-separated):\033[0m\n -> ").strip()
-            
+
             if not file_paths:
                 print("❌ \033[1;5;93mNo file paths provided.\033[0m")
                 continue
-            
-            images = collect_images_from_paths(file_paths)
+
+            images = djj.collect_images_from_paths(file_paths)
             # Set folder_path to parent of first image for output folder logic
             if images:
                 folder_path = str(pathlib.Path(images[0]).parent)

@@ -1,6 +1,6 @@
 # DJJTB — utils.py Modularization / Dedup Refactor Plan
 
-**Status:** in progress — Phases 0-1 done, Phase 2 next
+**Status:** in progress — Phases 0-2 done, Phase 3 next
 **Created:** 2026-07-25
 **Purpose:** living checklist for incrementally moving duplicated per-script
 logic (`collect_images_from_folder`/`collect_videos_from_folder`
@@ -195,7 +195,7 @@ above).
 
 ## Phase 2 — Image collect-function dedup: `media_tools/`
 
-**Status:** `[ ]` not started
+**Status:** `[x]` done (2026-07-25)
 **Depends on:** nothing
 **Risk:** low — lowest-risk swap in the whole plan
 
@@ -206,6 +206,16 @@ already matches `djj.IMAGE_EXTENSIONS` exactly (order differs, values don't).
 The only real behavior delta is the Output-dir pruning djj's version adds.
 Also swap the file's local `collect_images_from_paths`/`collect_images_from_txt`
 in the same pass (same reasoning as Phase 1).
+
+**Done note (2026-07-25):** Exactly as predicted — no `extensions=` override
+needed since the tuples matched exactly, so this was a pure delete-and-call
+`djj.*` directly swap. `collect_images_from_folder`/`_from_paths` deleted;
+`collect_images_from_txt` kept as a thin local wrapper (same shape reasoning
+as Phase 1), its internal folder-expansion now goes through
+`djj.collect_images_from_folder`. 654→622 lines. Smoke-tested: flat/recursive
+collection, Output-dir pruning, and multi-path parsing all confirmed working
+against a real temp folder including a `.gif` (verifying it's still picked
+up, matching pre-existing behavior since the extension lists always matched).
 
 **Files touched:** `djjtb/media_tools/image_tools/image_slideshow_maker.py`
 **Verify:** run the tool against a real test folder (flat +
