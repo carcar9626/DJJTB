@@ -7,33 +7,28 @@ import djjtb.utils as djj
 
 os.system('clear')
 
-VIDEO_EXTENSIONS = ('.mp4', '.mkv', '.webm', '.mov')
-
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 def clean_path(path_str):
     return path_str.strip().strip('\'"')
 
 def is_valid_video(filename):
-    return filename.lower().endswith(VIDEO_EXTENSIONS)
-
-def collect_videos_from_folder(input_path):
-    """Collect videos from a single folder (no recursion)."""
-    input_path_obj = pathlib.Path(input_path)
-    videos = [f for f in input_path_obj.glob('*') if f.suffix.lower() in VIDEO_EXTENSIONS and f.is_file()]
-    return sorted([str(v) for v in videos], key=str.lower)
+    return filename.lower().endswith(djj.VIDEO_EXTENSIONS)
 
 def collect_subfolders_with_videos(parent_path):
     """
     Scan immediate subfolders of parent_path.
     Returns dict: {subfolder_path: [sorted video paths]}
     Only includes subfolders that actually contain videos.
+    This is a deliberate one-level fan-out (one non-recursive collect per
+    immediate subfolder), not the same thing as include_subfolders=True on
+    a single collect call — don't collapse the two.
     """
     parent = pathlib.Path(parent_path)
     grouped = {}
     for subfolder in sorted(parent.iterdir()):
         if subfolder.is_dir():
-            videos = collect_videos_from_folder(str(subfolder))
+            videos = djj.collect_videos_from_folder(str(subfolder), include_subfolders=False)
             if videos:
                 grouped[str(subfolder)] = videos
     return grouped
@@ -46,7 +41,7 @@ def collect_videos_from_paths(file_paths):
         if path_obj.is_file() and is_valid_video(path_obj.name):
             videos.append(str(path_obj))
         elif path_obj.is_dir():
-            videos.extend(collect_videos_from_folder(str(path_obj)))
+            videos.extend(djj.collect_videos_from_folder(str(path_obj), include_subfolders=False))
     return sorted(videos, key=str.lower)
 
 def get_user_group_size():
@@ -434,7 +429,7 @@ def main():
 
                 if not subfolder_groups:
                     print("\033[93m⚠️  No subfolders with videos found. Falling back to this folder only.\033[0m\n")
-                    videos = collect_videos_from_folder(src_dir_resolved)
+                    videos = djj.collect_videos_from_folder(src_dir_resolved, include_subfolders=False)
                 else:
                     subfolder_mode = True
                     total_vids = sum(len(v) for v in subfolder_groups.values())
@@ -468,7 +463,7 @@ def main():
                             videos.extend(vids)
                         videos = sorted(videos, key=str.lower)
             else:
-                videos = collect_videos_from_folder(src_dir_resolved)
+                videos = djj.collect_videos_from_folder(src_dir_resolved, include_subfolders=False)
 
             output_dir = os.path.join(src_dir_resolved, "Output", "VideoMerger")
 

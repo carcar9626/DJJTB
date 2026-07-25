@@ -10,11 +10,8 @@ VIDEO_BITRATE = '15000k'             # Used with h264_videotoolbox only
 VIDEO_CRF = '18'                     # Used with libx264 only
 VIDEO_PRESET = 'fast'                # Used with libx264 only
 
-VIDEO_EXTENSIONS = ('.mp4', '.mov', '.mkv', '.avi', '.webm')
-
-
 def is_video_file(filename):
-    return filename.lower().endswith(VIDEO_EXTENSIONS)
+    return filename.lower().endswith(djj.VIDEO_EXTENSIONS)
 
 def run_ffmpeg(cmd):
     try:
@@ -180,17 +177,6 @@ def reverse_and_merge(video_path, index, total, speed_factor, input_base, encode
     normalized_file.unlink(missing_ok=True)
 
 
-def collect_videos_from_folder(input_path, subfolders=False):
-    input_path_obj = Path(input_path)
-    videos = []
-    if input_path_obj.is_dir():
-        if subfolders:
-            for root, _, files in os.walk(input_path):
-                videos.extend(Path(root) / f for f in files if Path(f).suffix.lower() in VIDEO_EXTENSIONS)
-        else:
-            videos = [f for f in input_path_obj.glob('*') if f.suffix.lower() in VIDEO_EXTENSIONS and f.is_file()]
-    return sorted([str(v) for v in videos], key=str.lower)
-
 def ask_speed_factor():
     answer = djj.prompt_choice(
         "Change speed of reversed?\n1. Yes\n2. No\n",
@@ -236,12 +222,12 @@ def main():
                 default='2'
             ) == '1'
             print()
-            videos = collect_videos_from_folder(input_path, include_sub)
+            videos = djj.collect_videos_from_folder(input_path, include_sub)
 
         elif input_mode == '2':
             raw_files = djj.get_multifile_input(
                 "📁 Enter video paths",
-                extensions=VIDEO_EXTENSIONS
+                extensions=djj.VIDEO_EXTENSIONS
             )
             videos = [f for f in raw_files if is_video_file(f)]
             if videos:
@@ -255,7 +241,7 @@ def main():
                 if p_obj.is_file() and is_video_file(p_obj.name):
                     videos.append(str(p_obj))
                 elif p_obj.is_dir():
-                    videos.extend(collect_videos_from_folder(str(p_obj)))
+                    videos.extend(djj.collect_videos_from_folder(str(p_obj)))
             videos = sorted(videos, key=str.lower)
             if videos:
                 input_path = str(Path(videos[0]).parent)

@@ -1,6 +1,6 @@
 # DJJTB — utils.py Modularization / Dedup Refactor Plan
 
-**Status:** in progress — Phases 0-3 done, Phase 4 next
+**Status:** in progress — Phases 0-4 done, Phase 5 next
 **Created:** 2026-07-25
 **Purpose:** living checklist for incrementally moving duplicated per-script
 logic (`collect_images_from_folder`/`collect_videos_from_folder`
@@ -320,7 +320,7 @@ output.
 
 ## Phase 4 — Video collect-function dedup: "proud of" files (higher caution)
 
-**Status:** `[ ]` not started
+**Status:** `[x]` done (2026-07-25)
 **Depends on:** Phase 0
 **Risk:** higher — these are explicitly flagged in CLAUDE.md as hands-off
 custom workflows the user is proud of; treat this phase as lower priority
@@ -360,6 +360,53 @@ cleanup beyond the stated swap
 run. Given the parked black-frame/freeze investigation already noted in
 CLAUDE.md for `video_group_merger.py`, treat any output difference here as
 worth stopping and investigating rather than assuming it's unrelated.
+
+**Done note (2026-07-25):** Double-checked before starting that prior
+sessions' dedupe/bugfix passes on these two files (dead-code removal, the
+Copy-streams merge bug fix in `video_group_merger.py`, the audio-desync fix
+in `video_reverse_merge.py` — all per CLAUDE.md/memory, done before this
+plan existed) hadn't already touched the specific functions this phase
+targets — confirmed via fresh grep, no overlap, plan's assumptions still
+held exactly.
+
+`video_reverse_merge.py`: `collect_videos_from_folder` deleted outright
+(it returned strings already, no Path-wrapper needed, straight swap to
+`djj.collect_videos_from_folder`); local `VIDEO_EXTENSIONS` constant
+removed, `is_video_file()` now reads `djj.VIDEO_EXTENSIONS` directly (it's
+used standalone in the multi-path-input branch too, not just by the
+deleted function). `reverse_and_merge()` — the explicitly hands-off
+workflow logic — untouched, confirmed by grep it only does string-based
+`os.path.split`/`os.path.splitext`, no Path-attribute reliance to break.
+338→324 lines.
+
+`video_group_merger.py`: `collect_videos_from_folder(input_path)` (no
+recursion param, single-folder only) deleted outright — all 4 call sites
+(inside `collect_subfolders_with_videos`, inside `collect_videos_from_paths`,
+and 2 in the main flow) now call `djj.collect_videos_from_folder(path,
+include_subfolders=False)` directly, safe since that's exactly the previous
+always-non-recursive behavior. `collect_subfolders_with_videos`'s one-level
+fan-out logic (the actual point of that function — one non-recursive
+collect per immediate subfolder, building a `{subfolder: [videos]}` dict)
+was left structurally as-is per the plan's explicit warning not to
+"simplify" it into `include_subfolders=True` — that's a different
+operation. `collect_videos_from_paths` also stayed local (already correctly
+expands directories via the folder collector, matching djj's own paths
+semantics — no behavior change needed, just the extension source).
+`is_valid_video()` now reads `djj.VIDEO_EXTENSIONS`; local `VIDEO_EXTENSIONS`
+removed. **Caught a real mistake during this phase**: an `Edit` with
+`replace_all: true` on `collect_videos_from_folder(src_dir_resolved)` only
+matched one of its two occurrences because their surrounding indentation
+differed slightly — the second silently kept calling the now-deleted local
+function. Caught immediately by re-grepping for the old function name after
+the edit (which should always be the check, not just a compile pass — a
+`NameError` here only fires at actual runtime, not import time, so
+`py_compile` alone wouldn't have caught it). 592→587 lines.
+
+Neither file's core merge/reverse ffmpeg logic was touched — only the
+collection layer. Smoke-tested: per-subfolder fan-out grouping (confirmed a
+top-level file doesn't leak into subfolder groups, each subfolder's video
+count is correct), directory expansion in paths mode, and the widened
+`.wmv`/`.avi`/`.flv` coverage via `djj.VIDEO_EXTENSIONS` in both files.
 
 ---
 
