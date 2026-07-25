@@ -629,7 +629,7 @@ class READMEGenerator:
             "# Common patterns\n",
             "choice = djj.prompt_choice(\"Select option\", ['1', '2', '3'])\n",
             "media_files = djj.get_centralized_media_input(\"script_name\")\n",
-            "output_path = djj.get_centralized_output_path(\"script_name\")\n",
+            "output_path = os.path.join(input_folder, \"Output\", \"ToolLabel\")  # sibling-Output/ convention\n",
             "```\n\n"
         ])
         

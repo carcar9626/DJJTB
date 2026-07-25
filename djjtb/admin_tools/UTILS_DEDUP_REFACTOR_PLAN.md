@@ -1,6 +1,6 @@
 # DJJTB — utils.py Modularization / Dedup Refactor Plan
 
-**Status:** in progress — Phases 0-4 done, Phase 5 next
+**Status:** in progress — Phases 0-5 done, Phase 6 next
 **Created:** 2026-07-25
 **Purpose:** living checklist for incrementally moving duplicated per-script
 logic (`collect_images_from_folder`/`collect_videos_from_folder`
@@ -412,7 +412,7 @@ count is correct), directory expansion in paths mode, and the widened
 
 ## Phase 5 — Output-path convention rollout
 
-**Status:** `[ ]` not started
+**Status:** `[x]` done (2026-07-25)
 **Depends on:** nothing
 **Risk:** low — small, mostly confirmatory phase; the convention itself is
 already documented in `djjtb/skills/djjtb-conventions/SKILL.md` and (per the
@@ -438,6 +438,17 @@ re-verification note above) there are no active scripts left calling the old
 **Verify:** re-run the grep for `get_centralized_output_path(` and
 `Desktop.*strftime` across active scripts; confirm the only remaining hits
 are the ones explicitly decided on in 5a/5b.
+
+**Done note (2026-07-25):** 5a — fixed the example line to
+`output_path = os.path.join(input_folder, "Output", "ToolLabel")  # sibling-Output/ convention`.
+Left the adjacent `djj.get_centralized_media_input("script_name")` example
+line untouched — same file, same "recommends a pattern with 0 real
+adopters" staleness, but out of this phase's explicit scope; flagged to the
+user as a related but separate observation, not acted on.
+5b — re-verified fresh: `playlist_generator.py` explicitly *prompts* the
+user ("Save to default path? 1. Yes (~/Desktop/Playlists) 2. No (choose
+custom path)"), it's not a silent/hardcoded Desktop write. User confirmed:
+leave as-is, intentional for a portable deliverable — no code change.
 
 ---
 
