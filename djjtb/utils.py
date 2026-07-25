@@ -489,6 +489,45 @@ def get_multifile_input(prompt_text="📁 Enter file paths", extensions=None, ma
     return valid_files
 
 
+def parse_multipath_input(raw_input, extensions=None, include_subfolders=False):
+    """
+    Parse an already-obtained space-separated path string (quoted paths,
+    escaped spaces, files and folders mixed together) into a sorted list of
+    valid file paths. A parse-only sibling of get_multifile_input for
+    scripts that print their own prompt text before collecting the raw
+    string themselves — silent on invalid/unmatched paths (skips them),
+    matching the shape of the local collect_files_from_paths()-style
+    functions this replaces, not get_multifile_input's verbose reporting.
+
+    extensions=None means no filtering (any file matches). include_subfolders
+    defaults to False since that's the current behavior of every caller
+    this was extracted for — pass True explicitly if recursive expansion
+    is actually wanted.
+    """
+    import pathlib
+
+    valid_files = []
+    for path_str in raw_input.strip().split():
+        clean_path_str = path_str.strip().strip('\'"').replace('\\ ', ' ')
+        try:
+            path_obj = pathlib.Path(clean_path_str).expanduser().resolve()
+            if not path_obj.exists():
+                continue
+            if path_obj.is_file():
+                if not extensions or path_obj.suffix.lower() in extensions:
+                    valid_files.append(str(path_obj))
+            elif path_obj.is_dir():
+                walker = path_obj.rglob('*') if include_subfolders else path_obj.glob('*')
+                valid_files.extend(
+                    str(f) for f in walker
+                    if f.is_file() and (not extensions or f.suffix.lower() in extensions)
+                )
+        except Exception:
+            continue
+
+    return sorted(set(valid_files), key=str.lower)
+
+
 def run_batch_processor(cmd_list, file_paths, description="Processing", show_progress=True, timeout_per_file=300):
     """
     Run a command for multiple files with clean progress reporting and error handling.

@@ -86,10 +86,6 @@ def verify_facefusion_exists():
     print("✅ \033[93mFaceFusion installation found\033[0m")
     return True
 
-def clean_path(path_str):
-    """Clean path string by removing quotes and whitespace"""
-    return path_str.strip().strip('\'"')
-
 def tag_source_files(file_paths, tag_name="FF"):
     """Add Finder tag to source files"""
     TAG_PATH = "/opt/homebrew/bin/tag"
@@ -188,23 +184,6 @@ def collect_files_from_folder(input_path, subfolders=False):
                     if f.suffix.lower() in SUPPORTED_EXTS and f.is_file()]
     
     return sorted([str(f) for f in files], key=str.lower)
-
-def collect_files_from_paths(file_paths):
-    """Collect files from space-separated file paths"""
-    files = []
-    paths = file_paths.strip().split()
-    
-    for path in paths:
-        path = clean_path(path)
-        path_obj = pathlib.Path(path)
-        
-        if path_obj.is_file() and path_obj.suffix.lower() in SUPPORTED_EXTS:
-            files.append(str(path_obj))
-        elif path_obj.is_dir():
-            dir_files = collect_files_from_folder(path)
-            files.extend(dir_files)
-    
-    return sorted(files, key=str.lower)
 
 def build_facefusion_args(face_enhancer=None, face_enhancer_blend=FACE_ENHANCER_DEFAULT_BLEND,
                           expression_restorer=False, expression_restorer_factor=EXPRESSION_RESTORER_DEFAULT_FACTOR):
@@ -309,7 +288,7 @@ def get_source_input(mode):
             if not file_paths:
                 print("\033[1;93m❌ No file paths provided.\033[0m")
                 sys.exit(1)
-            source_files = collect_files_from_paths(file_paths)
+            source_files = djj.parse_multipath_input(file_paths, extensions=SUPPORTED_EXTS)
             print()
             return source_files, 'files', None
 
@@ -397,7 +376,7 @@ def get_target_input(mode):
                 print("\033[1;93m❌ No file paths provided.\033[0m")
                 sys.exit(1)
             
-            target_files = collect_files_from_paths(file_paths)
+            target_files = djj.parse_multipath_input(file_paths, extensions=SUPPORTED_EXTS)
             print()
             return target_files, 'files', None
             

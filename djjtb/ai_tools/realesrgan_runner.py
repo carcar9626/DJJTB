@@ -72,10 +72,6 @@ def verify_executable_exists():
     print("✅ \033[93mReal-ESRGAN executable found and ready\033[0m")
     return True
 
-def clean_path(path_str):
-    """Clean path string by removing quotes and whitespace"""
-    return path_str.strip().strip('\'"')
-
 def tag_source_files(file_paths, tag_name="UP"):
     """Add Finder tag to source files"""
     TAG_PATH = "/opt/homebrew/bin/tag"
@@ -107,22 +103,6 @@ def collect_files_from_folder(input_path, subfolders=False):
     
     return sorted([str(f) for f in files], key=str.lower)
 
-def collect_files_from_paths(file_paths):
-    """Collect files from space-separated file paths"""
-    files = []
-    paths = file_paths.strip().split()
-    
-    for path in paths:
-        path = clean_path(path)
-        path_obj = pathlib.Path(path)
-        
-        if path_obj.is_file() and path_obj.suffix.lower() in SUPPORTED_EXTS:
-            files.append(str(path_obj))
-        elif path_obj.is_dir():
-            dir_files = collect_files_from_folder(path)
-            files.extend(dir_files)
-    
-    return sorted(files, key=str.lower)
 
 def get_valid_inputs():
     """Allow selecting multiple files and/or folders using prompt_choice"""
@@ -157,7 +137,7 @@ def get_valid_inputs():
             print("\033[1;33m❌ No file paths provided.\033[0m")
             sys.exit(1)
         
-        valid_paths = collect_files_from_paths(file_paths)
+        valid_paths = djj.parse_multipath_input(file_paths, extensions=SUPPORTED_EXTS)
         print()
         src_path = None
     

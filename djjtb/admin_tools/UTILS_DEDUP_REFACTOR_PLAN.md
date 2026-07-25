@@ -1,6 +1,6 @@
 # DJJTB — utils.py Modularization / Dedup Refactor Plan
 
-**Status:** in progress — Phases 0-5 done, Phase 6 next
+**Status:** in progress — Phases 0-5 done, Phase 6 in progress (6a done, 6b-6e next)
 **Created:** 2026-07-25
 **Purpose:** living checklist for incrementally moving duplicated per-script
 logic (`collect_images_from_folder`/`collect_videos_from_folder`
@@ -454,11 +454,32 @@ leave as-is, intentional for a portable deliverable — no code change.
 
 ## Phase 6 — Multi-path input consolidation (Item 2)
 
-**Status:** `[ ]` not started
+**Status:** `[~]` in progress — design decision made, 6a done, 6b-6e remain
 **Depends on:** Phase 0a (if any sub-phase routes through
 `get_centralized_media_input`)
 **Risk:** medium-high on the design-decision step below, low-medium per file
 once that's resolved
+
+**Design decision — resolved (2026-07-25):** Went narrower than the plan's
+rough sketch, confirmed with the user before implementing. Added
+`djj.parse_multipath_input(raw_input, extensions=None, include_subfolders=False)`
+as a **new, standalone** function in `utils.py` (not extracted from
+`get_multifile_input`'s body — `get_multifile_input` itself is **completely
+untouched**, since it has 2 real active callers — `rsync_helper.py` and
+`video_reverse_merge.py` from Phase 4 — and refactoring it added real
+regression risk for zero benefit to this phase's actual 15 target files,
+none of which call `get_multifile_input`). Two corrections made to the
+plan's original rough signature after actually reading the target files:
+`include_subfolders` defaults to **`False`**, not `True` — every 6a/6c/6d
+file's existing directory expansion is non-recursive by default, so
+defaulting to recursive would've silently widened all of them; and
+`extensions` has no single sensible default (the 6a files alone have 3
+different `SUPPORTED_EXTS` values — mixed image+video, image-only two
+different ways) so it defaults to `None` meaning "no filtering," with every
+caller passing its own tuple explicitly, same pattern as Phases 1-4. Silent
+on invalid/unmatched paths (skips them) to match the local functions it
+replaces, not `get_multifile_input`'s verbose reporting. Smoke-tested in
+isolation before touching any target file.
 
 ### Preamble — read before starting any sub-phase
 
@@ -509,7 +530,7 @@ below by subfolder/shape.
 
 ### 6a. `ai_tools/` — byte-identical `clean_path()` runners
 
-**Status:** `[ ]` not started
+**Status:** `[x]` done (2026-07-25)
 **Files:** `djjtb/ai_tools/codeformer_runner_liveprompt.py`,
 `djjtb/ai_tools/facefusion_runner.py`, `djjtb/ai_tools/gfpgan_runner.py`,
 `djjtb/ai_tools/realesrgan_runner.py`, `djjtb/ai_tools/realsr_runner.py`
@@ -521,6 +542,18 @@ expands dirs one level). Highest-value, lowest-risk group in this phase —
 do this one first once the Phase 6 preamble's design decision is made.
 **Verify:** run each of the 5 AI runners with a real multi-path drag-drop
 batch (mix of files + a folder) before/after, confirm identical file list.
+
+**Done note (2026-07-25):** Exactly as predicted — `clean_path()` and
+`collect_files_from_paths()` deleted from all 5, each file's single call
+site now reads `djj.parse_multipath_input(file_paths, extensions=SUPPORTED_EXTS)`.
+`collect_files_from_folder()` was deliberately left untouched in all 5 —
+it's a different, valid function (folder-mode input, not multi-path
+parsing) that was never part of Item 2's duplication and is out of this
+plan's scope; noted so it isn't mistaken for an oversight. `facefusion_runner.py`
+had 2 call sites (source + target file selection), the other 4 had 1 each.
+Smoke-tested all 5 together via module import + a real temp folder,
+confirming each tool's distinct `SUPPORTED_EXTS` threads through correctly
+and non-recursive directory expansion behaves as before.
 
 ### 6b. `ai_tools/` — remaining, mixed shape
 
