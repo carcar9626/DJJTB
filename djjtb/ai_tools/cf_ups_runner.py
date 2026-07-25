@@ -394,17 +394,6 @@ def collect_files_from_folder(input_path, subfolders=False, extensions=SUPPORTED
     return sorted([str(f) for f in files], key=str.lower)
 
 
-def collect_files_from_paths(raw, extensions=SUPPORTED_EXTS):
-    files = []
-    for path_str in raw.strip().split():
-        p = pathlib.Path(path_str.strip('\'"'))
-        if p.is_file() and p.suffix.lower() in extensions:
-            files.append(str(p))
-        elif p.is_dir():
-            files.extend(collect_files_from_folder(p, extensions=extensions))
-    return sorted(files, key=str.lower)
-
-
 def cleanup_cf_extras(output_path):
     """Remove cropped_faces and restored_faces subdirs CF creates."""
     for sub in ('cropped_faces', 'restored_faces'):
@@ -647,7 +636,7 @@ def get_inputs(mode='1'):
         if not raw:
             print("❌ No file paths provided.")
             sys.exit(1)
-        files = collect_files_from_paths(raw, extensions=extensions)
+        files = djj.parse_multipath_input(raw, extensions=extensions)
         files = djj.apply_skip_list(files)
         if files:
             src_path = str(pathlib.Path(files[0]).parent)

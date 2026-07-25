@@ -1,6 +1,6 @@
 # DJJTB — utils.py Modularization / Dedup Refactor Plan
 
-**Status:** in progress — Phases 0-5 done, Phase 6 in progress (6a done, 6b-6e next)
+**Status:** all phases (0-6) done (2026-07-25)
 **Created:** 2026-07-25
 **Purpose:** living checklist for incrementally moving duplicated per-script
 logic (`collect_images_from_folder`/`collect_videos_from_folder`
@@ -454,7 +454,16 @@ leave as-is, intentional for a portable deliverable — no code change.
 
 ## Phase 6 — Multi-path input consolidation (Item 2)
 
-**Status:** `[~]` in progress — design decision made, 6a done, 6b-6e remain
+**Status:** `[x]` done (2026-07-25) — design decision made, 6a-6e all done.
+10 of the 15 files actually swapped to `djj.parse_multipath_input`: all 5
+from 6a, plus `cf_ups_runner.py` (6b), `auto_subfolder.py` (6c), and
+`image_webp_to_mp4.py`/`media_sorter.py`/`metadata_tool.py` (6d). The other
+5 — `hermes_helper.py` (6b), `filename_randomizer.py`/`file_identifier.py`
+(6c), `playlist_generator.py` (6d), `path_grabber.py` (6e) — were each
+individually re-read and confirmed to be a genuine shape mismatch, not
+forced into `parse_multipath_input`. See each sub-phase's done note for
+why. One real pre-existing bug found and fixed along the way (a `NameError`
+in `media_sorter.py`'s paths-mode branch).
 **Depends on:** Phase 0a (if any sub-phase routes through
 `get_centralized_media_input`)
 **Risk:** medium-high on the design-decision step below, low-medium per file
@@ -557,7 +566,7 @@ and non-recursive directory expansion behaves as before.
 
 ### 6b. `ai_tools/` — remaining, mixed shape
 
-**Status:** `[ ]` not started
+**Status:** `[x]` done (2026-07-25)
 **Files:** `djjtb/ai_tools/cf_ups_runner.py` (inline variant of the 6a
 pattern, no separate `clean_path` — same fix, just written differently),
 `djjtb/ai_tools/hermes_helper.py` (**different shape — flag before
@@ -568,9 +577,27 @@ before editing.)
 **Verify:** `cf_ups_runner.py` — same as 6a. `hermes_helper.py` — confirm
 single-path prompt behavior unchanged after swap.
 
+**Done note (2026-07-25):** `cf_ups_runner.py` — `collect_files_from_paths(raw,
+extensions=SUPPORTED_EXTS)` deleted, call site now
+`djj.parse_multipath_input(raw, extensions=extensions)` where `extensions`
+is a caller-determined variable (this tool passes different extension sets
+per mode — CF-only vs CF+Upscaler combined — confirmed the swap preserves
+that, since `extensions` is just forwarded through). `collect_files_from_folder`
+left untouched, same out-of-scope reasoning as 6a.
+`hermes_helper.py` — re-read `_collect_new_folders()` in full: it's not a
+single-path prompt either (the plan's original guess was off) — it's a
+**repeated-entry accumulator loop** (prompts for one path at a time,
+validates it's a folder with specific feedback, appends to a list, repeats
+until a blank line). Doesn't match `get_path_input()` (one-shot, no
+accumulate-until-blank) or `parse_multipath_input()` (expects one
+space-separated string, not a loop) — neither fits without changing the
+interaction. The only actually-duplicated content is one
+`.strip().strip('\'"')` call, too trivial to justify a new abstraction.
+Left untouched.
+
 ### 6c. `file_tools/`
 
-**Status:** `[ ]` not started
+**Status:** `[x]` done (2026-07-25)
 **Files:** `djjtb/file_tools/auto_subfolder.py`,
 `djjtb/file_tools/filename_randomizer.py` (both genuine multi-path
 split()-loop parsers, same shape as 6a),
@@ -581,9 +608,33 @@ reading the call site before assuming which djj function fits.)
 **Verify:** run each tool against a real multi-path batch (or single path,
 per 6c's per-file shape) before/after.
 
+**Done note (2026-07-25):** `auto_subfolder.py` — clean swap,
+`collect_files_from_paths(file_paths, extensions=None)` deleted, call site
+now `djj.parse_multipath_input(file_paths)` (this tool accepts any file
+type, matching `parse_multipath_input`'s own `extensions=None` default
+exactly — zero extra args needed).
+`filename_randomizer.py` — re-read fully, turned out **not** to be 6a-shape
+after all: its `collect_files_from_paths` returns `Path` objects (confirmed
+heavy `.name`/`.stem`/`.suffix`/`.parent` reliance downstream by grep) and
+deliberately includes symlinks *regardless of extension*
+(`file_path.is_symlink() or file_path.suffix.lower() in extensions`) — a
+real, deliberate behavior `parse_multipath_input` doesn't replicate. Left
+untouched.
+`file_identifier.py` — actually **was** genuine multi-path (the plan's
+"maybe single-path" flag was the cautious guess, not the reality), but its
+directory expansion explicitly excludes dotfiles
+(`not file.name.startswith('.')`). Verified before assuming this was
+redundant with glob's own behavior: tested `pathlib.Path.glob('*')` directly
+— it **does** include dotfiles by default (unlike shell globbing), so this
+exclusion is real and meaningful (skips `.DS_Store` etc. for a tool whose
+whole job is file-type identification — running magic-byte detection on
+`.DS_Store` would be noise). `parse_multipath_input` has no dotfile
+exclusion, so swapping would've silently started including junk. Left
+untouched.
+
 ### 6d. `media_tools/` (non-video, non-Item-1-overlap)
 
-**Status:** `[ ]` not started
+**Status:** `[x]` done (2026-07-25)
 **Files:** `djjtb/media_tools/image_tools/image_webp_to_mp4.py`,
 `djjtb/media_tools/media_sorter.py` (both genuine multi-path parsers, 6a
 shape), `djjtb/media_tools/metadata_tool.py` (has a `clean_path()` helper —
@@ -596,9 +647,46 @@ for `djj.get_path_input()` if anything, likely lowest priority in this whole
 phase since it's a single value, not a collection.)
 **Verify:** per-file, matching whichever djj function actually ends up used.
 
+**Done note (2026-07-25):** `image_webp_to_mp4.py` — clean swap,
+`collect_webp_from_paths` deleted, call site now
+`djj.parse_multipath_input(file_paths, extensions=('.webp',))`.
+`media_sorter.py` — swapped the inline paths-mode parsing block (not a
+separate named function here, unlike the other files) to
+`djj.parse_multipath_input(paths_input, extensions=IMAGE_EXTS | VIDEO_EXTS)`,
+wrapped back to `Path` objects since `.parent`/`.name` are used downstream.
+**Found and fixed a real pre-existing bug while touching this code**: the
+line right after the parsing loop called
+`djj.apply_skip_list(media_files, root=folder_path)`, but `folder_path` is
+only ever assigned in the folder-mode branch — selecting "2. Space-separated
+file paths" would have raised `NameError` every time (confirmed by grep,
+not assumption: no `folder_path =` assignment exists anywhere in the
+paths-mode branch). Fixed by dropping the `root=` argument entirely in this
+branch — multi-path mode has no single explicitly-chosen root to exempt
+from skip-list name-matching (unlike folder mode), so `apply_skip_list`'s
+own `root=None` default is the semantically correct behavior here, not a
+workaround.
+`metadata_tool.py` — `is_media_file()`'s three extension lists
+(`video_extensions`/`image_extensions`/`audio_extensions`) were function-local,
+so hoisted them to module-level `VIDEO_EXTS`/`IMAGE_EXTS`/`AUDIO_EXTS`
+constants (both `is_media_file` and the new call site now share them —
+extra dedup beyond just this phase's scope, done because it was the clean
+way to give the call site real extension tuples to pass through). Call
+site now builds the right tuple via a small `ext_by_filter` dict keyed by
+the tool's existing `'videos'/'images'/'audio'/'both'` filter value, then
+calls `djj.parse_multipath_input(file_paths, extensions=ext_by_filter[file_type_filter])`.
+`clean_path()` and `collect_files_from_paths()` deleted.
+`playlist_generator.py` — re-confirmed the plan's read was right: this
+function reads paths **from a txt file** (one per line), not a
+space-separated string — wrong shape for `parse_multipath_input` entirely.
+`djj.get_path_input()` was also considered and rejected: it retries until
+valid or exits the script after repeated failures, while this function
+currently fails soft (returns `[], None`, lets the caller's loop re-prompt)
+— swapping would be a real behavior change, not a pure dedup. Left
+untouched.
+
 ### 6e. `quick_tools/` — different problem shape entirely
 
-**Status:** `[ ]` not started
+**Status:** `[x]` done (2026-07-25) — confirmed no fit, left untouched
 **Files:** `djjtb/quick_tools/path_grabber.py`
 
 This tool's job is grabbing dropped Finder paths from the clipboard, one per
@@ -609,6 +697,13 @@ Lowest priority in this phase; make a manual per-line-vs-batch judgment call
 when this sub-phase is picked up rather than forcing it into the same mold
 as 6a–6d.
 **Verify:** N/A until the fit decision above is made.
+
+**Done note (2026-07-25):** Confirmed by reading — this operates on
+newline-separated clipboard *text*, validated against a hardcoded list of
+path-prefix heuristics (`/Users/`, `~/Desktop/`, etc.), with no file-extension
+concept anywhere (it grabs any kind of path — apps, folders, arbitrary
+files). Fundamentally different shape from every other function in this
+phase; no djj.* function fits. Left untouched, as anticipated.
 
 ---
 

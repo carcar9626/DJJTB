@@ -203,22 +203,6 @@ def collect_webp_files(input_path, include_subfolders=False):
 
     return sorted([str(f) for f in webp_files], key=str.lower)
 
-def collect_webp_from_paths(file_paths):
-    """Collect WebP files from space-separated paths."""
-    webp_files = []
-    paths = file_paths.strip().split()
-
-    for path in paths:
-        path = path.strip('\'"')
-        path_obj = pathlib.Path(path)
-
-        if path_obj.is_file() and path_obj.suffix.lower() == '.webp':
-            webp_files.append(str(path_obj))
-        elif path_obj.is_dir():
-            webp_files.extend(collect_webp_files(str(path_obj), include_subfolders=False))
-
-    return sorted(webp_files, key=str.lower)
-
 def collect_webp_from_txt():
     """Collect WebP files from txt file."""
     txt_path = djj.get_path_input("Enter txt file path")
@@ -345,7 +329,7 @@ def main():
                 print("❌ \033[93mNo file paths provided.\033[0m")
                 continue
 
-            webp_files = collect_webp_from_paths(file_paths)
+            webp_files = djj.parse_multipath_input(file_paths, extensions=('.webp',))
             if webp_files:
                 source_folder = str(pathlib.Path(webp_files[0]).parent)
             print()

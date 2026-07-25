@@ -125,24 +125,6 @@ def collect_files_from_folder(folder_path, extensions=None):
     return sorted(files, key=str.lower)
 
 
-def collect_files_from_paths(file_paths, extensions=None):
-    """Collect files from space-separated paths (files or folders, non-recursive)."""
-    files = []
-    paths = file_paths.strip().split()
-    
-    for path in paths:
-        path = path.strip('\'"')
-        path_obj = pathlib.Path(path).expanduser().resolve()
-        
-        if path_obj.is_file():
-            if extensions is None or path_obj.suffix.lower() in extensions:
-                files.append(str(path_obj))
-        elif path_obj.is_dir():
-            files.extend(collect_files_from_folder(str(path_obj), extensions))
-    
-    return sorted(files, key=str.lower)
-
-
 def collect_files_from_txt(txt_path, extensions=None):
     """Collect files from paths listed in a txt file."""
     paths = djj.get_paths_from_txt("Enter txt file path")
@@ -353,7 +335,7 @@ def main():
             if not file_paths:
                 print("❌ \033[93mNo file paths provided.\033[0m")
                 continue
-            files = collect_files_from_paths(file_paths)
+            files = djj.parse_multipath_input(file_paths)
             if files:
                 parent_folder = str(pathlib.Path(files[0]).parent)
             print()

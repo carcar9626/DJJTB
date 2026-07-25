@@ -271,29 +271,12 @@ def get_media_files_from_input():
         print(f"\033[93mEnter file paths (space-separated):\033[0m")
         paths_input = input(" > ").strip()
         if paths_input:
-            for path_str in paths_input.split():
-                path_str = path_str.strip('\'"')
-                try:
-                    path = Path(path_str).expanduser().resolve()
-                    if path.exists():
-                        if path.is_file():
-                            ext = path.suffix.lower()
-                            if ext in IMAGE_EXTS or ext in VIDEO_EXTS:
-                                media_files.append(path)
-                        elif path.is_dir():
-                            # Collect files from this directory
-                            for file in path.iterdir():
-                                if file.is_file():
-                                    ext = file.suffix.lower()
-                                    if ext in IMAGE_EXTS or ext in VIDEO_EXTS:
-                                        media_files.append(file)
-                    else:
-                        print(f"\033[93m Warning: Path '{path}' does not exist.\033[0m")
-                except Exception as e:
-                    print(f"\033[93m Error resolving path '{path_str}': {e}\033[0m")
-        
-        # For multi-file mode, use the parent of the first file as root folder
-        media_files = djj.apply_skip_list(media_files, root=folder_path)
+            media_files = [Path(p) for p in djj.parse_multipath_input(paths_input, extensions=IMAGE_EXTS | VIDEO_EXTS)]
+
+        # For multi-file mode there's no single explicitly-chosen root (unlike
+        # folder mode) to exempt from name-based skip-list matching, so no
+        # root= is passed here -- apply_skip_list defaults to root=None.
+        media_files = djj.apply_skip_list(media_files)
         if media_files:
             root_folder = media_files[0].parent
     

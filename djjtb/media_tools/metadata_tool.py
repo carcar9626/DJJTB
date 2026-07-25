@@ -51,8 +51,9 @@ CAMERA_MODELS = ["EOS 5D Mark IV", "D850", "A7R III", "iPhone 14 Pro", "Galaxy S
 
 os.system('clear')
 
-def clean_path(path_str):
-    return path_str.strip().strip('\'"')
+VIDEO_EXTS = ['.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v', '.flv', '.wmv', '.3gp']
+IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp', '.svg', '.ico', '.heic', '.heif']
+AUDIO_EXTS = ['.mp3', '.wav', '.flac', '.aac', '.m4a', '.ogg', '.wma']
 
 def generate_fake_metadata(file_type="image"):
     """Generate creative fake metadata"""
@@ -110,18 +111,14 @@ def get_file_type_by_extension(filename):
         return 'Unknown'
 
 def is_media_file(filename, file_types='both'):
-    video_extensions = ['.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v', '.flv', '.wmv', '.3gp']
-    image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp', '.svg', '.ico', '.heic', '.heif']
-    audio_extensions = ['.mp3', '.wav', '.flac', '.aac', '.m4a', '.ogg', '.wma']
-    
     if file_types == 'videos':
-        return any(filename.lower().endswith(ext) for ext in video_extensions)
+        return any(filename.lower().endswith(ext) for ext in VIDEO_EXTS)
     elif file_types == 'images':
-        return any(filename.lower().endswith(ext) for ext in image_extensions)
+        return any(filename.lower().endswith(ext) for ext in IMAGE_EXTS)
     elif file_types == 'audio':
-        return any(filename.lower().endswith(ext) for ext in audio_extensions)
+        return any(filename.lower().endswith(ext) for ext in AUDIO_EXTS)
     else:
-        return any(filename.lower().endswith(ext) for ext in video_extensions + image_extensions + audio_extensions)
+        return any(filename.lower().endswith(ext) for ext in VIDEO_EXTS + IMAGE_EXTS + AUDIO_EXTS)
 
 def collect_and_select_files(input_path, include_sub=False, file_types='both'):
     """Collect files and let user select which ones to process"""
@@ -186,24 +183,6 @@ def collect_and_select_files(input_path, include_sub=False, file_types='both'):
         return []
     
     return list(dict.fromkeys(selected_files))  # Remove duplicates while preserving order
-
-def collect_files_from_paths(file_paths, file_types='both'):
-    media_files = []
-    paths = file_paths.strip().split()
-    
-    for path in paths:
-        path = clean_path(path)
-        path_obj = Path(path)
-        
-        if path_obj.is_file() and is_media_file(path_obj.name, file_types):
-            media_files.append(str(path_obj))
-        elif path_obj.is_dir():
-            # For directories in file paths, collect all files
-            for file in path_obj.glob('*'):
-                if file.is_file() and is_media_file(file.name, file_types):
-                    media_files.append(str(file))
-    
-    return sorted(media_files, key=str.lower)
 
 def run_ffmpeg_strip(input_file, output_file):
     try:
@@ -331,7 +310,11 @@ def main():
                 print("❌ \033[93mNo file paths provided.\033[0m")
                 continue
             
-            media_files = collect_files_from_paths(file_paths, file_type_filter)
+            ext_by_filter = {
+                'videos': VIDEO_EXTS, 'images': IMAGE_EXTS, 'audio': AUDIO_EXTS,
+                'both': VIDEO_EXTS + IMAGE_EXTS + AUDIO_EXTS,
+            }
+            media_files = djj.parse_multipath_input(file_paths, extensions=ext_by_filter[file_type_filter])
             if media_files:
                 input_base_path = str(Path(media_files[0]).parent)
             print()
