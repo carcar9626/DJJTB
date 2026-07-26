@@ -835,6 +835,46 @@ class PathManager:
 # Global path manager instance
 path_manager = PathManager()
 
+_LAST_OUTPUT_KEY = "_last_output"
+
+
+def save_last_output(script_name, output_paths):
+    """
+    Record what a tool just produced, for the next tool to discover via
+    load_last_output(). Overwrites whatever was previously recorded --
+    only ever the single most recent output, no history. Call this right
+    after a tool finishes producing files, not at input-collection time.
+    """
+    path_manager.save_paths(_LAST_OUTPUT_KEY, output_paths, {'source_script': script_name})
+
+
+def load_last_output(extensions=None, max_age_seconds=3600):
+    """
+    Return the most recently recorded output as {'paths': [...], 'source_script': ...,
+    'timestamp': ...}, or None if nothing was recorded, it's older than
+    max_age_seconds, or none of its paths match extensions. This is what a
+    consuming tool's input-selection prompt calls to decide whether to
+    offer a "use previous output" choice -- declining the offer never
+    clears this; only a tool actually finishing and calling
+    save_last_output() again replaces it.
+    """
+    record = path_manager.load_paths(_LAST_OUTPUT_KEY)
+    if not record or not record.get('paths'):
+        return None
+
+    age = time.time() - record.get('timestamp', 0)
+    if max_age_seconds is not None and age > max_age_seconds:
+        return None
+
+    paths = record['paths']
+    if extensions:
+        paths = [p for p in paths if pathlib.Path(p).suffix.lower() in extensions]
+        if not paths:
+            return None
+
+    return {'paths': paths, 'source_script': record.get('source_script'), 'timestamp': record.get('timestamp')}
+
+
 def get_centralized_media_input(script_name, prompt_text="📁 Select media files/folders", extensions=('.mp4', '.mkv', '.webm', '.mov')):
     """
     Centralized media input handler that can be called from any script

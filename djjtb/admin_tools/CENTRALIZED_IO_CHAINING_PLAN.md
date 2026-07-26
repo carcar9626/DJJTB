@@ -1,7 +1,21 @@
 # DJJTB — Centralized I/O / Cross-Tool Chaining Plan
 
-**Status:** planning only, execution not started
+**Status:** in progress — Phase A done, Phase B (wiring the 2 pilot pairs) not started
 **Created:** 2026-07-25
+**Branch:** `worktree-centralized-io-chaining` in
+`.claude/worktrees/centralized-io-chaining` — fully isolated from `main`,
+per user's explicit request given how workflow-critical/fragile this
+feature could become. Nothing here reaches `main` until thoroughly tested
+and the user says so.
+
+**User's long-term reference point (2026-07-25, not being built now):**
+eventual 3-hop chain — `video_frame_bridge.py` (extract) →
+`image_processor.py` (trim/resize) → `facefusion_runner.py`. Confirmed
+explicitly as "not immediate," just context for what the finished feature
+should eventually support. The single-most-recent-output-slot design
+(Phase A, Q2) naturally supports chains like this already — each hop's
+output becomes the next hop's "previous output" in sequence — so this
+doesn't require different plumbing, just more pairs wired later (Phase C).
 **Purpose:** the actual next step CLAUDE.md's "Current goal" describes — letting
 a tool's output flow into the next tool through the launcher — now that
 `UTILS_DEDUP_REFACTOR_PLAN.md`'s prerequisite dedup work (all 7 phases) is
@@ -54,50 +68,41 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
 ## Phase A — Design the actual state format (do this first, changes everything after)
 
-**Status:** `[ ]` not started
+**Status:** `[x]` done (2026-07-25)
 **Depends on:** nothing
 **Risk:** this is the one decision that reshapes every later phase — don't
 skip straight to wiring individual tools before this is settled
 
-Open questions this phase needs to resolve (propose an answer, confirm with
-user, don't just pick one silently — this is a new feature, not a refactor
-with an obviously-correct preserve-existing-behavior answer):
+**Decisions (confirmed with user, 2026-07-25):**
 
-1. **Storage shape.** Extend `PathManager`'s existing JSON file
-   (`/tmp/djjtb_paths.json`) with a new top-level key like `_last_output`
-   (script name, output paths, output dir, timestamp, file kind) alongside
-   the existing per-script keys — or a wholly separate small state file?
-   Reusing the existing file is probably right (one less thing to clean
-   up, `path_manager.cleanup()` already exists) but confirm before building
-   on it.
-2. **One slot or a short history?** Simplest: only ever remember the *one*
-   most recent output, overwritten each run. Richer: keep the last N (3-5)
-   so a user who ran two tools since could still pick either. Recommend
-   starting with one slot — matches "let's hope nothing breaks" caution,
-   easy to extend to a history list later without a breaking format change
-   if the single slot is itself stored as `{"history": [...]}`.
-3. **Staleness rule.** Should a 3-day-old "previous output" still be
-   offered as a one-tap option, or does it need a cutoff (e.g. only offer
-   if produced within the last N hours, else silently fall through to the
-   normal input prompt)? Affects whether users get a surprising stale
-   suggestion.
-4. **Type/extension matching.** If Tool A produced videos and Tool B only
-   accepts images, the offer needs to not appear (or say why it's greyed
-   out) rather than let the user select it and hit an empty/wrong result.
-   Needs the same `extensions=` concept already threaded through
-   `djj.collect_images_from_folder`/`collect_videos_from_folder`/
-   `parse_multipath_input` from the dedup plan — reuse that, don't
-   reinvent a second extension-matching convention.
-5. **What counts as "output."** A tool like `video_processor.py`'s
-   re-encode mode produces one output file per input video, scattered
-   across possibly multiple `Output/Reencoded/` subfolders (one per input
-   video's parent, per the per-source-folder output convention). "The
-   output" for chaining purposes is probably the flat list of all produced
-   file paths, not a single directory — confirm this reads true across a
-   few real tools before assuming it's universal (see Phase B).
+1. **Storage shape**: extend `PathManager`'s existing JSON file, not a
+   separate file. Confirmed.
+2. **One slot, not a history.** Only the single most-recent output is ever
+   remembered, overwritten every time any tool finishes. User confirmed
+   this explicitly. Note: this still supports the multi-hop reference
+   workflow above fine — each hop just overwrites the slot with its own
+   output before the next hop reads it.
+3. **Staleness cutoff: 1 hour.** After that, `load_last_output()` returns
+   `None` (falls through to the normal prompts silently) rather than
+   offering something stale. User confirmed the record is only ever
+   replaced when a tool *finishes and produces new output* — declining the
+   offer and picking input manually does **not** clear or affect the slot;
+   it only changes when something new is actually produced.
+4. **Type/extension matching**: reuse the existing `extensions=` convention
+   from `djj.collect_images_from_folder`/`collect_videos_from_folder`/
+   `parse_multipath_input` — no new convention.
+5. **What counts as "output"**: confirmed per-pilot in Phase B rather than
+   generalized up front — `image_processor.py`'s simple modes already
+   return a single canonical `output_dir` (via `djj.get_output_directory`),
+   re-scanned by the consumer; that's the shape being used for both pilot
+   pairs, not a raw file-path list. Known edge case, not fixed now: if
+   input spans multiple subfolders, `image_processor.py`'s own in-tool
+   chain loop already only tracks the first canonical folder, not all of
+   them — the new cross-tool recording inherits the same limitation
+   consistently rather than fixing an unrelated pre-existing gap while
+   building something new.
 
-**Proposed new function (draft, not final — refine after Phase A's
-questions are answered):**
+**Finalized function signatures (implementing next):**
 
 ```python
 def save_last_output(script_name, output_paths, output_kind=None):
@@ -120,44 +125,81 @@ save a fake output, load it back, confirm staleness cutoff and extension
 filtering both work, confirm `PathManager.cleanup()` still clears
 everything including the new key.
 
+**Done note (2026-07-25):** `save_last_output(script_name, output_paths)`
+and `load_last_output(extensions=None, max_age_seconds=3600)` added right
+after `path_manager = PathManager()` in `djjtb/utils.py`, storing under a
+reserved `_last_output` key in the same JSON file (leading underscore, safe
+since no real script is ever named that). Smoke-tested in isolation (6
+checks): empty-state returns `None`; save/load round-trips correctly;
+extension filtering both matches and correctly excludes non-matching
+paths; staleness cutoff correctly returns `None` for a simulated 2-hour-old
+record against the 1-hour default, and correctly ignores staleness when
+`max_age_seconds=None`; a second `save_last_output()` call overwrites the
+first (single slot, confirmed, not a history); `path_manager.cleanup()`
+clears it along with everything else it manages. No script wiring yet —
+that's Phase B, not started.
+
+**Session ended here (context-limited) — for whoever picks this up next:**
+Phase A is fully done and tested. Phase B (wiring the 2 confirmed pilot
+pairs into `image_processor.py`/`facefusion_runner.py` and
+`video_processor.py`/`video_splitter.py`) has **not been started** — no
+changes to any of those 4 files yet. This is a clean, safe stopping point:
+the new functions exist and work, but nothing calls them yet, so no
+existing tool's behavior has changed at all. Read Phase B's section above
+in full before starting — it already has the exact scope, the known
+`run_reencode`/`run_speed_change`/`run_crop` return-value gap, and the
+"simple modes only" boundary worked out. Don't re-derive any of that from
+scratch.
+
 ---
 
-## Phase B — Pick 2-3 real producer→consumer pairs, wire those first
+## Phase B — Two confirmed pilot pairs
 
 **Status:** `[ ]` not started
 **Depends on:** Phase A
 **Risk:** medium — first real proof this actually feels good to use, not
 just correct in isolation
 
-Don't wire all ~40 tools at once — same phased caution as the dedup plan.
-Pick a small number of *actually-common* real workflows first, confirm the
-UX is right, then expand. Candidates to evaluate (not yet verified against
-actual code — read each tool's real end-of-run output-producing code before
-committing to the pairing, the way every phase of the dedup plan did):
+Two pairs confirmed with user (2026-07-25), chosen to exercise the
+mechanism across two different tool categories (image tool → AI tool, and
+video tool → video tool), not just prove it once and assume it generalizes:
 
-- `image_processor.py` (crop/pad/resize output) → `image_slideshow_maker.py`
-  (the workflow implied by the user's own question this session: "I just
-  ran image_processor... shouldn't slideshow maker ask if I want to use
-  previous output?")
-- `video_processor.py` (re-encode/crop output) → `video_splitter.py` or
-  `video_frame_bridge.py`'s extract mode
-- One AI-tool pairing, e.g. `cf_ups_runner.py`'s upscaled output →
-  `video_slideshow_watermark.py` or similar, if that's a workflow the user
-  actually uses (ask before assuming)
+**Pair 1: `image_processor.py` → `facefusion_runner.py` (target images).**
+The real workflow the user described: trim+resize in image_processor, use
+that output as FaceFusion's target images. Scoped to image_processor's
+*simple* modes only (Pad, Crop, Crop+Resize, Resize-only, Rotate/Flip,
+Convert, Strip padding) — Pairing/Join/Collage (mode 6) explicitly
+excluded, reusing the exact same boundary the script's own existing
+in-tool "run another operation?" chain loop already draws, for the same
+reason (non-uniform/possibly-multiple output shape). Only FaceFusion's
+*target*-image input gets the new offer, not its *source*-image slot —
+that's not the workflow described.
+
+**Pair 2: `video_processor.py` → `video_splitter.py`.** Needs one small
+prerequisite change discovered while scoping this: `run_reencode`/
+`run_speed_change`/`run_crop` currently don't `return` anything at all
+(unlike `image_processor.py`'s `run_*` functions, which already return
+`output_dir`) — add that return first, mirroring the existing
+image_processor.py convention, before wiring the save call.
 
 For each pair: producer calls `djj.save_last_output(...)` right after it
 finishes producing files (not at input-collection time — this is the part
 that's actually new, existing code has never done this). Consumer's
 input-mode prompt gains a new leading option — "0. Use previous output (N
 files from <tool>, <time> ago)" — only shown when `load_last_output()`
-returns something extension-matched and fresh enough.
+returns something extension-matched and fresh enough within the 1-hour
+window.
 
-**Files touched:** TBD once pairs are confirmed with user
-**Verify:** real end-to-end run exactly like this session's Combo 1/Combo
+**Files touched:** `djjtb/media_tools/image_tools/image_processor.py`,
+`djjtb/ai_tools/facefusion_runner.py`,
+`djjtb/media_tools/video_tools/video_processor.py`,
+`djjtb/media_tools/video_tools/video_splitter.py`
+**Verify:** real end-to-end run exactly like the dedup plan's Combo 1/Combo
 2 tests — run producer, then consumer, confirm the offer appears with the
 right count/age, confirm selecting it collects exactly the producer's
 output files, confirm declining it still falls through to the normal
-prompts unchanged.
+prompts unchanged, confirm the offer disappears after the 1-hour window
+(or is absent for a fresh `PathManager` state).
 
 ---
 
@@ -180,9 +222,10 @@ this session has done.
 
 ---
 
-## Explicitly not decided yet (surface to user before Phase A starts for real)
+## Decision log (all resolved 2026-07-25, before any code was written)
 
-- Single most-recent-output slot vs. short history (Phase A, Q2)
-- Staleness cutoff value, if any (Phase A, Q3)
-- Which producer→consumer pairs actually match how the user works, vs.
-  which just seem plausible from reading code (Phase B)
+- Single most-recent-output slot, not a history — confirmed.
+- Staleness cutoff: 1 hour — confirmed.
+- Pilot pairs: image_processor.py → facefusion_runner.py (target images),
+  video_processor.py → video_splitter.py — confirmed, chosen specifically
+  to span two tool categories rather than prove the mechanism once.
