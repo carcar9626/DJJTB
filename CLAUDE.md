@@ -130,5 +130,7 @@ Paths resolve on disk, but not in daily use — decide keep/delete per tool, don
 ## Current goal
 Find similar functions across the scripts and modularize them to utils.py to slim them and work towards refactoring scripts to use centralized I/O via PathManager so results can chain from one script to the next through the launcher and other ad hoc upgrades or adjustments.
 
+**Status (2026-07-25):** the modularization/dedup half is done — see `djjtb/admin_tools/UTILS_DEDUP_REFACTOR_PLAN.md` (all 7 phases complete, merged to `main`). The actual cross-tool chaining half is in progress on its own fully-isolated branch, `worktree-centralized-io-chaining` (pushed to GitHub, not merged to `main` — deliberately kept separate until thoroughly tested, since it's expected to be fragile and workflow-critical). See `djjtb/admin_tools/CENTRALIZED_IO_CHAINING_PLAN.md` on that branch for exact status before continuing this work.
+
 ## Long Term goal
 Make DJJTB a full-on shippable, bankable APP, step by step.
