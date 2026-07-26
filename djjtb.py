@@ -81,7 +81,6 @@ class DJJTBLauncher:
         #
         print(" 💰 \033[4;93m3\033[0m  FILE TOOLS 🗄️ 🗂️   ")
         #
-        print(" 💰 \033[4;93mA\033[0m  APP LAUNCHER 📱🚀")
         print(" 💰\033[4;93mAC\033[0m  ARCHIVED 🗄️")
         print()
         print("\033[1;93m QUICK TOOLS\033[0m")
@@ -778,7 +777,7 @@ class DJJTBLauncher:
         while True:
             self.show_main_menu()
             choice = djj.prompt_choice("\033[93mChoose a category\033[0m",
-                                     ['1', '2', '3', '4', '5', '6', '7', '8', '9','10', '11', 'a' , 'ac', 'ad', 'c', 'x'])
+                                     ['1', '2', '3', '4', '5', '6', '7', '8', '9','10', '11', 'ac', 'ad', 'c', 'x'])
 
             if choice == "1":
                 self.handle_media_tools()
@@ -788,9 +787,6 @@ class DJJTBLauncher:
                 self.handle_file_tools()
             elif choice in ["4", "5", "6", "7", "8", "9","10", "11"]:
                 self.handle_quick_tools(choice)
-            elif choice == "a":  # App Launcher
-                command = f"cd {self.project_path}; python3 -m djjtb.app_launcher"
-                djj.open_terminal_with_settings(command, "djjtb", "738, 200, 1314, 958")
             elif choice == "ac":  # Archived
                 self.handle_archived_tools()
             elif choice == "ad":  # Admin Tools
