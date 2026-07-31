@@ -1,0 +1,195 @@
+# NBP Multi-Category Prompt Pipeline — Build Log & Reference
+
+Documents the expansion of the NBP prompt-assembler pipeline from pose-only to five
+categories (Pose, Scene/Setting, Lighting, Outfit, Composition), built in one session.
+Written for handoff to Claude Code, another chat, or future-you re-reading this cold.
+
+## What this pipeline does
+
+Reference images/grids go into a category-specific Gemma4 model in Open WebUI, which
+extracts a structured description and can file it directly into
+`prompt_assembler.json` — the same tool your original pose workflow already used,
+now generalized across five categories instead of one.
+
+## Architecture overview
+
+```
+Reference image
+      ↓
+Open WebUI custom model (one of 5, each = gemma4:26b + a category-specific
+system prompt)
+      ↓
+"prompts please" → strict extraction → model calls its dedicated Workspace Tool
+      ↓
+Workspace Tool (native Python, runs inside Open WebUI) → HTTP POST →
+      ↓
+mcpo sub-server for that category (path-isolated, one port, five paths)
+      ↓
+add_pose_prompts.py (generalized, category-aware) → prompt_assembler.json
+```
+
+## The five models (Open WebUI, Workspace → Models)
+
+| Model | Base | System prompt covers |
+|---|---|---|
+| POSE-GEMMA | gemma4:26b | Body pose/action only |
+| SCENE-GEMMA | gemma4:26b | Environment/setting only |
+| LIGHTING-GEMMA | gemma4:26b | Lighting only |
+| OUTFIT-GEMMA | gemma4:26b | Clothing/wardrobe only |
+| COMPOSITION-GEMMA | gemma4:26b | Camera framing/lens only |
+
+Each system prompt follows the same structure as the original pose one (Role &
+Context / Core Values / Analysis Protocol), with two trigger phrases:
+
+- **`"prompts please"`** → strict extraction mode. Output is `#NAME#\n<description>`
+  blocks, filing-ready. This is the only mode that should ever reach the assembler.
+- **`"full prompts"` / `"complete prompts"`** → standalone, generation-ready prose
+  mode. Deliberately uses a *different* heading style (`## Name — Complete X
+  Prompt`, not the bare `#NAME#` tag) so it can never be mistaken for filing-ready
+  output — if accidentally run through the filing script, it fails loudly rather
+  than silently polluting an entry.
+- If neither phrase is present, the model is instructed to ask which mode is wanted.
+
+**Lead-in phrasing** (added late in the build, subject-anchoring for the generation
+stage):
+- Outfit: every description starts with `"Subject's wearing a "`
+- Scene/Setting: every description starts with `"Subject is in "`
+- Composition, Lighting: no forced lead-in — left as-is
+- Pose: already subject-anchored from the original template, unchanged
+
+Full system prompt text lives in the earlier artifact from this project:
+`nbp_system_prompts_scene_lighting_outfit_composition.md`, plus the original pose
+prompt the user supplied directly (not separately filed anywhere yet — worth adding
+to project knowledge if it isn't already).
+
+## prompt_assembler.json schema
+
+9 top-level arrays: `subject`, `outfit`, `scene/setting`, `composition`,
+`pose/action`, `spacial/add ons`, `lighting`, `aesthetic`, `misc.`, `custom`.
+
+`scene/setting` is new this session — didn't exist in the original schema (built
+originally for flow.google/Nano Banana i2i work, where scene wasn't needed). Added
+between `outfit` and `composition` in both the JSON and `prompt_assembler.html`,
+optional like every other category.
+
+Each filing-eligible category uses a letter-prefixed, auto-incrementing title:
+`P<n>-`, `S<n>-`, `L<n>-`, `O<n>-`, `C<n>-`. Pre-existing entries that don't follow
+this convention (hand-curated ones, e.g. composition's original camera-angle
+presets) are left untouched — numbering just continues past whatever the highest
+existing number is.
+
+## Scripts (DJJTB repo)
+
+**`djjtb/file_tools/add_pose_prompts.py`**
+Generalized from pose-only to all five categories. `add_pose_prompts(raw_text,
+json_path, category=...)` takes any of the five array keys. CLI `main()` now
+prompts interactively (`prompt_choice()`, options 1–5, default Pose) instead of
+hardcoding pose. `CATEGORY_MENU` and `CATEGORY_PREFIX` dicts are the source of
+truth for category → array key → title prefix.
+
+**`djjtb/mcp_server/server.py`**
+Runs with a `--category <name>` argument. Each invocation registers **only** its
+one corresponding tool function (`file_pose_prompt`, `file_scene_prompt`, etc.) —
+not all five. The FastMCP instance name is also category-derived
+(`djjtb_mcp_<category>`), so each sub-server correctly self-reports its own
+identity rather than all five showing identically.
+
+## Infra: mcpo, ports, and Open WebUI wiring
+
+**Why one shared tool didn't work:** the original single MCP server exposed all
+five filing functions through one Open WebUI connection. Open WebUI can only
+enable/disable a whole tool-server connection per model, not individual functions
+inside it — so every model had access to every category's filing function
+regardless of its system prompt. This caused two real bugs mid-build:
+1. **Category leakage** — a single "outfit" test run filed into pose, scene, and
+   lighting too, because the shared tool's docstring literally enumerated all five
+   categories as valid options.
+2. **Triplication** — the same run created 3 near-duplicate entries per category,
+   from the model (thinking-enabled) re-calling the tool multiple times per turn
+   while refining its own wording.
+
+**The fix — path-isolated sub-servers, one per category, one shared port:**
+`mcpo` runs in multi-server config mode (`mcpo --port 8000 --config
+mcpo_config.json`), where each named server is mounted at its own sub-path:
+
+```
+http://192.168.50.67:8000/pose
+http://192.168.50.67:8000/scene
+http://192.168.50.67:8000/lighting
+http://192.168.50.67:8000/outfit
+http://192.168.50.67:8000/composition
+```
+
+Each path serves exactly one tool function — genuine isolation, not just a naming
+convention. `mcpo` itself runs as a macOS LaunchAgent for persistence across
+reboots (launches `python3 -m djjtb.mcp_server.server --category <name>` per entry
+in the config).
+
+**Note on the IP:** `host.docker.internal` (the usual Docker→Mac-native-process
+pattern, per the port registry's existing rule of thumb) didn't work for this
+Open WebUI setup — had to switch the Tool Server URL to the Mac's actual LAN IP
+(`192.168.50.67:8000`) instead. Worth a registry update if this pattern recurs
+elsewhere in the stack.
+
+**The real per-model isolation mechanism turned out to be different than
+expected:** Open WebUI's "Tool Servers" (external OpenAPI/MCP connections, added
+under Settings → Integrations → Manage Tool Servers) **never appear in a model's
+own Tools checklist** — that section only ever lists native **Workspace → Tools**
+(Python code running inside Open WebUI itself). The fix was five thin Workspace
+Tools, one per category, each just forwarding an HTTP POST to its own mcpo
+sub-path:
+
+```python
+class Tools:
+    def file_outfit_prompt(self, raw_text: str) -> str:
+        """... docstring becomes the function schema the model sees ..."""
+        resp = requests.post(
+            "http://192.168.50.67:8000/outfit/file_outfit_prompt",
+            json={"raw_text": raw_text}, timeout=30,
+        )
+        resp.raise_for_status()
+        return str(resp.json())
+```
+
+These five wrappers are pasted directly into Open WebUI's Workspace → Tools editor
+(not part of the DJJTB repo) and attached one-per-model via Workspace → Models →
+edit → Tools.
+
+## Known gotchas / things to re-check if this breaks again
+
+- **mcpo doesn't hot-reload.** Editing `server.py` requires restarting mcpo itself
+  (it launches the MCP server as its own subprocess at startup) — not just saving
+  the file.
+- **Tool Servers vs. Workspace Tools are genuinely separate systems** in Open
+  WebUI. Only the latter attaches per-model. This cost significant debugging time
+  before the tooltip ("add them to the Tools workspace first") gave it away.
+- **The model-editor "Tools" checkbox may only set a default-on state, not a hard
+  restriction**, per Open WebUI's own community discussions on this exact feature.
+  Worth a quick spot-check per model/chat rather than trusting it blindly,
+  especially after any Open WebUI update.
+- **A container restart without a persisted `WEBUI_SECRET_KEY`** can silently
+  break decryption of stored tool-server credentials — if a connection
+  "disappears" again, check this before assuming the tool server itself is down.
+- Model instructions matter here: each system prompt now explicitly says "call
+  the filing tool exactly once" and "never touch another category's tool" — both
+  added specifically because the model didn't do either by default.
+
+## Open items / things not done tonight
+
+- **Composition tension, unresolved:** early in this build, the plan was to treat
+  image-derived composition output as *candidates* to manually review and fold
+  into the existing curated composition list — not auto-file it — since
+  composition was originally kept deliberately hand-curated. In practice, the
+  final pipeline auto-files composition the same as every other category. Worth
+  a deliberate decision either way rather than leaving it as an accidental
+  default.
+- Entries filed during testing before the lead-in phrasing was added (e.g. the
+  early `O01`–`O03` outfit test batch) don't have `"Subject's wearing a"` etc. —
+  not retroactively fixed.
+- `ai_stack_port_registry.md` hasn't been updated yet with tonight's lessons
+  (mcpo multi-server/path-mounting pattern, the Tool Servers vs. Workspace Tools
+  distinction, the LAN-IP-over-host.docker.internal requirement). Worth doing
+  next time this project's chat is open.
+- Alternatives to `gemma4:26b` were researched (`gemma4:31b`, the `-mlx` builds,
+  `qwen3-vl:8b`) but not adopted — still running `gemma4:26b` across all five
+  models as of tonight.
