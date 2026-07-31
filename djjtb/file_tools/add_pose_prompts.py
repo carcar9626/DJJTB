@@ -24,7 +24,7 @@ JSON_PATH = Path("/Users/home/Documents/Scripts/FLOW_TOOLS/prompt_assembler/LOCA
 TXT_FOLDER = "/Users/home/Documents/Scripts/FLOW_TOOLS/prompt_assembler/LOCAL/txt"
 
 POSE_BLOCK = re.compile(
-    r"^#(.+?)#\s*\n(.+?)(?=\n^#.+?#\s*\n|\Z)",
+    r"^#\[?(.+?)\]?#\s*(.+?)(?=\n^#\[?.+?\]?#|\Z)",
     re.DOTALL | re.MULTILINE,
 )
 

@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 POSE_BLOCK = re.compile(
-    r"^#(.+?)#\s*\n(.+?)(?=\n^#.+?#\s*\n|\Z)",
+    r"^#\[?(.+?)\]?#\s*(.+?)(?=\n^#\[?.+?\]?#|\Z)",
     re.DOTALL | re.MULTILINE,
 )
 TITLE_NUMBER = re.compile(r"^P(\d+)-")
