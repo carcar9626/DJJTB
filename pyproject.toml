@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "djjtb"
+version = "0.1.0"
+description = "DJJTB shared logic, installed as a package for external consumers (e.g. djjtb-suite backend)."
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.setuptools.packages.find]
+include = ["djjtb", "djjtb.*"]
+exclude = ["djjtb.mcp_server.mcpvenv*"]

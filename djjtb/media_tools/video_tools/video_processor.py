@@ -111,6 +111,53 @@ def get_audio_choice():
 
 # ─── Mode 1: Re-encode ──────────────────────────────────────────────────────
 
+def reencode_one(video_path, codec, crf, suffix, tag, audio_choice, logger=None):
+    """Pure single-video reencode, extracted 2026-07-27 from run_reencode's inline loop
+    body so djjtb-suite's backend can call the same code the CLI does instead of
+    duplicating it (see djjtb-suite's CLAUDE.md 'Source of truth' section). Behavior
+    unchanged from the pre-extraction inline version -- same ffprobe default-stream
+    lookup, same cmd construction, same raise-on-ffmpeg-failure. `logger` is optional
+    (djjtb-suite's backend doesn't write into DJJTB's own log files, same as
+    video_reverse_merge.py's reverse_and_merge()).
+    """
+    out_dir = video_path.parent / "Output" / "Reencoded"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    output = out_dir / f"{video_path.stem}{suffix}.mp4"
+
+    default_stream = "0"
+    if audio_choice != '3':
+        try:
+            default_stream = subprocess.run([
+                "ffprobe", "-v", "error", "-show_entries", "stream=index:disposition=default",
+                "-of", "csv=p=0", "-select_streams", "v", str(video_path)
+            ], capture_output=True, text=True).stdout.strip().split(',')[0]
+            if not default_stream:
+                default_stream = subprocess.run([
+                    "ffprobe", "-v", "error", "-show_entries", "stream=index",
+                    "-of", "csv=p=0", "-select_streams", "v", str(video_path)
+                ], capture_output=True, text=True).stdout.strip().split('\n')[0]
+        except Exception as e:
+            if logger:
+                logger.error(f"Error getting stream info for {video_path.name}: {e}")
+
+    if codec == "copy":
+        cmd = ["ffmpeg", "-i", str(video_path), "-c", "copy", "-y", str(output)]
+    else:
+        cmd = ["ffmpeg", "-i", str(video_path)]
+        if audio_choice != '3':
+            cmd.extend(["-map", f"0:v:{default_stream}"])
+        cmd.extend(djj.get_audio_options(audio_choice))
+        cmd.extend(["-c:v", codec, "-preset", "medium", "-crf", crf])
+        if tag:
+            cmd.extend(tag.split())
+        cmd.extend(["-y", str(output)])
+
+    subprocess.run(cmd, capture_output=True, text=True, check=True)
+    if logger:
+        logger.info(f"Re-encoded {video_path.name} to {output}")
+    return out_dir, output
+
+
 def run_reencode(videos):
     print("\033[93mChoose codec:\033[0m\n1. H.264\n2. H.265\n3. Copy container only (no re-encoding)")
     codec_choice = djj.prompt_choice("", ['1', '2', '3'], default='1')
@@ -134,46 +181,15 @@ def run_reencode(videos):
     logger = get_op_logger("reencode")
 
     for i, video_path in enumerate(videos, 1):
-        out_dir = video_path.parent / "Output" / "Reencoded"
-        out_dir.mkdir(parents=True, exist_ok=True)
-        output = out_dir / f"{video_path.stem}{suffix}.mp4"
-
-        default_stream = "0"
-        if audio_choice != '3':
-            try:
-                default_stream = subprocess.run([
-                    "ffprobe", "-v", "error", "-show_entries", "stream=index:disposition=default",
-                    "-of", "csv=p=0", "-select_streams", "v", str(video_path)
-                ], capture_output=True, text=True).stdout.strip().split(',')[0]
-                if not default_stream:
-                    default_stream = subprocess.run([
-                        "ffprobe", "-v", "error", "-show_entries", "stream=index",
-                        "-of", "csv=p=0", "-select_streams", "v", str(video_path)
-                    ], capture_output=True, text=True).stdout.strip().split('\n')[0]
-            except Exception as e:
-                logger.error(f"Error getting stream info for {video_path.name}: {e}")
-
         progress = (i / total) * 100
         sys.stdout.write(f"\033[93m\rProcessing \033[0m{i}/{total} ({progress:.1f}%)...")
         sys.stdout.flush()
 
-        if codec == "copy":
-            cmd = ["ffmpeg", "-i", str(video_path), "-c", "copy", "-y", str(output)]
-        else:
-            cmd = ["ffmpeg", "-i", str(video_path)]
-            if audio_choice != '3':
-                cmd.extend(["-map", f"0:v:{default_stream}"])
-            cmd.extend(djj.get_audio_options(audio_choice))
-            cmd.extend(["-c:v", codec, "-preset", "medium", "-crf", crf])
-            if tag:
-                cmd.extend(tag.split())
-            cmd.extend(["-y", str(output)])
-
         try:
-            subprocess.run(cmd, capture_output=True, text=True, check=True)
-            logger.info(f"Re-encoded {video_path.name} to {output}")
+            out_dir, output = reencode_one(video_path, codec, crf, suffix, tag, audio_choice, logger)
             successful += 1
         except subprocess.CalledProcessError as e:
+            out_dir = video_path.parent / "Output" / "Reencoded"
             logger.error(f"Error re-encoding {video_path.name}: {e.stderr}")
             print(f"\n\033[93mError re-encoding {video_path.name}: {e.stderr}\033[0m")
 
@@ -212,6 +228,50 @@ def get_atempo_chain(speed):
     return ",".join(filters)
 
 
+def speed_change_one(video_path, speed, out_dir, overwrite=True, logger=None):
+    """Pure single-video speed change, extracted 2026-07-27 from run_speed_change's inline
+    loop body -- same reasoning as reencode_one() above. `out_dir` is decided by the
+    caller (CLI picks one shared dir when all videos share a parent, else per-video;
+    djjtb-suite's backend does the equivalent). Returns (output_path, skipped: bool);
+    raises subprocess.CalledProcessError on ffmpeg failure, same as before extraction.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    output = out_dir / f"{video_path.stem}_{speed}x{video_path.suffix}"
+
+    if output.exists() and not overwrite:
+        if logger:
+            logger.info(f"Skipped {video_path.stem} (file exists)")
+        return output, True
+
+    try:
+        audio_stream = subprocess.run([
+            "ffprobe", "-v", "error", "-show_entries", "stream=codec_type",
+            "-of", "csv=p=0", "-select_streams", "a", str(video_path)
+        ], capture_output=True, text=True).stdout.strip()
+        audio_exists = "audio" in audio_stream
+    except subprocess.CalledProcessError:
+        audio_exists = False
+
+    pts = 1 / speed
+    if audio_exists:
+        atempo = get_atempo_chain(speed)
+        cmd = [
+            "ffmpeg", "-i", str(video_path),
+            "-filter_complex", f"[0:v]setpts={pts}*PTS[v];[0:a]{atempo}[a]",
+            "-map", "[v]", "-map", "[a]", "-loglevel", "quiet", "-y", str(output)
+        ]
+    else:
+        cmd = [
+            "ffmpeg", "-i", str(video_path),
+            "-filter:v", f"setpts={pts}*PTS",
+            "-an", "-loglevel", "quiet", "-y", str(output)
+        ]
+    subprocess.run(cmd, check=True)
+    if logger:
+        logger.info(f"Speed adjusted {video_path.stem} to {speed}x -> {output}")
+    return output, False
+
+
 def run_speed_change(videos):
     while True:
         try:
@@ -242,42 +302,12 @@ def run_speed_change(videos):
             current_output_dir = video_path.parent / "Output" / "Speed_Adjusted"
             current_output_dir.mkdir(parents=True, exist_ok=True)
 
-        output = current_output_dir / f"{video_path.stem}_{speed}x{video_path.suffix}"
-
-        if output.exists() and overwrite != '1':
-            logger.info(f"Skipped {video_path.stem} (file exists)")
-            continue
-
-        try:
-            audio_stream = subprocess.run([
-                "ffprobe", "-v", "error", "-show_entries", "stream=codec_type",
-                "-of", "csv=p=0", "-select_streams", "a", str(video_path)
-            ], capture_output=True, text=True).stdout.strip()
-            audio_exists = "audio" in audio_stream
-        except subprocess.CalledProcessError:
-            audio_exists = False
-
-        pts = 1 / speed
         progress = (i / total) * 100
         sys.stdout.write(f"\rProcessing {i}/{total} ({progress:.1f}%)...")
         sys.stdout.flush()
 
         try:
-            if audio_exists:
-                atempo = get_atempo_chain(speed)
-                cmd = [
-                    "ffmpeg", "-i", str(video_path),
-                    "-filter_complex", f"[0:v]setpts={pts}*PTS[v];[0:a]{atempo}[a]",
-                    "-map", "[v]", "-map", "[a]", "-loglevel", "quiet", "-y", str(output)
-                ]
-            else:
-                cmd = [
-                    "ffmpeg", "-i", str(video_path),
-                    "-filter:v", f"setpts={pts}*PTS",
-                    "-an", "-loglevel", "quiet", "-y", str(output)
-                ]
-            subprocess.run(cmd, check=True)
-            logger.info(f"Speed adjusted {video_path.stem} to {speed}x -> {output}")
+            speed_change_one(video_path, speed, current_output_dir, overwrite == '1', logger)
         except subprocess.CalledProcessError:
             logger.error(f"Error processing {video_path.stem}: FFmpeg failed to adjust speed")
             sys.stdout.write(f"\r{' ' * 60}\r")
@@ -361,6 +391,67 @@ def log_crop_to_csv(entry):
         writer.writerow(entry)
 
 
+class CropDetectionError(Exception):
+    """Raised by crop_one() when border auto-detection (crop_mode == '1') finds nothing --
+    mirrors the pre-extraction inline loop's early `continue` for that case: no ffmpeg
+    run, no CSV log entry.
+    """
+    pass
+
+
+def crop_one(video_path, crop_mode, audio_choice, logger=None):
+    """Pure single-video crop, extracted 2026-07-27 from run_crop's inline loop body --
+    same reasoning as reencode_one()/speed_change_one() above. Returns a dict with
+    everything the caller needs for its own success/failure bookkeeping and (CLI-only)
+    CSV log entry; does not raise on ffmpeg failure (matches the original's manual
+    returncode check rather than check=True), only on failed border detection.
+    """
+    width, height = get_video_resolution(video_path)
+    crop_filter = None
+
+    if crop_mode == "1":
+        raw_crop = get_cropdetect_crop(video_path)
+        if not raw_crop:
+            raise CropDetectionError(video_path.name)
+        crop_filter = f"crop={raw_crop}"
+    elif crop_mode in {"2.1", "2.2"}:
+        crop_filter = build_crop_filter(crop_mode, width, height)
+
+    out_dir = video_path.parent / "Output" / "Cropped"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"{video_path.stem}_cropped.mp4"
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(video_path),
+        *djj.get_audio_options(audio_choice),
+        "-vf", crop_filter,
+        "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+        str(out_path)
+    ]
+
+    result = subprocess.run(cmd, stderr=subprocess.PIPE, stdout=subprocess.DEVNULL, text=True)
+    status = "success" if result.returncode == 0 else "failed"
+
+    if result.returncode == 0:
+        if logger:
+            logger.info(f"Cropped {video_path.name} to {out_path}")
+    else:
+        if logger:
+            logger.error(f"Failed to crop {video_path.name}: {result.stderr}")
+
+    return {
+        "out_dir": out_dir,
+        "out_path": out_path,
+        "crop_filter": crop_filter,
+        "width": width,
+        "height": height,
+        "status": status,
+        "stderr": result.stderr,
+        "returncode": result.returncode,
+    }
+
+
 def run_crop(videos):
     print("\033[93mCropping Mode:\033[0m")
     print("1. Trim Paddings")
@@ -385,61 +476,37 @@ def run_crop(videos):
     logger = get_op_logger("crop")
 
     for i, video_path in enumerate(videos, 1):
-        width, height = get_video_resolution(video_path)
-        crop_filter = None
-
-        if crop_mode == "1":
-            raw_crop = get_cropdetect_crop(video_path)
-            if not raw_crop:
-                logger.error(f"Could not detect borders for {video_path.name}")
-                print(f"\033[93m❌ Skipped: Could not detect borders for\033[0m {video_path.name}")
-                failed += 1
-                continue
-            crop_filter = f"crop={raw_crop}"
-        elif crop_mode in {"2.1", "2.2"}:
-            crop_filter = build_crop_filter(crop_mode, width, height)
-
-        out_dir = video_path.parent / "Output" / "Cropped"
-        out_dir.mkdir(parents=True, exist_ok=True)
-        out_path = out_dir / f"{video_path.stem}_cropped.mp4"
-
-        if out_dir not in output_base_dirs:
-            output_base_dirs.append(out_dir)
-
-        cmd = [
-            "ffmpeg", "-y",
-            "-i", str(video_path),
-            *djj.get_audio_options(audio_choice),
-            "-vf", crop_filter,
-            "-c:v", "libx264", "-preset", "fast", "-crf", "20",
-            str(out_path)
-        ]
-
         progress = (i / total) * 100
         sys.stdout.write(f"\033[93m\rProcessing\033[0m {i}/{total} ({progress:.1f}%)...")
         sys.stdout.flush()
 
-        result = subprocess.run(cmd, stderr=subprocess.PIPE, stdout=subprocess.DEVNULL, text=True)
-        status = "success" if result.returncode == 0 else "failed"
+        try:
+            r = crop_one(video_path, crop_mode, audio_choice, logger)
+        except CropDetectionError:
+            logger.error(f"Could not detect borders for {video_path.name}")
+            print(f"\033[93m❌ Skipped: Could not detect borders for\033[0m {video_path.name}")
+            failed += 1
+            continue
 
-        if result.returncode == 0:
+        if r["out_dir"] not in output_base_dirs:
+            output_base_dirs.append(r["out_dir"])
+
+        if r["status"] == "success":
             successful += 1
-            logger.info(f"Cropped {video_path.name} to {out_path}")
         else:
             failed += 1
-            logger.error(f"Failed to crop {video_path.name}: {result.stderr}")
 
         log_crop_to_csv({
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "filename": video_path.name,
             "audio_option": audio_choice,
             "crop_mode": crop_mode,
-            "status": status,
-            "crop_filter": crop_filter,
-            "input_resolution": f"{width}x{height}",
-            "output_path": str(out_path),
-            "ffmpeg_summary": result.stderr.strip().splitlines()[-1] if result.stderr else "",
-            "exit_code": result.returncode
+            "status": r["status"],
+            "crop_filter": r["crop_filter"],
+            "input_resolution": f"{r['width']}x{r['height']}",
+            "output_path": str(r["out_path"]),
+            "ffmpeg_summary": r["stderr"].strip().splitlines()[-1] if r["stderr"] else "",
+            "exit_code": r["returncode"]
         })
 
     sys.stdout.write("\r" + " " * 60 + "\r")

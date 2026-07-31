@@ -235,6 +235,53 @@ def rename_frames_count(output_dir, video_stem, indices):
 
 # ── Extraction: interval-based ────────────────────────────────────────────────
 
+def extract_frames_interval_one(video_path, nb_frames, frame_interval, session_dir, allow_large=False, logger=None):
+    """Pure single-video interval extraction, extracted 2026-07-28 from
+    extract_frames_interval()'s inline loop body so djjtb-suite's backend can call the same
+    code the CLI does (see djjtb-suite's CLAUDE.md 'Source of truth' section) -- same reasoning
+    as video_processor.py's reencode_one()/speed_change_one()/crop_one().
+
+    Does NOT prompt. If the estimated output would exceed 3000 images and `allow_large` is
+    False, returns status "skipped_large" *without* running ffmpeg -- the CLI wrapper below
+    prompts interactively on that status and retries with allow_large=True if the user says
+    yes; djjtb-suite's backend treats it as a per-item skip (its "hard-skip with an optional
+    force checkbox" default, chosen deliberately over exposing the CLI's interactive prompt).
+
+    Returns a dict: {status: "success"|"skipped_large"|"error", output_dir, ...}.
+    """
+    video_name = video_path.stem
+    output_dir = make_video_output_dir(session_dir, video_name)
+
+    total_images = None
+    try:
+        total_images = max(1, int(nb_frames / frame_interval))
+    except Exception as e:
+        if logger:
+            logger.error(f"Error estimating frames for {video_path}: {e}")
+
+    if total_images and total_images > 3000 and not allow_large:
+        return {"status": "skipped_large", "output_dir": output_dir, "estimated_count": total_images}
+
+    cmd = [
+        'ffmpeg', '-i', str(video_path),
+        '-vf', f'select=not(mod(n\\,{frame_interval}))',
+        '-vsync', '0', '-q:v', '2',
+        f'{output_dir}/{video_name}_tmp%04d.jpg'
+    ]
+
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        rename_frames_interval(output_dir, video_name, frame_interval, nb_frames)
+        extracted = len([f for f in os.listdir(output_dir) if f.endswith('.jpg')])
+        if logger:
+            logger.info(f"Extracted {extracted} frames for {video_name} to {output_dir}")
+        return {"status": "success", "output_dir": output_dir, "extracted_count": extracted}
+    except subprocess.CalledProcessError as e:
+        if logger:
+            logger.error(f"Error processing {video_name}: {e.stderr}")
+        return {"status": "error", "output_dir": output_dir, "error": e.stderr}
+
+
 def extract_frames_interval(probe_results, frame_interval, logger):
     """
     Extract every Nth frame.
@@ -256,39 +303,25 @@ def extract_frames_interval(probe_results, frame_interval, logger):
         sys.stdout.flush()
 
         session_dir = session_map[video_path.parent]
-        output_dir = make_video_output_dir(session_dir, video_name)
 
-        try:
-            total_images = max(1, int(nb_frames / frame_interval))
-            if total_images > 3000:
-                sys.stdout.write(f"\r{' ' * 60}\r")
-                sys.stdout.flush()
-                print(f"\n\033[93mWarning: ~{total_images} images from {video_name}.\033[0m")
-                proceed = djj.prompt_choice("\033[93mProceed?\033[0m\n1. Yes\n2. Skip", ['1', '2'], default='2')
-                if proceed != '1':
-                    logger.info(f"Skipped {video_name} (user choice)")
-                    output_session_dirs.append(session_dir)
-                    continue
-        except Exception as e:
-            logger.error(f"Error estimating frames for {video_path}: {e}")
+        result = extract_frames_interval_one(video_path, nb_frames, frame_interval, session_dir, allow_large=False, logger=logger)
 
-        cmd = [
-            'ffmpeg', '-i', str(video_path),
-            '-vf', f'select=not(mod(n\\,{frame_interval}))',
-            '-vsync', '0', '-q:v', '2',
-            f'{output_dir}/{video_name}_tmp%04d.jpg'
-        ]
-
-        try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True)
-            rename_frames_interval(output_dir, video_name, frame_interval, nb_frames)
-            extracted = len([f for f in os.listdir(output_dir) if f.endswith('.jpg')])
-            logger.info(f"Extracted {extracted} frames for {video_name} to {output_dir}")
-        except subprocess.CalledProcessError as e:
+        if result["status"] == "skipped_large":
             sys.stdout.write(f"\r{' ' * 60}\r")
             sys.stdout.flush()
-            print(f"\033[93mError processing {video_name}: {e.stderr}\033[0m")
-            logger.error(f"Error processing {video_name}: {e.stderr}")
+            print(f"\n\033[93mWarning: ~{result['estimated_count']} images from {video_name}.\033[0m")
+            proceed = djj.prompt_choice("\033[93mProceed?\033[0m\n1. Yes\n2. Skip", ['1', '2'], default='2')
+            if proceed == '1':
+                result = extract_frames_interval_one(video_path, nb_frames, frame_interval, session_dir, allow_large=True, logger=logger)
+            else:
+                logger.info(f"Skipped {video_name} (user choice)")
+                output_session_dirs.append(session_dir)
+                continue
+
+        if result["status"] == "error":
+            sys.stdout.write(f"\r{' ' * 60}\r")
+            sys.stdout.flush()
+            print(f"\033[93mError processing {video_name}: {result['error']}\033[0m")
 
         output_session_dirs.append(session_dir)
 
@@ -296,6 +329,50 @@ def extract_frames_interval(probe_results, frame_interval, logger):
 
 
 # ── Extraction: target count — evenly spread ─────────────────────────────────
+
+def extract_frames_count_one(video_path, nb_frames, target_count, session_dir, logger=None):
+    """Pure single-video target-count extraction, extracted 2026-07-28 -- same reasoning as
+    extract_frames_interval_one() above. No interactive branch in this mode (unlike interval
+    mode), so this one's a straight extraction, no allow_large equivalent needed.
+
+    Returns a dict: {status: "success"|"no_frame_count"|"error", output_dir, ...}.
+    """
+    video_name = video_path.stem
+    output_dir = make_video_output_dir(session_dir, video_name)
+
+    if nb_frames == 0:
+        if logger:
+            logger.error(f"Could not get frame count for {video_name}")
+        return {"status": "no_frame_count", "output_dir": output_dir}
+
+    actual_count = min(target_count, nb_frames)
+    if actual_count == 1:
+        indices = [nb_frames // 2]
+    else:
+        step = (nb_frames - 1) / (actual_count - 1)
+        indices = [round(step * j) for j in range(actual_count)]
+
+    select_expr = "+".join(f"eq(n\\,{idx})" for idx in indices)
+
+    cmd = [
+        'ffmpeg', '-i', str(video_path),
+        '-vf', f'select={select_expr}',
+        '-vsync', '0', '-q:v', '2',
+        f'{output_dir}/{video_name}_tmp%04d.jpg'
+    ]
+
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        rename_frames_count(output_dir, video_name, indices)
+        extracted = len([f for f in os.listdir(output_dir) if f.endswith('.jpg')])
+        if logger:
+            logger.info(f"Extracted {extracted}/{actual_count} frames for {video_name} to {output_dir}")
+        return {"status": "success", "output_dir": output_dir, "extracted_count": extracted, "actual_count": actual_count}
+    except subprocess.CalledProcessError as e:
+        if logger:
+            logger.error(f"Error processing {video_name}: {e.stderr}")
+        return {"status": "error", "output_dir": output_dir, "error": e.stderr, "actual_count": actual_count}
+
 
 def extract_frames_count(probe_results, target_count, logger):
     """
@@ -318,7 +395,6 @@ def extract_frames_count(probe_results, target_count, logger):
         sys.stdout.flush()
 
         session_dir = session_map[video_path.parent]
-        output_dir = make_video_output_dir(session_dir, video_name)
 
         if nb_frames == 0:
             sys.stdout.write(f"\r{' ' * 60}\r")
@@ -332,31 +408,12 @@ def extract_frames_count(probe_results, target_count, logger):
             print(f"\033[93m⚠️  {video_name}: only {nb_frames} frames, extracting {actual_count}.\033[0m")
             sys.stdout.flush()
 
-        if actual_count == 1:
-            indices = [nb_frames // 2]
-        else:
-            step = (nb_frames - 1) / (actual_count - 1)
-            indices = [round(step * j) for j in range(actual_count)]
+        result = extract_frames_count_one(video_path, nb_frames, target_count, session_dir, logger=logger)
 
-        select_expr = "+".join(f"eq(n\\,{idx})" for idx in indices)
-
-        cmd = [
-            'ffmpeg', '-i', str(video_path),
-            '-vf', f'select={select_expr}',
-            '-vsync', '0', '-q:v', '2',
-            f'{output_dir}/{video_name}_tmp%04d.jpg'
-        ]
-
-        try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True)
-            rename_frames_count(output_dir, video_name, indices)
-            extracted = len([f for f in os.listdir(output_dir) if f.endswith('.jpg')])
-            logger.info(f"Extracted {extracted}/{actual_count} frames for {video_name} to {output_dir}")
-        except subprocess.CalledProcessError as e:
+        if result["status"] == "error":
             sys.stdout.write(f"\r{' ' * 60}\r")
             sys.stdout.flush()
-            print(f"\033[93mError processing {video_name}: {e.stderr}\033[0m")
-            logger.error(f"Error processing {video_name}: {e.stderr}")
+            print(f"\033[93mError processing {video_name}: {result['error']}\033[0m")
 
         output_session_dirs.append(session_dir)
 
