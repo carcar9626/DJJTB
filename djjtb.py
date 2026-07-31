@@ -188,6 +188,7 @@ class DJJTBLauncher:
         print(" 💰\033[4;93m11\033[0m  Vocab + Mask Generator 🔤")
         print(" 💰\033[4;93m12\033[0m  Category Sorter (AI)(CLIP) 🗂️")
         print(" 💰\033[4;93m13\033[0m  Open WebUI 🌐🧠")
+        print(" 💰\033[4;93m14\033[0m  Smart Crop (AI) ✂️")
         print()
         print("\033[1;93m 🤖  AI AGENTS  🤖\033[0m")
         print("\033[92m--------------------------------------------------\033[0m")
@@ -447,7 +448,7 @@ class DJJTBLauncher:
         while True:
             self.show_ai_tools_menu()
             choice = djj.prompt_choice("\033[93mChoose an AI tool\033[0m",
-                                     ['1','2','3','4','5','6','7','8','9','10','11','12','13','hm','cu','ch','cw','cj', 'jc','atk', '0', '00'])
+                                     ['1','2','3','4','5','6','7','8','9','10','11','12','13','14','hm','cu','ch','cw','cj', 'jc','atk', '0', '00'])
             """
             if choice == "1":  # Prompt Randomizer
                 djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path}/djjtb/ai_tools/; python3 -m djjtb.media_tools.ai_tools.prompt_randomizer")
@@ -492,6 +493,8 @@ class DJJTBLauncher:
                 subprocess.run(["docker", "start", "open-webui"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 subprocess.run(["open", "/Users/home/Applications/Open WebUI.app"])
                 djj.wait_with_skip(2, "Launching Open WebUI")
+            elif choice == "14":  # Smart Crop (AI) — orchestration in main venv, detection shells to its own scvenv
+                djj.run_script_in_tab("djjtb.ai_tools.smart_crop_runner", self.venv_path, self.project_path)
             elif choice == "hm":  # Hermes Helper
                 result = self.handle_hermes_helper()
                 if result == "main_menu":
