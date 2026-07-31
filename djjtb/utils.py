@@ -1051,6 +1051,15 @@ def open_terminal_with_settings(command, profile="LinkGrabber", bounds="50, 282,
     '''
     subprocess.run(["osascript", "-e", applescript])
 
+def send_macos_notification(title, message, subtitle=None):
+    """Fire a native macOS notification banner via osascript."""
+    def esc(s):
+        return s.replace('\\', '\\\\').replace('"', '\\"')
+    script = f'display notification "{esc(message)}" with title "{esc(title)}"'
+    if subtitle:
+        script += f' subtitle "{esc(subtitle)}"'
+    subprocess.run(["osascript", "-e", script], stderr=subprocess.DEVNULL)
+
 def get_media_input(prompt_text="📁 Enter path", extensions=('.mp4', '.mkv', '.webm', '.mov')):
     """Universal media input handler with mode selection"""
     input_mode = prompt_choice(

@@ -221,3 +221,12 @@ djjvenv/
 !requirements.bak.txt
 !assets/folder_nests.txt
 !assets/folder_nests_temp.txt
+
+# Claude Code local state (settings, worktrees for isolated branch work)
+.claude/
+
+# graphify knowledge-graph cache (regenerable via `graphify update .`)
+graphify-out/
+
+# scratch/prototype scripts, not real repo history
+djjtb/experiment/

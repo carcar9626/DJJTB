@@ -13,7 +13,7 @@ from pathlib import Path
 # Add the project root to Python path
 sys.path.insert(0, str(Path(__file__).parent))
 import djjtb.utils as djj
-import djjtb.ai_tools.hermes_helper as hh
+import djjtb.ai_tools.hermes.hermes_core as hh
 
 # ── Boot-launch detection ─────────────────────────────────────────────────────
 # Stamp file records the last time djjtb launched the grabbers.
@@ -244,6 +244,7 @@ class DJJTBLauncher:
         print(" 💰 \033[4;93m8\033[0m  TUI ⌨️")
         print(" 💰 \033[4;93m9\033[0m  Doctor 🔬")
         print(" 💰\033[4;93m10\033[0m  Model Switch 🔀")
+        print(" 💰\033[4;93m11\033[0m  Start Watchdog 🐕")
         print()
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰 \033[4;93m0\033[0m  ⏪ Back to AI TOOLS")
@@ -520,7 +521,7 @@ class DJJTBLauncher:
         while True:
             self.show_hermes_helper_menu()
             choice = djj.prompt_choice("\033[93mChoose an option\033[0m",
-                                     ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '0', '00'])
+                                     ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '0', '00'])
 
             if choice == "1":  # Start Gateway
                 if not hh.docker_running():
@@ -544,7 +545,7 @@ class DJJTBLauncher:
                 print(f"{color}{msg}\033[0m")
                 djj.wait_with_skip(3, "Returning to Hermes Helper menu")
             elif choice == "4":  # Add/Remove Working Folders
-                djj.run_script_in_tab("djjtb.ai_tools.hermes_helper", self.venv_path, self.project_path)
+                djj.run_script_in_tab("djjtb.ai_tools.hermes.hermes_helper", self.venv_path, self.project_path)
             elif choice == "5":  # Status / Health Check
                 print(hh.status_report())
                 djj.wait_with_skip(5, "Returning to Hermes Helper menu")
@@ -562,6 +563,8 @@ class DJJTBLauncher:
                 djj.run_command_in_tab(f"{hh.HERMES_BIN} doctor")
             elif choice == "10":  # Model Switch
                 djj.run_command_in_tab(f"{hh.HERMES_BIN} model")
+            elif choice == "11":  # Start Watchdog
+                djj.run_script_in_tab("djjtb.ai_tools.hermes.hermes_watchdog", self.venv_path, self.project_path)
             elif choice == "0":
                 return None
             elif choice == "00":

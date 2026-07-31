@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
-Hermes Helper — status/control utilities for Nous Research's Hermes Agent CLI,
-plus a standalone Add/Remove Working Folders flow (run as __main__ in its own tab).
+Hermes Core — shared, non-interactive logic for Nous Research's Hermes Agent
+CLI, used by both hermes_helper.py (menu/CLI) and hermes_watchdog.py
+(unattended stall/crash monitor). Nothing in this module prompts for input
+or prints to the terminal.
 
 Docker sandbox mounts (terminal.docker_volumes in config.yaml) are edited with a
 surgical text-block rewrite rather than a full YAML parse/dump, so the rest of the
@@ -33,6 +35,17 @@ def gateway_pids():
     return [p for p in result.stdout.split() if p]
 
 
+def hermes_desktop_pids():
+    """PIDs of any running `hermes serve` process — the separate process
+    Hermes Desktop uses, distinct from `hermes gateway`. Desktop can silently
+    recreate its own sandbox container and keep working a folder in parallel
+    with a gateway-side session (confirmed: duplicate processing of the same
+    files, real wasted GPU load), so this is checked as a startup guard
+    before anything that auto-relaunches the gateway."""
+    result = subprocess.run(["pgrep", "-f", "hermes serve"], stdout=subprocess.PIPE, text=True)
+    return [p for p in result.stdout.split() if p]
+
+
 def docker_running():
     return subprocess.run(
         ["docker", "info"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
@@ -57,6 +70,18 @@ def read_api_port():
     except FileNotFoundError:
         pass
     return 8643
+
+
+def read_api_key():
+    """Read API_SERVER_KEY from .env. Returns None if not found."""
+    try:
+        for line in Path(ENV_PATH).read_text().splitlines():
+            line = line.strip()
+            if line.startswith("API_SERVER_KEY="):
+                return line.split("=", 1)[1].strip()
+    except FileNotFoundError:
+        pass
+    return None
 
 
 def sandbox_containers():
@@ -217,127 +242,124 @@ def _derive_container_path(host_path, existing_container_paths):
     return f"/workspace/{base}-{n}"
 
 
-# ── Standalone Add/Remove Working Folders flow ────────────────────────────────
-
-def _select_indices_to_remove(volumes):
-    selected = set()
-    while True:
-        print("\033[93mMounted folders:\033[0m")
-        print("\033[93m" + "-" * 60 + "\033[0m")
-        for i, v in enumerate(volumes, 1):
-            host, _, container = v.partition(':')
-            marker = " ✅" if (i - 1) in selected else ""
-            print(f"  {i:2}. {host}  →  {container}{marker}")
-        print("\033[93m" + "-" * 60 + "\033[0m")
-        if selected:
-            print(f"\033[92mSelected for removal ({len(selected)}):\033[0m "
-                  f"{', '.join(str(i + 1) for i in sorted(selected))}")
-        raw = input("\033[93mEnter a number to toggle, or press Enter to confirm:\033[0m ").strip()
-        if raw == '':
-            return selected
-        try:
-            n = int(raw)
-            if 1 <= n <= len(volumes):
-                idx = n - 1
-                if idx in selected:
-                    selected.remove(idx)
-                else:
-                    selected.add(idx)
-            else:
-                print(f"\033[93mPlease enter a number between 1 and {len(volumes)}.\033[0m\n")
-        except ValueError:
-            print("\033[93mInvalid input.\033[0m\n")
-
-
-def _collect_new_folders():
-    paths = []
-    print("\033[93mEnter host folder paths one at a time. Press Enter on a blank line to finish.\033[0m")
-    while True:
-        raw = input(" 📁 > ").strip().strip('\'"')
-        if raw == '':
-            break
-        p = Path(raw).expanduser().resolve()
-        if not p.is_dir():
-            print(f"\033[93m⚠️  '{p}' isn't a folder — try again.\033[0m")
-            continue
-        paths.append(p)
-        print(f"\033[92m➕ Added:\033[0m {p}")
-    return paths
-
-
-def _apply_and_restart(new_volumes):
-    write_docker_volumes(new_volumes)
-    print("\033[92m✅ config.yaml updated.\033[0m")
-    ok, msg = stop_gateway()
-    print(f"\033[93m{msg}\033[0m" if ok else f"\033[93m{msg}\033[0m")
-    removed = remove_sandbox_containers()
-    if removed:
-        print(f"\033[93m🗑  Removed {removed} sandbox container(s) so new mounts take effect.\033[0m")
-    launch_gateway_window()
-    print("\033[92m🚀 Relaunching gateway in a new window...\033[0m")
-    time.sleep(2)
-
-
-def main():
-    os.system('clear')
-    print("\033[1;93m🪽 Hermes Helper — Add/Remove Working Folders 🪽\033[0m")
-    print("\033[92m" + "-" * 60 + "\033[0m")
-
-    volumes = read_docker_volumes()
-    action = djj.prompt_choice(
-        "\033[93mWhat do you want to do?\033[0m\n1. Add folders\n2. Remove folders\n",
-        ['1', '2'], default='1'
-    )
-
-    if action == '2':
-        if not volumes:
-            print("\033[93mNo mounted folders to remove.\033[0m")
-            djj.wait_with_skip(3, "Closing")
-            return
-        to_remove = _select_indices_to_remove(volumes)
-        if not to_remove:
-            print("\033[93mNothing selected — no changes made.\033[0m")
-            djj.wait_with_skip(3, "Closing")
-            return
-        new_volumes = [v for i, v in enumerate(volumes) if i not in to_remove]
-        print(f"\033[93mRemoving {len(to_remove)} mount(s):\033[0m")
-        for i in sorted(to_remove):
-            print(f"  - {volumes[i]}")
-        confirm = djj.prompt_choice("\033[93mApply?\033[0m\n1. Yes\n2. Cancel\n", ['1', '2'], default='1')
-        if confirm != '1':
-            print("\033[93mCancelled — no changes made.\033[0m")
-            djj.wait_with_skip(3, "Closing")
-            return
-        _apply_and_restart(new_volumes)
-        return
-
-    # action == '1': Add
-    new_paths = _collect_new_folders()
-    if not new_paths:
-        print("\033[93mNo folders entered — no changes made.\033[0m")
-        djj.wait_with_skip(3, "Closing")
-        return
-
-    existing_container_paths = [v.split(':', 1)[1] for v in volumes if ':' in v]
-    additions = []
-    for p in new_paths:
-        cpath = _derive_container_path(
-            str(p), existing_container_paths + [a.split(':', 1)[1] for a in additions]
+def host_path_to_container_path(host_path):
+    """
+    Map a real Mac path to its container-side equivalent by matching it
+    against the current docker_volumes mounts. Raises ValueError if no
+    mounted folder covers it — the folder has to be mounted (Hermes Helper
+    -> Add/Remove Working Folders) before a resume prompt can reference it.
+    """
+    host_path = str(Path(host_path).expanduser().resolve())
+    best = None
+    for v in read_docker_volumes():
+        host, _, container = v.partition(':')
+        host = str(Path(host).expanduser().resolve())
+        if host_path == host or host_path.startswith(host + os.sep):
+            if best is None or len(host) > len(best[0]):
+                best = (host, container)
+    if best is None:
+        raise ValueError(
+            f"'{host_path}' isn't under any mounted docker_volumes folder — "
+            "mount it first via Hermes Helper -> Add/Remove Working Folders."
         )
-        additions.append(f"{p}:{cpath}")
-
-    print(f"\033[93mAdding {len(additions)} mount(s):\033[0m")
-    for a in additions:
-        host, _, container = a.partition(':')
-        print(f"  {host}  →  {container}")
-    confirm = djj.prompt_choice("\033[93mApply?\033[0m\n1. Yes\n2. Cancel\n", ['1', '2'], default='1')
-    if confirm != '1':
-        print("\033[93mCancelled — no changes made.\033[0m")
-        djj.wait_with_skip(3, "Closing")
-        return
-
-    _apply_and_restart(volumes + additions)
+    host, container = best
+    suffix = host_path[len(host):].lstrip(os.sep)
+    return f"{container}/{suffix}" if suffix else container
 
 
-if __name__ == "__main__":
-    main()
+# ── Log parsing / verification (never trust a chat's own "done" claim) ───────
+
+def count_real_log_entries(log_path):
+    """
+    Parse a `filename | field | field...` style DJJIF pipeline log (covers
+    inventory-log.txt, duplicate-log.txt, sort-log.txt), keeping only
+    genuine, first-occurrence-per-filename entries. Deliberately more
+    conservative than a naive `grep -c` / `wc -l`: skips banner lines
+    (`=== Phase N ===`), the column-header row, malformed/short lines, and
+    duplicate re-logged entries — the exact corruption shapes confirmed in
+    real log files (heredoc leaks, multi-line wraps, re-runs).
+
+    Returns (count, set_of_filenames).
+    """
+    path = Path(log_path)
+    if not path.exists():
+        return 0, set()
+    seen = set()
+    for line in path.read_text(errors='replace').splitlines():
+        parts = [p.strip() for p in line.split('|')]
+        parts = [p for p in parts if p != '']
+        if len(parts) < 2:
+            continue
+        filename = parts[0]
+        if not filename or '.' not in filename or filename.lower() == 'filename':
+            continue
+        seen.add(filename)
+    return len(seen), seen
+
+
+def count_image_files(folder):
+    """Recursive real-file count under folder, using the repo's shared
+    IMAGE_EXTENSIONS check (djj.is_image_extension) rather than reimplementing it."""
+    folder = Path(folder)
+    if not folder.is_dir():
+        return 0
+    return sum(1 for p in folder.rglob('*') if p.is_file() and djj.is_image_extension(p.name))
+
+
+PHASE_LOG_NAMES = {
+    'phase1': 'inventory-log.txt',
+    'phase2': 'duplicate-log.txt',
+    'phase3': 'sort-log.txt',
+}
+
+
+def detect_pipeline_phase(target_folder):
+    """
+    Figure out which phase of the inventory -> dedupe -> categorize pipeline
+    is actually in progress, by recomputing real counts from disk — never
+    from a chat message. Returns a dict:
+      {phase, real_file_count, inventory_count, duplicate_count, sort_count}
+
+    Phase-2 completion can't be robustly verified from duplicate-log.txt
+    content alone — real logs have sometimes been free prose rather than
+    structured `filename | KEPT/FLAGGED | reason` lines (confirmed against
+    real cowork-duplicate-log.txt content). Sort-log.txt gaining any real
+    entries is used as proof Phase 2 concluded instead, since Phase 3 only
+    ever starts after Phase 2 in the pipeline's own prompt flow.
+    """
+    folder = Path(target_folder)
+    real_count = count_image_files(folder)
+    inv_count, _ = count_real_log_entries(folder / PHASE_LOG_NAMES['phase1'])
+    dup_count, _ = count_real_log_entries(folder / PHASE_LOG_NAMES['phase2'])
+    sort_count, _ = count_real_log_entries(folder / PHASE_LOG_NAMES['phase3'])
+
+    if inv_count < real_count:
+        phase = 'phase1'
+    elif sort_count > 0:
+        phase = 'phase3'
+    else:
+        phase = 'phase2'
+
+    return {
+        'phase': phase,
+        'real_file_count': real_count,
+        'inventory_count': inv_count,
+        'duplicate_count': dup_count,
+        'sort_count': sort_count,
+    }
+
+
+def verify_job_complete(target_folder, duplicate_tolerance=0):
+    """
+    A job is only genuinely finished when sort-log.txt has moved/logged
+    every real file (minus a small, documented tolerance for files flagged
+    as duplicates) — never on a claimed "done" message. Returns
+    (is_complete, detail_dict) where detail_dict is the same shape as
+    detect_pipeline_phase(), for transparent per-cycle logging.
+    """
+    detail = detect_pipeline_phase(target_folder)
+    is_complete = (
+        detail['inventory_count'] >= detail['real_file_count'] > 0
+        and detail['sort_count'] >= detail['real_file_count'] - duplicate_tolerance
+    )
+    return is_complete, detail
