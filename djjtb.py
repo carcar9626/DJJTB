@@ -100,6 +100,13 @@ class DJJTBLauncher:
         #
         print(" 💰\033[4;93m10\033[0m  Link Scraper 🔗🪏")
         print(" 💰\033[4;93m11\033[0m  Mount Movies 4 & 8 💽")
+        print()
+        print("\033[1;93m DJJPS (GUI)\033[0m")
+        print("\033[92m--------------------------------------------------\033[0m")
+        print(" 💰\033[4;93m12\033[0m  DJJTB Suite 🖥️")
+        print(" 💰\033[4;93m13\033[0m  Smart Crop 🖥️")
+        print(" 💰\033[4;93m14\033[0m  FaceFusion 🖥️")
+        print(" 💰\033[4;93m15\033[0m  JoyCaption 🖥️")
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰\033[4;91mX\033[0m  Exit 👋🏻✈️         💰\033[4;91mAD\033[0m  ADMIN TOOLS 🔐")
         print("\033[92m==================================================\033[0m")
@@ -683,6 +690,26 @@ class DJJTBLauncher:
                 )
             time.sleep(2)
 
+        elif choice == "12":  # DJJTB Suite (djjtb-suite desktop GUI) — opened like a double-click, own Terminal window/profile
+            print("\033[93mLaunching DJJTB Suite...\033[0m")
+            djj.open_path("/Users/home/Documents/Scripts/DJJPS/djjtb-suite/run_djjtb_suite_desktop.command")
+            time.sleep(2)
+
+        elif choice == "13":  # Smart Crop (smart-crop-djjtb desktop GUI) — opened like a double-click, own Terminal window/profile
+            print("\033[93mLaunching Smart Crop...\033[0m")
+            djj.open_path("/Users/home/Documents/Scripts/DJJPS/smart-crop-djjtb/run_smart_crop_desktop.command")
+            time.sleep(2)
+
+        elif choice == "14":  # FaceFusion (facefusion-desktop-djjtb desktop GUI) — opened like a double-click, own Terminal window/profile
+            print("\033[93mLaunching FaceFusion...\033[0m")
+            djj.open_path("/Users/home/Documents/Scripts/DJJPS/facefusion-desktop-djjtb/run_facefusion_desktop.command")
+            time.sleep(2)
+
+        elif choice == "15":  # JoyCaption (joycaption-desktop-ollama-djjtb desktop GUI) — opened like a double-click, own Terminal window/profile
+            print("\033[93mLaunching JoyCaption...\033[0m")
+            djj.open_path("/Users/home/Documents/Scripts/DJJPS/joycaption-desktop-ollama-djjtb/run_joycaption_desktop.command")
+            time.sleep(2)
+
 
     def handle_admin_tools(self):
         """Handle Admin Tools submenu (password-protected, not fancy — just a speedbump)"""
@@ -783,7 +810,7 @@ class DJJTBLauncher:
         while True:
             self.show_main_menu()
             choice = djj.prompt_choice("\033[93mChoose a category\033[0m",
-                                     ['1', '2', '3', '4', '5', '6', '7', '8', '9','10', '11', 'ac', 'ad', 'c', 'x'])
+                                     ['1', '2', '3', '4', '5', '6', '7', '8', '9','10', '11', '12', '13', '14', '15', 'ac', 'ad', 'c', 'x'])
 
             if choice == "1":
                 self.handle_media_tools()
@@ -791,7 +818,7 @@ class DJJTBLauncher:
                 self.handle_ai_tools()
             elif choice == "3":
                 self.handle_file_tools()
-            elif choice in ["4", "5", "6", "7", "8", "9","10", "11"]:
+            elif choice in ["4", "5", "6", "7", "8", "9","10", "11", "12", "13", "14", "15"]:
                 self.handle_quick_tools(choice)
             elif choice == "ac":  # Archived
                 self.handle_archived_tools()

@@ -142,6 +142,119 @@ provisionally CLI-only).
   duplicating it here would go stale). A behavior change to one of these silently affects the web
   UI with zero signal from this side, since a DJJTB session has no visibility into djjtb-suite by
   default.
+- **Wired into `djjtb.py`'s main menu (2026-07-31)**: QUICK TOOLS → new "DJJPS (GUI)" sub-heading,
+  choice `12`. Launched via `djj.open_path()` on `run_djjtb_suite_desktop.command` — deliberately
+  *not* `run_command_in_tab`/`run_script_in_tab` (which `source` DJJTB's own venv into the
+  launcher's Terminal tab): the four DJJPS GUI apps each have their own venv, and the user wants
+  zero risk of them getting tangled with DJJTB's. `open_path()` just shells out to macOS `open`,
+  identical to double-clicking the `.command` file — it opens its own Terminal window at that
+  window's default profile, fully independent of DJJTB's tab session, and closes itself when the
+  pywebview app quits.
+
+## facefusion-desktop-djjtb (desktop GUI built on this repo)
+
+`/Users/home/Documents/Scripts/DJJPS/facefusion-desktop-djjtb` is a standalone pywebview +
+React desktop GUI wrapping `djjtb/ai_tools/facefusion_runner.py` specifically — not a
+djjtb-suite feature (djjtb-suite's scope permanently excludes AI Tools) and not a general
+"AI Tools framework," just the first single-tool conversion of this kind. See its own
+CLAUDE.md for the full architecture (no FastAPI/HTTP — pywebview's `js_api` bridge instead,
+since it's single-user/single-tool, a deliberately different stack from djjtb-suite's).
+
+- Installed as an editable dependency into *its own* venv (`pip install -e
+  /Users/home/Documents/Scripts/DJJTB`), same pattern djjtb-suite uses — never installed into
+  this repo's own venv or into its frontend.
+- Imports these functions from `facefusion_runner.py` unchanged, as pure functions:
+  `build_facefusion_args`, `process_single_headless`, `generate_output_filename`,
+  `collect_files_from_folder`, `get_target_ff_dir`, `copy_source_files`,
+  `handle_target_files`, `tag_source_files`, `verify_facefusion_exists`. Never the interactive
+  ones (`get_swap_mode`, `get_source_input`, `get_target_input`,
+  `get_output_path_and_suffix`, `main`) — those are replaced by GUI form state.
+- **Changing `facefusion_runner.py`**: before changing the signature or behavior of any
+  function in the list above, check facefusion-desktop-djjtb's own CLAUDE.md — a behavior
+  change there silently affects the desktop GUI with zero signal from this side, same
+  blind spot djjtb-suite has. One extra wrinkle specific to this consumer:
+  `build_facefusion_args()` reads `FACE_MASK_PADDING`/`FACE_MASK_BLUR`/detector &
+  landmarker scores/`FACE_DETECTOR_MODEL` as **module-level globals**, not parameters — the
+  GUI's "Advanced" panel overrides these on the imported module object at run time
+  (`backend/jobs.py`'s `_apply_advanced()`) rather than passing them as args. If these ever
+  become real parameters instead of globals, that override mechanism needs updating too.
+- **Wired into `djjtb.py`'s main menu (2026-07-31)**: QUICK TOOLS → "DJJPS (GUI)" sub-heading,
+  choice `14`, via `djj.open_path()` on `run_facefusion_desktop.command` — see the equivalent
+  note under djjtb-suite above for why `open_path()` (double-click equivalent) was used instead
+  of the venv-sourcing tab launchers.
+
+## joycaption-desktop-ollama-djjtb (desktop GUI built on this repo)
+
+`/Users/home/Documents/Scripts/DJJPS/joycaption-desktop-ollama-djjtb` is a standalone pywebview +
+React desktop GUI wrapping `djjtb/ai_tools/joycaption_runner_ollama.py` — same pattern as
+facefusion-desktop-djjtb (pywebview `js_api` bridge, no HTTP/FastAPI), not a djjtb-suite feature.
+Captions images via JoyCaption Beta One served locally through Ollama. See its own CLAUDE.md for
+full architecture; pushed to GitHub, private, `main` branch.
+
+- Installed as an editable dependency into *its own* venv (`pip install -e
+  /Users/home/Documents/Scripts/DJJTB`), same pattern as the other two. Confirmed lightweight —
+  backend venv is just `djjtb` + `pywebview` + `requests`, nothing from this repo's heavy
+  `requirements.txt`.
+- Imports unchanged, as pure functions/classes/constants: `CAPTION_STYLES`, `SUPPORTED_EXTS`,
+  `OLLAMA_URL`, `OLLAMA_MODEL`, `JoyCaptionModel` (load/caption/unload). Never `main()` or the
+  raw `input()`/`djj.prompt_*` calls inside it.
+- **Two functions that look pure but aren't imported**: `process_images()` prints progress
+  directly instead of returning status, so the GUI's `backend/jobs.py` reimplements its per-image
+  loop, pushing progress via `window.state.job` instead (same reason facefusion-desktop-djjtb
+  doesn't import `process_face_swap()`). `collect_images_from_txt()` internally calls
+  `djj.get_path_input()` (interactive) to ask for the txt path, so it can't run unchanged either —
+  the GUI gets that path via a native file dialog and reimplements just the file-parsing body.
+- **Changing `joycaption_runner_ollama.py`**: before changing the signature or behavior of
+  anything in the "imported unchanged" list above, check joycaption-desktop-ollama-djjtb's own
+  CLAUDE.md — same blind-spot rule as the other two conversions. Also worth knowing: importing
+  this module runs `os.system('clear')` unconditionally at module level, which now also fires
+  once whenever the desktop app's backend process starts (clears whichever terminal launched it) —
+  not fixed, just flagged, per that app's own "preserve CLI quirks" convention.
+- **Wired into `djjtb.py`'s main menu (2026-07-31)**: QUICK TOOLS → "DJJPS (GUI)" sub-heading,
+  choice `15`, via `djj.open_path()` on `run_joycaption_desktop.command` — see the equivalent
+  note under djjtb-suite above for why `open_path()` (double-click equivalent) was used instead
+  of the venv-sourcing tab launchers.
+
+## smart-crop-djjtb (desktop GUI built on this repo)
+
+`/Users/home/Documents/Scripts/DJJPS/smart-crop-djjtb` is a standalone pywebview + React desktop
+GUI wrapping `djjtb/ai_tools/smart_crop_runner.py` — same pattern as facefusion-desktop-djjtb and
+joycaption-desktop-ollama-djjtb (pywebview `js_api` bridge, no HTTP/FastAPI), not a djjtb-suite
+feature. Subject-aware batch crop: YOLOX-l person detection + largest-window crop to a target
+aspect ratio, optional resize to a longest-edge value. See its own CLAUDE.md for full
+architecture; verified end-to-end (2 real test photos, both correctly person-detected and
+cropped) before being called done.
+
+- Installed as an editable dependency into *its own* venv (`pip install -e
+  /Users/home/Documents/Scripts/DJJTB`), same pattern as the other two. Confirmed lightweight —
+  backend venv is just `djjtb` + `pywebview` + `Pillow`, nothing from this repo's heavy
+  `requirements.txt`. The actual heavy lifting (`onnxruntime`, `opencv`, `numpy`, the 216MB
+  YOLOX-l model) stays fully isolated behind `smart_crop_runner.py`'s own `scvenv` subprocess
+  boundary — never touches this GUI's venv at all.
+- Imports unchanged, as pure functions/constants: `detect_subjects()`, `compute_crop_box()`,
+  `AR_PRESETS`, `SC_PYTHON`, `SC_MODEL_PATH`, `SC_CONF_DEFAULT`, `get_op_logger()`. Never `main()`,
+  `get_target_ar()`, `get_output_resolution()`, or the raw `djj.prompt_choice`/`djj.get_int_input`
+  calls inside `main()`'s loop — those are replaced by GUI form state.
+- **Two wrinkles this conversion has that the other two don't**: (1) `smart_crop_images()` prints
+  progress directly instead of returning status, so the GUI's `backend/jobs.py` reimplements its
+  per-image loop (same reason facefusion-desktop-djjtb doesn't import `process_face_swap()`) —
+  but detection itself is *also* one opaque batched subprocess call for the whole image set (no
+  per-image signal during that phase), so the GUI's job state has an extra `phase`
+  (`"detecting"`/`"cropping"`) field neither sibling app needed. (2) There's no
+  `check_dependencies()`-style function in the source script to reuse for a "model not found"
+  setup-required card — the CLI just shells out and prints a warning on failure — so
+  `sc_api.py`'s `check_dependencies()` (verifies `SC_PYTHON`/`SC_MODEL_PATH` exist on disk) is new
+  logic, not a reuse of existing CLI reasoning.
+- `get_paths_from_txt()` calls `input()` directly (interactive), so it can't run unchanged either —
+  the GUI gets the txt path via a native file dialog and reimplements just the file-parsing body
+  (skip blank/`#`-comment lines, strip quotes, unescape `\ ` spaces, resolve, check existence).
+- **Changing `smart_crop_runner.py`**: before changing the signature or behavior of anything in
+  the "imported unchanged" list above, check smart-crop-djjtb's own CLAUDE.md — same blind-spot
+  rule as the other two conversions.
+- **Wired into `djjtb.py`'s main menu (2026-07-31)**: QUICK TOOLS → "DJJPS (GUI)" sub-heading,
+  choice `13`, via `djj.open_path()` on `run_smart_crop_desktop.command` — see the equivalent
+  note under djjtb-suite above for why `open_path()` (double-click equivalent) was used instead
+  of the venv-sourcing tab launchers.
 
 ## Working with me
 
