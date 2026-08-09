@@ -898,11 +898,19 @@ def join_image_video(image_path, video_path, output_path, position, audio_choice
 def _collage_one_group(group, direction, longest_edge, output_dir, suffix):
     """
     Build and save one collage image from `group` (any size >= 1).
+    Output format/mode is taken from the first image in the group (same image
+    whose stem names the output file) via get_save_format — alpha/transparency
+    is preserved through the canvas when that format supports it (PNG/WEBP/
+    GIF/TIFF); only flattened to RGB when saving as a format that can't hold
+    alpha (JPEG/BMP), same rule _default_save_kwargs uses elsewhere.
     Returns the saved path, or None on failure (caller reports the error).
     """
     from PIL import Image
 
-    imgs = [Image.open(p).convert('RGB') for p in group]
+    pillow_format, file_ext = get_save_format(group[0])
+    canvas_mode = 'RGBA' if pillow_format in ('PNG', 'WEBP', 'GIF', 'TIFF') else 'RGB'
+
+    imgs = [Image.open(p).convert(canvas_mode) for p in group]
 
     if direction == 'H':
         # Scale all images to the tallest image's height, then paste side by side
@@ -912,7 +920,7 @@ def _collage_one_group(group, direction, longest_edge, output_dir, suffix):
             for im in imgs
         ]
         total_w = sum(im.width for im in resized)
-        canvas = Image.new('RGB', (total_w, target_h))
+        canvas = Image.new(canvas_mode, (total_w, target_h))
         x = 0
         for im in resized:
             canvas.paste(im, (x, 0))
@@ -925,7 +933,7 @@ def _collage_one_group(group, direction, longest_edge, output_dir, suffix):
             for im in imgs
         ]
         total_h = sum(im.height for im in resized)
-        canvas = Image.new('RGB', (target_w, total_h))
+        canvas = Image.new(canvas_mode, (target_w, total_h))
         y = 0
         for im in resized:
             canvas.paste(im, (0, y))
@@ -951,8 +959,9 @@ def _collage_one_group(group, direction, longest_edge, output_dir, suffix):
     import re as _re
     first_stem = pathlib.Path(group[0]).stem
     first_stem = _re.sub(r'_comp\d*$', '', first_stem)
-    out_path = os.path.join(output_dir, f"{first_stem}{suffix}.jpg")
-    canvas.save(out_path, 'JPEG', quality=95)
+    out_path = os.path.join(output_dir, f"{first_stem}{suffix}{file_ext}")
+    save_kwargs = {'quality': 95} if pillow_format in ('JPEG', 'WEBP') else {}
+    canvas.save(out_path, pillow_format, **save_kwargs)
     return out_path
 
 
