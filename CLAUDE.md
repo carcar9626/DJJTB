@@ -97,6 +97,24 @@ Paths resolve on disk, but not in daily use — decide keep/delete per tool, don
 
 `merge_loras.py`, `prompt_randomizer.py`, `mask_generator.py`, `vocab_extractor.py`, `djj_vocab_renderer.py`, `vocab_mask_generator.py`, `comfyui/comfyui_batch.py` (HTTP client to the already-running ComfyUI server at `localhost:8188`, doesn't invoke `cfuivenv` itself) — these run entirely in DJJTB's own venv.
 
+**TODO, found 2026-08-03 while debugging a sibling project's ComfyUI client (stories-with-DJJ,
+not this repo)**: ComfyUI's own `POST /free` endpoint (`{"unload_models": true, "free_memory":
+true}`, confirmed by reading `main.py`'s queue loop directly — it calls
+`comfy.model_management.unload_all_models()`, resets the execution cache, then `gc.collect()` +
+`soft_empty_cache()`, the real MPS cache-clear) is a lightweight way to periodically reset
+ComfyUI's memory state mid-batch, without restarting the whole server (no custom-node reload, no
+downtime) — at the cost of the next job after a free having to reload the model stack from disk.
+Real motivating case: a long run of many sequential Qwen Image Edit generations in one
+ComfyUI process showed real per-generation slowdown (`/it` time climbing, one generation
+eventually taking 5+ minutes) that a periodic `/free` call (every ~4 generations) measurably
+bounded — noisy afterward but no longer runaway-compounding. **Worth adding to
+`comfyui_batch.py`'s batch loops** (`process_single_input`, `process_dual_input`,
+`generate_missing_icons`) as an optional periodic call every N submissions, same idea as this
+repo's existing `QUEUE_DELAY` convention. Not yet implemented here — this is a note to come back
+to, not a completed change. See stories-with-DJJ's `animation/spike/comfyui_client.py`
+(`free_memory()`) and `CLAUDE.md`'s 2026-08-03 entries for the fuller investigation if useful
+context is needed before implementing.
+
 ## Conventions
 
 - All scripts `import djjtb.utils as djj` and use `djj.prompt_choice`, `djj.get_path_input`, `djj.get_centralized_media_input`, `djj.get_centralized_output_path`, `djj.apply_skip_list`, `djj.setup_logging`, `djj.what_next`. Match this in any new tool.
