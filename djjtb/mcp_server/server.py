@@ -59,7 +59,7 @@ mcp = FastMCP(f"djjtb_mcp_{_category}" if _category else "djjtb_mcp")
 # _register_tools() below, based on --category.
 
 
-def file_pose_prompt(raw_text: str) -> list[str]:
+def file_pose_prompt(raw_text: str, image_filename: str = "") -> list[str]:
     """Parse NBP-formatted output and file it into the "pose/action" array of the prompt assembler.
 
     Use this for body pose or action descriptions only.
@@ -72,13 +72,21 @@ def file_pose_prompt(raw_text: str) -> list[str]:
     from "pose/action"'s highest existing "P<number>-" title. Writes a
     backup before any change.
 
+    The new entry's reference image is linked automatically if a file
+    already exists at pose_images/p<assigned-number>.<ext> -- no action
+    needed for the normal case. Only pass image_filename if the user's own
+    message explicitly named a specific image file for this pose; never
+    guess, infer, or invent one.
+
     Args:
         raw_text: The raw model output containing one or more pose/action blocks.
+        image_filename: Optional. Only set if the user explicitly stated a
+            filename for this pose's reference image. Leave empty otherwise.
 
     Returns:
         List of titles that were added, e.g. ["P65-RECLINED ASYMMETRIC LEGS EXTENDED"].
     """
-    return add_pose_prompts(raw_text, JSON_PATH, category="pose/action")
+    return add_pose_prompts(raw_text, JSON_PATH, category="pose/action", image_filename=image_filename)
 
 
 def file_scene_prompt(raw_text: str) -> list[str]:

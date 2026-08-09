@@ -22,6 +22,8 @@ from pathlib import Path
 
 JSON_PATH = Path("/Users/home/Documents/Scripts/FLOW_TOOLS/prompt_assembler/LOCAL/prompt_assembler.json")
 TXT_FOLDER = "/Users/home/Documents/Scripts/FLOW_TOOLS/prompt_assembler/LOCAL/txt"
+POSE_IMAGES_DIR = Path("/Users/home/Documents/Scripts/FLOW_TOOLS/prompt_assembler/LOCAL/pose_images")
+POSE_IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
 
 POSE_BLOCK = re.compile(
     r"^#\[?(.+?)\]?#\s*(.+?)(?=\n^#\[?.+?\]?#|\Z)",
@@ -56,7 +58,37 @@ def next_number(data: dict, category: str, prefix: str) -> int:
     return max_n + 1
 
 
-def add_pose_prompts(raw_text: str, json_path: Path, category: str = "pose/action") -> list[str]:
+def resolve_pose_image(number: int, explicit_filename: str = "") -> str:
+    """Resolve the prompt_assembler `image` field for a newly-filed pose/action entry.
+
+    If explicit_filename is given (passed through verbatim from the caller
+    -- only ever set when the user themselves stated a specific filename,
+    never guessed by a model), just basename it and point at
+    pose_images/<basename>. No existence check, since the user may state
+    it ahead of actually placing the file.
+
+    Otherwise, auto-detect: the prompt_assembler app's own naming
+    convention is "p<number>.<ext>" (lowercase, e.g. "p67.jpg") directly
+    under pose_images/ -- see prompt_assembler/LOCAL/pose_images/NAMING_GUIDE.txt.
+    Returns "" if no matching file exists yet, same as a preset with no
+    image linked at all; the app's pose-reference pane already handles
+    that (shows a placeholder + a manual path input to link it later).
+    """
+    if explicit_filename:
+        return f"pose_images/{Path(explicit_filename).name}"
+    for ext in POSE_IMAGE_EXTS:
+        candidate = POSE_IMAGES_DIR / f"p{number}{ext}"
+        if candidate.exists():
+            return f"pose_images/{candidate.name}"
+    return ""
+
+
+def add_pose_prompts(
+    raw_text: str,
+    json_path: Path,
+    category: str = "pose/action",
+    image_filename: str = "",
+) -> list[str]:
     """Parse raw_text and append the resulting entries to json_path's category array.
 
     Title numbers are assigned automatically and sequentially, continuing
@@ -64,6 +96,13 @@ def add_pose_prompts(raw_text: str, json_path: Path, category: str = "pose/actio
     list of titles added. Silently overwrites a single <stem>.bak.json
     backup beside json_path with the pre-write contents before touching
     the file.
+
+    For category == "pose/action" only, each new entry also gets an
+    `image` field: resolved via resolve_pose_image() against the newly
+    assigned number, or against image_filename if given (only meaningful
+    when this call files exactly one pose -- with more than one, which
+    entry it'd apply to is ambiguous, so it's ignored and auto-detection
+    is used for each instead).
     """
     raw_original = json_path.read_text(encoding="utf-8")
     data = json.loads(raw_original)
@@ -80,9 +119,14 @@ def add_pose_prompts(raw_text: str, json_path: Path, category: str = "pose/actio
     prefix = CATEGORY_PREFIX.get(category, "P")
     start = next_number(data, category, prefix)
     new_entries = []
+    single_block_override = image_filename if len(blocks) == 1 else ""
     for i, block in enumerate(blocks):
-        title = f"{prefix}{start + i:02d}-{block['name']}"
-        new_entries.append({"title": title, "prompt": block["description"]})
+        number = start + i
+        title = f"{prefix}{number:02d}-{block['name']}"
+        entry = {"title": title, "prompt": block["description"]}
+        if category == "pose/action":
+            entry["image"] = resolve_pose_image(number, single_block_override)
+        new_entries.append(entry)
 
     data[category].extend(new_entries)
     json_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")

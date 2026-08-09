@@ -87,6 +87,44 @@ prompts interactively (`prompt_choice()`, options 1–5, default Pose) instead o
 hardcoding pose. `CATEGORY_MENU` and `CATEGORY_PREFIX` dicts are the source of
 truth for category → array key → title prefix.
 
+**Pose image linking (added 2026-08-01).** The pose workflow dropped
+multi-pose grids in favor of one reference image per pose, uploaded and
+saved separately into `prompt_assembler/LOCAL/pose_images/`. `pose/action`
+entries only (no other category) now get an `image` field filed
+automatically, via a new `resolve_pose_image(number, explicit_filename="")`
+function:
+- **Default path:** after the new entry's number is assigned,
+  `add_pose_prompts()` checks `prompt_assembler/LOCAL/pose_images/` for a
+  file already named `p<number>.<ext>` (jpg/jpeg/png/webp). If found,
+  it's linked. If not (the reference image hasn't been placed there yet),
+  `image` is left as `""` — same as any other unlinked preset; it can be
+  linked later through the prompt_assembler app's pose-reference pane (a
+  path input right there in the UI) once the file exists.
+- **Override path:** `add_pose_prompts()` takes a new optional
+  `image_filename` argument, only meaningful when filing exactly one pose
+  per call (with more than one, which entry it'd apply to is ambiguous,
+  so it's ignored and every entry falls back to the default path
+  instead). This flows end to end: POSE-GEMMA's system prompt → the
+  model's `file_pose_prompt` tool call → `server.py`'s `file_pose_prompt()`
+  → the Open WebUI Workspace Tool (`openwebui_filers/djjtb_pose_filer.py`)
+  → `add_pose_prompts()`. The model is instructed to pass this through
+  **only** when the user's own message explicitly states a filename —
+  never to guess or invent one, and never to use a pose number for it,
+  since the model has no way to know what number the pipeline will
+  assign before filing happens.
+- This only applies to pose/action right now. Scene/lighting/outfit/
+  composition entries don't have an `image` concept at all.
+- See `prompt_assembler/LOCAL/README.md` § 10 for the naming convention
+  (`pose_images/p<number>.<ext>`, lowercase) and for a real example of
+  why this needs to stay conservative: a batch of ~72 poses linked
+  retroactively by reading numbers off old reference grids turned up a
+  handful of numbers (54–58) that were ambiguous/duplicated across
+  multiple source files — those were deliberately left unlinked rather
+  than guessed. The auto-detect-by-number default here has the same
+  failure mode in principle (if two different images both happened to be
+  named the same number), so it's worth a periodic sanity check that
+  `pose_images/` doesn't accumulate stray duplicate-numbered files.
+
 **`djjtb/mcp_server/server.py`**
 Runs with a `--category <name>` argument. Each invocation registers **only** its
 one corresponding tool function (`file_pose_prompt`, `file_scene_prompt`, etc.) —
@@ -159,7 +197,25 @@ edit → Tools.
 
 - **mcpo doesn't hot-reload.** Editing `server.py` requires restarting mcpo itself
   (it launches the MCP server as its own subprocess at startup) — not just saving
-  the file.
+  the file. **Confirmed as a real live failure, 2026-08-01, not just a theoretical
+  one:** the pose image-linking feature was added, but `com.djjtb.mcpserver`
+  (the LaunchAgent running mcpo) had been up since the day before. First live
+  test filed the pose correctly but with no `image` field, because mcpo was
+  still serving the old code — confirmed via `launchctl list` (stale start
+  time) and the live `/pose/openapi.json` schema (missing the new
+  `image_filename` field). Fixed with
+  `launchctl kickstart -k gui/<uid>/com.djjtb.mcpserver`; identical retry then
+  worked correctly. **After any change to `server.py` or
+  `add_pose_prompts.py`, restart this LaunchAgent before testing** — don't
+  assume a fresh test reflects fresh code.
+- **All five `*-GEMMA` models occasionally answer in a chatty, non-strict
+  format** (e.g. a multi-option "Option 1/2/3" style response) instead of
+  the `#NAME#`-only format the "prompts please" override protocol
+  specifies, even when the tool call itself is still correct. Confirmed by
+  the user as a longstanding, harmless quirk that's never affected actual
+  filing — it changes what's shown in chat, not what gets written to
+  `prompt_assembler.json`. Not investigated further since it's never
+  broken anything; worth knowing so it isn't mistaken for a new bug.
 - **Tool Servers vs. Workspace Tools are genuinely separate systems** in Open
   WebUI. Only the latter attaches per-model. This cost significant debugging time
   before the tooltip ("add them to the Tools workspace first") gave it away.
@@ -173,6 +229,13 @@ edit → Tools.
 - Model instructions matter here: each system prompt now explicitly says "call
   the filing tool exactly once" and "never touch another category's tool" — both
   added specifically because the model didn't do either by default.
+- **The pose image auto-link depends on file-placement timing.** If the
+  reference image isn't already sitting in `pose_images/` (named by the
+  number that's *about to* be assigned) at the moment `file_pose_prompt`
+  runs, the new entry's `image` just comes back blank — not an error,
+  and not retried later. Nothing re-scans `pose_images/` after the fact.
+  Fine to fix up manually afterward via the prompt_assembler app's pane,
+  but worth knowing this isn't a retroactive/watching process.
 
 ## Open items / things not done tonight
 
@@ -193,3 +256,21 @@ edit → Tools.
 - Alternatives to `gemma4:26b` were researched (`gemma4:31b`, the `-mlx` builds,
   `qwen3-vl:8b`) but not adopted — still running `gemma4:26b` across all five
   models as of tonight.
+
+## Update 2026-08-01: pose image linking + grid-workflow retired
+
+- POSE-GEMMA's system prompt was revised: reference images are now
+  expected to be a single pose per image (grids are no longer the normal
+  case, though the model still tolerates one if given). Added an
+  `image_filename` passthrough instruction — see "Pose image linking"
+  under Scripts above. The model-facing behavior otherwise (mandatory
+  blocks, `#NAME#` extraction format, "prompts please" trigger, "call the
+  filing tool exactly once") is unchanged.
+- Code changes: `add_pose_prompts.py` (new `resolve_pose_image()` +
+  `image_filename` param), `server.py`'s `file_pose_prompt()` (new
+  `image_filename` param, passthrough only), `openwebui_filers/djjtb_pose_filer.py`
+  (same param, still needs to be manually copied into Open WebUI's
+  Workspace → Tools editor to take effect there — editing the local copy
+  in this repo doesn't update Open WebUI by itself).
+- Scene/lighting/outfit/composition are untouched by this update — still
+  no `image` concept for those categories.
