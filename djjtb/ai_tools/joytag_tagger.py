@@ -192,11 +192,23 @@ class JoyTagProcessor:
                 return False
                 
             print("\033[33m🏃 Loading ONNX model for JoyTag\033[0m")
-            
-            # Set up ONNX Runtime providers
-            providers = ["CPUExecutionProvider"]  # JoyTag works fine on CPU
-            
+
+            # Set up ONNX Runtime providers -- prefer CoreML (Apple Neural Engine/GPU) when the
+            # running onnxruntime build actually supports it, falling back to CPU otherwise.
+            # Real fix, 2026-08-12 (see CLAUDE.md): this was hardcoded to CPU-only regardless of
+            # what was available -- self.device above already checked for MPS via torch but was
+            # never wired into this call at all, so it had zero effect on actual execution.
+            # Checked live against ort.get_available_providers() rather than trusting the earlier
+            # torch-based check, since torch's MPS support and onnxruntime's CoreML EP are
+            # separate checks that happen to usually agree on Apple Silicon but aren't identical.
+            available_providers = ort.get_available_providers()
+            if "CoreMLExecutionProvider" in available_providers:
+                providers = ["CoreMLExecutionProvider", "CPUExecutionProvider"]
+            else:
+                providers = ["CPUExecutionProvider"]
+
             self.model = ort.InferenceSession(onnx_path, providers=providers)
+            print(f"\033[33m⚡ Inference provider:\033[0m {providers[0]}")
             self.model_type = "onnx"
             
             # Get input shape from model
