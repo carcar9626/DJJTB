@@ -1,4 +1,5 @@
 import os
+import random
 import sys
 import subprocess
 import pathlib
@@ -45,14 +46,10 @@ def collect_videos_from_paths(file_paths):
     return sorted(videos, key=str.lower)
 
 def get_user_group_size():
-    try:
-        group_size = int(input("\033[93mHow many files to merge per group?\033[0m\n [default 2]: ").strip() or 2)
-        if group_size < 2:
-            raise ValueError
-        return group_size
-    except ValueError:
-        print("❌ Invalid input. Using default of 2.")
-        return 2
+    return djj.get_int_input("\033[93mHow many files to merge per group?\033[0m", min_val=2, default=2)
+
+def get_user_group_count():
+    return djj.get_int_input("\033[93mHow many groups to create?\033[0m", min_val=1, default=2)
 
 # ─── Video Info ───────────────────────────────────────────────────────────────
 
@@ -89,8 +86,9 @@ def get_sizing_method(videos):
         "\033[93mSizing method:\033[0m\n"
         "1. Use first video's dimensions\n"
         "2. Fixed target size (1920x1080)\n"
-        "3. Crop all to fit (16:9 or 9:16)\n",
-        ['1', '2', '3'],
+        "3. Crop all to fit (16:9 or 9:16)\n"
+        "4. Custom fixed size (width x height)\n",
+        ['1', '2', '3', '4'],
         default='1'
     )
 
@@ -101,7 +99,15 @@ def get_sizing_method(videos):
             ['1', '2'],
             default='1'
         )
-        return 'crop', crop_aspect
+        return 'crop', crop_aspect, None
+
+    custom_dims = None
+    if sizing_choice == '4':
+        print()
+        custom_width = djj.get_int_input("\033[93mCustom width in pixels\033[0m", min_val=1)
+        print()
+        custom_height = djj.get_int_input("\033[93mCustom height in pixels\033[0m", min_val=1)
+        custom_dims = (custom_width, custom_height)
 
     print()
     use_background = djj.prompt_choice(
@@ -110,9 +116,9 @@ def get_sizing_method(videos):
         default='1'
     ) == '1'
 
-    method_map = {'1': 'first_video', '2': 'fixed_1920x1080'}
+    method_map = {'1': 'first_video', '2': 'fixed_1920x1080', '4': 'custom'}
     base_method = method_map[sizing_choice]
-    return (f"{base_method}_blur" if use_background else f"{base_method}_pad"), None
+    return (f"{base_method}_blur" if use_background else f"{base_method}_pad"), None, custom_dims
 
 def build_crop_filter(crop_aspect, width, height):
     if crop_aspect == '1':  # 16:9
@@ -148,7 +154,7 @@ def create_background_video(video_path, output_path, target_width, target_height
                f"crop={target_width}:{target_height},"
                f"gblur=sigma={blur_radius},"
                f"eq=brightness=-{1-opacity}",
-        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+        "-c:v", "h264_videotoolbox", "-b:v", "8M", "-pix_fmt", "yuv420p",
         "-an", temp_bg_video
     ]
     result = subprocess.run(bg_cmd, capture_output=True, text=True)
@@ -162,7 +168,7 @@ def _bg_overlay_cmd(bg_video, video, target_width, target_height, temp_output):
         f"[1:v]scale='if(gt(iw/ih,{target_width}/{target_height}),{target_width},-2)':'if(gt(iw/ih,{target_width}/{target_height}),-2,{target_height})'[scaled];"
         f"[0:v][scaled]overlay=(W-w)/2:(H-h)/2[outv]",
         "-map", "[outv]", "-map", "1:a?",
-        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+        "-c:v", "h264_videotoolbox", "-b:v", "8M",
         "-c:a", "aac", "-b:a", "128k", "-r", "30", "-pix_fmt", "yuv420p",
         temp_output
     ]
@@ -171,7 +177,7 @@ def _crop_scale_cmd(video, crop_filter, target_width, target_height, temp_output
     return [
         "ffmpeg", "-y", "-i", video,
         "-vf", f"{crop_filter},scale={target_width}:{target_height}",
-        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+        "-c:v", "h264_videotoolbox", "-b:v", "8M",
         "-c:a", "aac", "-b:a", "128k", "-r", "30", "-pix_fmt", "yuv420p",
         temp_output
     ]
@@ -181,7 +187,7 @@ def _scale_pad_cmd(video, target_width, target_height, temp_output):
         "ffmpeg", "-y", "-i", video,
         "-vf", f"scale='if(gt(iw/ih,{target_width}/{target_height}),{target_width},-2)':'if(gt(iw/ih,{target_width}/{target_height}),-2,{target_height})',"
                f"pad={target_width}:{target_height}:({target_width}-iw)/2:({target_height}-ih)/2:color=black",
-        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+        "-c:v", "h264_videotoolbox", "-b:v", "8M",
         "-c:a", "aac", "-b:a", "128k", "-r", "30", "-pix_fmt", "yuv420p",
         temp_output
     ]
@@ -258,7 +264,7 @@ def merge_videos_to_file(videos, output_file, sizing_method, crop_aspect, target
         if use_reencode:
             cmd = [
                 "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", concat_file,
-                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                "-c:v", "h264_videotoolbox", "-b:v", "8M",
                 "-c:a", "aac", "-b:a", "128k", "-r", "30", "-pix_fmt", "yuv420p",
                 output_file
             ]
@@ -335,25 +341,47 @@ def simple_merge_per_folder(subfolder_groups, output_dir, sizing_method, crop_as
 
 # ─── Group Merge Modes ────────────────────────────────────────────────────────
 
-def group_merge_videos(videos, output_dir, group_size, use_reencode, sizing_method, crop_aspect, target_width, target_height, label_prefix=""):
-    """Split videos into groups of N and merge each group. Returns (success, error) counts."""
+def build_size_groups(videos, group_size):
+    """Slice videos into consecutive groups of exactly group_size.
+    Leftover videos that don't fill a full group are skipped (not merged)."""
     total_groups = len(videos) // group_size
     remaining = len(videos) % group_size
+    if remaining:
+        print(f"   \033[93m⚠️  {remaining} file(s) skipped (not enough for a full group of {group_size})\033[0m")
+    return [videos[g * group_size: (g + 1) * group_size] for g in range(total_groups)]
+
+def build_count_groups(videos, num_groups):
+    """Split videos into exactly num_groups groups, spread as evenly as
+    possible (max size difference of 1) — no orphans, no leftover bucket."""
+    total = len(videos)
+    if num_groups > total:
+        print(f"   \033[93m⚠️  Only {total} video(s) available — reducing {num_groups} groups to {total}\033[0m")
+        num_groups = total
+    base, remainder = divmod(total, num_groups)
+    groups = []
+    idx = 0
+    for g in range(num_groups):
+        size = base + 1 if g < remainder else base
+        groups.append(videos[idx: idx + size])
+        idx += size
+    return groups
+
+def group_merge_videos(groups, output_dir, use_reencode, sizing_method, crop_aspect, target_width, target_height, label_prefix=""):
+    """Merge each pre-built group of videos into its own output file. Returns (success, error) counts."""
+    total_groups = len(groups)
     success_count = 0
     error_count = 0
 
-    if remaining != 0:
-        print(f"   \033[93m⚠️  {remaining} file(s) skipped (not enough for a full group of {group_size})\033[0m")
-
-    for g in range(total_groups):
-        group_videos = videos[g * group_size: (g + 1) * group_size]
+    for g, group_videos in enumerate(groups, 1):
+        if not group_videos:
+            continue
         base_name = os.path.splitext(os.path.basename(group_videos[0]))[0]
-        output_file = os.path.join(output_dir, f"{label_prefix}{base_name}_group_{g+1:03d}.mp4")
+        output_file = os.path.join(output_dir, f"{label_prefix}{base_name}_group_{g:03d}.mp4")
 
         preview = ' + '.join(os.path.basename(v) for v in group_videos[:2])
         if len(group_videos) > 2:
             preview += '...'
-        print(f"\033[93m  Group {g+1}/{total_groups}:\033[0m {preview}")
+        print(f"\033[93m  Group {g}/{total_groups}:\033[0m ({len(group_videos)} videos) {preview}")
 
         ok, err = merge_videos_to_file(
             group_videos, output_file, sizing_method, crop_aspect,
@@ -379,7 +407,7 @@ def main():
         print()
         print("\033[92m==================================================\033[0m")
         print("\033[1;93mVideo Group Merger\033[0m")
-        print("Simple merge or group merge videos")
+        print("Merge or group-split videos, flat or per-folder")
         print("\033[92m==================================================\033[0m")
         print()
 
@@ -387,8 +415,9 @@ def main():
         merge_type = djj.prompt_choice(
             "\033[93mMerge type:\033[0m\n"
             "1. Simple merge (all videos → one file)\n"
-            "2. Group merge (every N videos → groups)\n",
-            ['1', '2'],
+            "2. Group by size (N videos per group)\n"
+            "3. Group by count (N groups, spread evenly)\n",
+            ['1', '2', '3'],
             default='1'
         )
         print()
@@ -438,23 +467,13 @@ def main():
                         print(f"   📁 {os.path.basename(sf)}  ({len(vids)} videos)")
                     print()
 
-                    if merge_type == '1':
-                        scope_choice = djj.prompt_choice(
-                            "\033[93mHow to merge?\033[0m\n"
-                            "1. One merged video per subfolder\n"
-                            "2. Merge all videos recursively into one file\n",
-                            ['1', '2'],
-                            default='1'
-                        )
-                    else:
-                        scope_choice = djj.prompt_choice(
-                            "\033[93mHow to group?\033[0m\n"
-                            "1. Groups within each subfolder independently\n"
-                            "2. Pool all videos together then group\n",
-                            ['1', '2'],
-                            default='1'
-                        )
-
+                    scope_choice = djj.prompt_choice(
+                        "\033[93mHow to handle subfolders?\033[0m\n"
+                        "1. Treat each subfolder independently\n"
+                        "2. Pool all videos together\n",
+                        ['1', '2'],
+                        default='1'
+                    )
                     subfolder_scope = 'per_folder' if scope_choice == '1' else 'collective'
                     print()
 
@@ -485,6 +504,21 @@ def main():
             print("\033[1;5;93m❌ No subfolders with videos found. Try again.\033[0m\n")
             continue
 
+        # --- Shuffle option ---
+        shuffle_videos = djj.prompt_choice(
+            "\033[93mShuffle video order?\033[0m\n1. Yes\n2. No\n",
+            ['1', '2'],
+            default='1'
+        ) == '1'
+        print()
+
+        if shuffle_videos:
+            if subfolder_mode and subfolder_scope == 'per_folder':
+                for sf_videos in subfolder_groups.values():
+                    random.shuffle(sf_videos)
+            else:
+                random.shuffle(videos)
+
         # Show video summary for non-per-folder modes
         if not subfolder_mode or subfolder_scope == 'collective':
             print(f"✅ \033[93m{len(videos)} video(s) found\033[0m")
@@ -498,7 +532,7 @@ def main():
 
         # --- Sizing options ---
         sample_videos = videos if videos else list(subfolder_groups.values())[0]
-        sizing_method, crop_aspect = get_sizing_method(sample_videos)
+        sizing_method, crop_aspect, custom_dims = get_sizing_method(sample_videos)
         print()
 
         if sizing_method.startswith('first_video'):
@@ -507,6 +541,9 @@ def main():
         elif sizing_method.startswith('fixed_1920x1080'):
             target_width, target_height = 1920, 1080
             print(f"🎯 \033[93mTarget:\033[0m 1920x1080 (fixed)")
+        elif sizing_method.startswith('custom'):
+            target_width, target_height = custom_dims
+            print(f"🎯 \033[93mTarget:\033[0m {target_width}x{target_height} (custom)")
         elif sizing_method == 'crop':
             target_width, target_height = (1920, 1080) if crop_aspect == '1' else (1080, 1920)
             aspect_name = "16:9" if crop_aspect == '1' else "9:16"
@@ -515,8 +552,9 @@ def main():
 
         # Group merge extras
         use_reencode = True
-        group_size = 2
-        if merge_type == '2':
+        group_size = None
+        num_groups = None
+        if merge_type in ('2', '3'):
             use_reencode = djj.prompt_choice(
                 "\033[93mMerge method:\033[0m\n"
                 "1. Re-encode (safer, fixes freezing issues)\n"
@@ -525,7 +563,10 @@ def main():
                 default='1'
             ) == '1'
             print()
-            group_size = get_user_group_size()
+            if merge_type == '2':
+                group_size = get_user_group_size()
+            else:
+                num_groups = get_user_group_count()
             print()
 
         # ─── Execute ─────────────────────────────────────────────────────────
@@ -546,24 +587,28 @@ def main():
                 )
 
         else:
-            print(f"\033[1;93mGrouping into sets of {group_size}...\033[0m")
+            mode_label = f"sets of {group_size}" if merge_type == '2' else f"{num_groups} even group(s)"
+            print(f"\033[1;93mGrouping into {mode_label}...\033[0m")
             print("-------------")
 
             if subfolder_mode and subfolder_scope == 'per_folder':
                 for sf_path, sf_videos in subfolder_groups.items():
                     sf_name = os.path.basename(sf_path)
-                    sf_total = len(sf_videos) // group_size
-                    print(f"\n\033[93m📁 {sf_name}\033[0m  ({len(sf_videos)} videos → {sf_total} group(s))")
+                    groups = build_size_groups(sf_videos, group_size) if merge_type == '2' \
+                        else build_count_groups(sf_videos, num_groups)
+                    print(f"\n\033[93m📁 {sf_name}\033[0m  ({len(sf_videos)} videos → {len(groups)} group(s))")
                     s, e = group_merge_videos(
-                        sf_videos, output_dir, group_size, use_reencode,
+                        groups, output_dir, use_reencode,
                         sizing_method, crop_aspect, target_width, target_height,
                         label_prefix=f"{sf_name}_"
                     )
                     success_count += s
                     error_count += e
             else:
+                groups = build_size_groups(videos, group_size) if merge_type == '2' \
+                    else build_count_groups(videos, num_groups)
                 success_count, error_count = group_merge_videos(
-                    videos, output_dir, group_size, use_reencode,
+                    groups, output_dir, use_reencode,
                     sizing_method, crop_aspect, target_width, target_height
                 )
 
