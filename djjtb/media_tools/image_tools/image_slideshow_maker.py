@@ -1,8 +1,8 @@
 import os
+import random
 import subprocess
 import sys
 import pathlib
-import logging
 import djjtb.utils as djj
 from PIL import Image, ImageFilter
 from datetime import datetime
@@ -11,15 +11,6 @@ os.system('clear')
 Image.MAX_IMAGE_PIXELS = 200000000  # Set to 200 million pixels
 
 # --- Shared Functions ---
-def setup_logging(output_path):
-    """Set up logging to a file in the output folder."""
-    log_file = os.path.join(output_path, "slideshow_errors.log")
-    logging.basicConfig(
-        filename=log_file,
-        level=logging.ERROR,
-        format='%(asctime)s - %(levelname)s - %(message)s'
-    )
-
 def collect_images_from_txt():
     """Collect images from txt file (files and folders)."""
     paths = djj.get_paths_from_txt("Enter txt file path")
@@ -87,10 +78,10 @@ def prepare_slides(images, folder_path, orientation, duration_per_slide, use_tra
     folder_path_resolved = str(pathlib.Path(folder_path).resolve())
     output_dir = os.path.join(folder_path_resolved, "Output", "Slideshow")
     os.makedirs(output_dir, exist_ok=True)
-    
+
     # Set up logging
-    setup_logging(output_dir)
-    
+    logger = djj.setup_logging(output_dir, "image_slideshow_maker")
+
     if not images:
         print("\033[93mNo images found.\033[0m", file=sys.stderr)
         return None, 0
@@ -172,7 +163,7 @@ def prepare_slides(images, folder_path, orientation, duration_per_slide, use_tra
                 sys.stdout.write(f"\r\033[93mProcessed \033[0m{i}/{len(images)}")
                 sys.stdout.flush()
             except Exception as e:
-                logging.error(f"Transition-mode preprocessing failed on {os.path.basename(img_path)}: {e}")
+                logger.error(f"Transition-mode preprocessing failed on {os.path.basename(img_path)}: {e}")
                 continue
         
         print()
@@ -228,9 +219,9 @@ def prepare_slides(images, folder_path, orientation, duration_per_slide, use_tra
         
         cmd.extend([
             "-filter_complex", filter_complex,
-            "-c:v", "libx264",
-            "-crf", "18",
-            "-preset", "veryfast",
+            "-c:v", "h264_videotoolbox",
+            "-b:v", "8M",
+            "-pix_fmt", "yuv420p",
             "-r", "30",
             "-t", str(final_duration),
             "-fps_mode", "cfr",
@@ -244,8 +235,8 @@ def prepare_slides(images, folder_path, orientation, duration_per_slide, use_tra
             os.rmdir(temp_dir)
             
         except subprocess.CalledProcessError as e:
-            logging.error(f"Error creating slideshow with transitions: {e.stderr}")
-            print("\033[93mError creating slideshow. Check slideshow_errors.log for details.\033[0m", file=sys.stderr)
+            logger.error(f"Error creating slideshow with transitions: {e.stderr}")
+            print("\033[93mError creating slideshow. Check image_slideshow_maker_log.txt for details.\033[0m", file=sys.stderr)
             return None, len(images)
         # Clean up temporary processed images
         return output_file, len(images)
@@ -306,7 +297,7 @@ def prepare_slides(images, folder_path, orientation, duration_per_slide, use_tra
                 sys.stdout.write(f"\r\033[93mPreparing slides \033[0m{i}/{len(images)}...")
                 sys.stdout.flush()
             except Exception as e:
-                logging.error(f"Error processing {os.path.basename(img_path)}: {e}")
+                logger.error(f"Error processing {os.path.basename(img_path)}: {e}")
                 sys.stdout.write(f"\r\033[93mPreparing slide \033[0m{i}/{len(images)}... \033[93m(failed)\033[0m")
                 sys.stdout.flush()
                 continue
@@ -327,7 +318,8 @@ def prepare_slides(images, folder_path, orientation, duration_per_slide, use_tra
             'ffmpeg', '-y',
             '-framerate', f'1/{duration_per_slide}',
             '-i', os.path.join(temp_dir, 'slide_%04d.png'),
-            '-c:v', 'libx264',
+            '-c:v', 'h264_videotoolbox',
+            '-b:v', '8M',
             '-pix_fmt', 'yuv420p',
             output_file
         ]
@@ -335,8 +327,8 @@ def prepare_slides(images, folder_path, orientation, duration_per_slide, use_tra
         try:
             subprocess.run(ffmpeg_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         except subprocess.CalledProcessError as e:
-            logging.error(f"Error creating video: {e.stderr}")
-            print("\033[93mError creating video. Check slideshow_errors.log for details.\033[0m", file=sys.stderr)
+            logger.error(f"Error creating video: {e.stderr}")
+            print("\033[93mError creating video. Check image_slideshow_maker_log.txt for details.\033[0m", file=sys.stderr)
             return None, successful
         
         # Clean up temporary files
@@ -438,27 +430,48 @@ if __name__ == '__main__':
         print("Scanning for images...")
         print(f"✅ {len(images)} \033[93mimages found\033[0m")
         print()
-        
+
+        # Shuffle option
+        shuffle_images = djj.prompt_choice(
+            "\033[93mShuffle images order?\033[0m\n1. Yes\n2. No\n",
+            ['1', '2'],
+            default='1'
+        ) == '1'
+        print()
+
+        if shuffle_images:
+            random.shuffle(images)
+
         # Prompt for orientation with new options
         orientation_choice = djj.prompt_choice(
             "\033[93mSlideshow Orientation:\033[0m\n"
             "1. Landscape (1920x1080)\n"
             "2. Portrait (1080x1920)\n"
             "3. Square (1440x1440)\n"
-            "4. First image dimensions\n",
-            ['1', '2', '3', '4'],
+            "4. First image dimensions\n"
+            "5. Custom (width x height)\n",
+            ['1', '2', '3', '4', '5'],
             default='4'
         )
-        
+
         orientation_map = {
             '1': 'landscape',
             '2': 'portrait',
             '3': 'square',
-            '4': 'first_image'
+            '4': 'first_image',
+            '5': 'custom'
         }
         orientation = orientation_map[orientation_choice]
         print()
-        
+
+        custom_dims = None
+        if orientation == 'custom':
+            custom_width = djj.get_int_input("\033[93mCustom width in pixels\033[0m", min_val=1)
+            print()
+            custom_height = djj.get_int_input("\033[93mCustom height in pixels\033[0m", min_val=1)
+            print()
+            custom_dims = (custom_width, custom_height)
+
         # Transition option
         use_transitions = djj.prompt_choice(
             "\033[93mAdd dissolve transitions?\033[0m\n1. Yes\n2. No\n",
@@ -483,22 +496,14 @@ if __name__ == '__main__':
         
         if background_choice == '1':
             # Blurred background options
-            bg_opacity_input = input("Background opacity [0.0-1.0, default: 0.8]:\n -> ").strip()
-            try:
-                background_opacity = float(bg_opacity_input) if bg_opacity_input else 0.8
-                background_opacity = max(0.0, min(1.0, background_opacity))
-            except ValueError:
-                background_opacity = 0.8
-                print("Using default opacity: 0.8")
+            background_opacity = djj.get_float_input(
+                "Background opacity [0.0-1.0, default: 0.8]", min_val=0.0, max_val=1.0, default=0.8
+            )
             print()
-        
-            bg_blur_input = input("Background blur radius [1-50, default: 8]:\n -> ").strip()
-            try:
-                background_blur_radius = int(bg_blur_input) if bg_blur_input else 8
-                background_blur_radius = max(1, min(50, background_blur_radius))
-            except ValueError:
-                background_blur_radius = 8
-                print("Using default blur: 8")
+
+            background_blur_radius = djj.get_int_input(
+                "Background blur radius [1-50, default: 8]", min_val=1, max_val=50, default=8
+            )
             print()
         else:
             # Solid color background
@@ -514,32 +519,16 @@ if __name__ == '__main__':
                 background_color = (0, 0, 0)
                 print("Using default color: black (0,0,0)")
             print()
-        
-            bg_opacity_input = input("Background opacity [0.0-1.0, default: 1.0]:\n -> ").strip()
-            try:
-                background_opacity = float(bg_opacity_input) if bg_opacity_input else 1.0
-                background_opacity = max(0.0, min(1.0, background_opacity))
-            except ValueError:
-                background_opacity = 1.0
-                print("Using default opacity: 1.0")
+
+            background_opacity = djj.get_float_input(
+                "Background opacity [0.0-1.0, default: 1.0]", min_val=0.0, max_val=1.0, default=1.0
+            )
             print()
-        
-        
+
         # Prompt for duration per slide
-        while True:
-            try:
-                duration_input = input("Enter slide duration in seconds [default: 5]:\n -> ").strip()
-                if not duration_input:
-                    duration_per_slide = 5
-                    break
-                duration_per_slide = int(duration_input)
-                if duration_per_slide > 0:
-                    break
-                else:
-                    print("\033[5;93mPlease enter a positive number.\033[0m")
-            except ValueError:
-                print("\033[5;93mPlease enter a valid number.\033[0m")
-        
+        duration_per_slide = djj.get_int_input(
+            "Slide duration in seconds [default: 5]", min_val=1, default=5
+        )
         print()
         print("\033[1;93mProcessing...\033[0m")
         
@@ -567,7 +556,8 @@ if __name__ == '__main__':
                     background_type=background_type,
                     background_color=background_color,
                     background_opacity=background_opacity,
-                    background_blur_radius=background_blur_radius
+                    background_blur_radius=background_blur_radius,
+                    custom_dims=custom_dims
                 )
                 
                 if output_file:
@@ -596,7 +586,8 @@ if __name__ == '__main__':
                 background_type=background_type,
                 background_color=background_color,
                 background_opacity=background_opacity,
-                background_blur_radius=background_blur_radius
+                background_blur_radius=background_blur_radius,
+                custom_dims=custom_dims
             )
             
             # Display results
@@ -608,7 +599,7 @@ if __name__ == '__main__':
                 print(f"Output video: {output_file}")
                 print(f"Output folder: {os.path.dirname(output_file)}")
             else:
-                print("Failed to create video. Check slideshow_errors.log for details.")
+                print("Failed to create video. Check image_slideshow_maker_log.txt for details.")
             print()
             
             # Open output folder
