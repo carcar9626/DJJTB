@@ -25,6 +25,14 @@ import sys
 from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 from djjtb.file_tools.add_pose_prompts import add_pose_prompts
+from djjtb.mcp_server.tools.reddit_research import (
+    get_subreddit_info,
+    search_subreddits,
+    get_subreddit_rules,
+    get_recent_posts,
+    search_posts_in_subreddit,
+    get_post_comments,
+)
 
 JSON_PATH = Path("/Users/home/Documents/Scripts/FLOW_TOOLS/prompt_assembler/LOCAL/prompt_assembler.json")
 
@@ -185,11 +193,26 @@ CATEGORY_TOOLS = {
     "composition": file_composition_prompt,
 }
 
+# Read-only Reddit research tools (see REDDIT_MCP_SPEC.md). Not category-scoped
+# like the prompt-filing tools above -- these only register in unscoped stdio
+# mode (no --category), so the existing per-category mcpo/Open WebUI
+# subprocesses don't pick up unrelated tools.
+REDDIT_TOOLS = [
+    get_subreddit_info,
+    search_subreddits,
+    get_subreddit_rules,
+    get_recent_posts,
+    search_posts_in_subreddit,
+    get_post_comments,
+]
+
 
 def _register_tools(category):
-    """Register category's single tool, or all five if category is None."""
+    """Register category's single tool, or all five (+ Reddit tools) if category is None."""
     if category is None:
         for fn in CATEGORY_TOOLS.values():
+            mcp.add_tool(fn)
+        for fn in REDDIT_TOOLS:
             mcp.add_tool(fn)
         return
     if category not in CATEGORY_TOOLS:

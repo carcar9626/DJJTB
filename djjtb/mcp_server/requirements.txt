@@ -1,2 +1,4 @@
 mcp[cli]
 mcpo
+praw
+python-dotenv
