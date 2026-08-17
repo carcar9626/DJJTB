@@ -309,9 +309,13 @@ def simple_merge_single(videos, output_dir, sizing_method, crop_aspect, target_w
 
 
 def simple_merge_per_folder(subfolder_groups, output_dir, sizing_method, crop_aspect, target_width, target_height):
-    """One merged video per subfolder, all outputs flat in output_dir."""
+    """One merged video per subfolder, all outputs flat in output_dir.
+    When sizing_method is 'first_video_*', each subfolder resolves its own target
+    dimensions from its own first video instead of reusing one global sample --
+    subfolders can hold source video at different dimensions."""
     success_count = 0
     error_count = 0
+    per_folder_sizing = sizing_method.startswith('first_video')
 
     print(f"\n\033[1;93mMerging {len(subfolder_groups)} folder(s) → one video each...\033[0m")
     print("-------------")
@@ -319,6 +323,9 @@ def simple_merge_per_folder(subfolder_groups, output_dir, sizing_method, crop_as
     for idx, (subfolder_path, videos) in enumerate(subfolder_groups.items(), 1):
         sf_name = os.path.basename(subfolder_path)
         print(f"\n\033[93m[{idx}/{len(subfolder_groups)}] {sf_name}\033[0m  ({len(videos)} videos)")
+
+        if per_folder_sizing:
+            _, target_width, target_height, _ = get_video_info(videos[0])
 
         output_file = os.path.join(output_dir, f"{sf_name}_merged.mp4")
 
@@ -537,7 +544,10 @@ def main():
 
         if sizing_method.startswith('first_video'):
             _, target_width, target_height, _ = get_video_info(sample_videos[0])
-            print(f"🎯 \033[93mTarget:\033[0m {target_width}x{target_height} (from first video)")
+            if subfolder_mode and subfolder_scope == 'per_folder':
+                print(f"🎯 \033[93mTarget:\033[0m each subfolder's own first video's dimensions")
+            else:
+                print(f"🎯 \033[93mTarget:\033[0m {target_width}x{target_height} (from first video)")
         elif sizing_method.startswith('fixed_1920x1080'):
             target_width, target_height = 1920, 1080
             print(f"🎯 \033[93mTarget:\033[0m 1920x1080 (fixed)")
@@ -592,8 +602,11 @@ def main():
             print("-------------")
 
             if subfolder_mode and subfolder_scope == 'per_folder':
+                per_folder_sizing = sizing_method.startswith('first_video')
                 for sf_path, sf_videos in subfolder_groups.items():
                     sf_name = os.path.basename(sf_path)
+                    if per_folder_sizing:
+                        _, target_width, target_height, _ = get_video_info(sf_videos[0])
                     groups = build_size_groups(sf_videos, group_size) if merge_type == '2' \
                         else build_count_groups(sf_videos, num_groups)
                     print(f"\n\033[93m📁 {sf_name}\033[0m  ({len(sf_videos)} videos → {len(groups)} group(s))")
