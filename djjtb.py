@@ -86,7 +86,7 @@ class DJJTBLauncher:
         print("\033[1;93m QUICK TOOLS\033[0m")
         print("\033[92m--------------------------------------------------\033[0m")
         #
-        print(" 💰 \033[4;93m4\033[0m  Reverse Image Search 🌠🔎")
+        print(" 💰 \033[4;93m4\033[0m  Media Dashboard (Info + Duration + Reverse Search) 📊🔎")
         #
         print(" 💰 \033[4;93m5\033[0m  Link Grabber 🔗✊🏼")
         #🚏✊🏼
@@ -94,19 +94,17 @@ class DJJTBLauncher:
         #
         print(" 💰 \033[4;93m7\033[0m  Multi XMP Viewer 🔢👀")
         #
-        print(" 💰 \033[4;93m8\033[0m  Media Info Viewer 📺ℹ️")
+        print(" 💰 \033[4;93m8\033[0m  Auto Scroller ⚙️ ⏬")
         #
-        print(" 💰 \033[4;93m9\033[0m  Auto Scroller ⚙️ ⏬")
-        #
-        print(" 💰\033[4;93m10\033[0m  Link Scraper 🔗🪏")
-        print(" 💰\033[4;93m11\033[0m  Mount Movies 4 & 8 💽")
+        print(" 💰 \033[4;93m9\033[0m  Link Scraper 🔗🪏")
+        print(" 💰\033[4;93m10\033[0m  Mount Movies 4 & 8 💽")
         print()
         print("\033[1;93m DJJPS (GUI)\033[0m")
         print("\033[92m--------------------------------------------------\033[0m")
-        print(" 💰\033[4;93m12\033[0m  DJJTB Suite 🖥️")
-        print(" 💰\033[4;93m13\033[0m  Smart Crop 🖥️")
-        print(" 💰\033[4;93m14\033[0m  FaceFusion 🖥️")
-        print(" 💰\033[4;93m15\033[0m  JoyCaption 🖥️")
+        print(" 💰\033[4;93m11\033[0m  DJJTB Suite 🖥️")
+        print(" 💰\033[4;93m12\033[0m  Smart Crop 🖥️")
+        print(" 💰\033[4;93m13\033[0m  FaceFusion 🖥️")
+        print(" 💰\033[4;93m14\033[0m  JoyCaption 🖥️")
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰\033[4;91mX\033[0m  Exit 👋🏻✈️         💰\033[4;91mAD\033[0m  ADMIN TOOLS 🔐")
         print("\033[92m==================================================\033[0m")
@@ -311,6 +309,9 @@ class DJJTBLauncher:
         print(" 💰 \033[4;93m2\033[0m  Image Collage Creator 🧩 🎇")
         print(" 💰 \033[4;93m3\033[0m  Image Caption Generator 🏷️")
         print(" 💰 \033[4;93m4\033[0m  Image Tagger (CLIP) 🏷️")
+        print(" 💰 \033[4;93m5\033[0m  Media Info Viewer (PyQt5) 📺ℹ️")
+        print(" 💰 \033[4;93m6\033[0m  Reverse Image Search (PyQt5) 🌠🔎")
+        print(" 💰 \033[4;93m7\033[0m  Video Duration Calculator (standalone) 📹⏱️")
         print()
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰 \033[4;93m0\033[0m  ⏪ Back")
@@ -327,7 +328,7 @@ class DJJTBLauncher:
             self.show_archived_menu()
 
             choice = djj.prompt_choice("\033[93mChoose a Tool\033[0m" if first_entry else "\033[93mChoose another option\033[0m",
-                                     ['1', '2', '3', '4', '0', '00'])
+                                     ['1', '2', '3', '4', '5', '6', '7', '0', '00'])
             first_entry = False
 
             if choice == "1":
@@ -338,6 +339,12 @@ class DJJTBLauncher:
                 djj.run_script_in_tab("djjtb.archived.image_caption_generator", self.venv_path, self.project_path)
             elif choice == "4":
                 djj.run_script_in_tab("djjtb.archived.image_tagger", self.venv_path, self.project_path)
+            elif choice == "5":
+                djj.run_script_in_tab("djjtb.archived.media_info_viewer", self.venv_path, self.project_path)
+            elif choice == "6":
+                djj.run_script_in_tab("djjtb.archived.reverse_image_search", self.venv_path, self.project_path)
+            elif choice == "7":
+                djj.run_script_in_tab("djjtb.archived.video_duration_calculator", self.venv_path, self.project_path)
             elif choice == "0":
                 break
             elif choice == "00":
@@ -651,33 +658,29 @@ class DJJTBLauncher:
 
     def handle_quick_tools(self, choice):
         """Handle quick tools"""
-        if choice == "4":  # Reverse Image Search
-            command = f"source {self.venv_path}; cd {self.project_path}; python3 -m djjtb.quick_tools.reverse_image_search"
-            djj.open_terminal_with_settings(command, "LinkGrabber", "50, 282, 250, 482")
-        
+        if choice == "4":  # Media Dashboard (Info + Duration + Reverse Search, combined pywebview app)
+            djj.run_script_in_tab("djjtb.quick_tools.media_dashboard", self.venv_path, self.project_path)
+
         elif choice == "5":  # Link Grabber
             command = f"source {self.venv_path}; cd {self.project_path}; python3 -m djjtb.quick_tools.link_grabber"
             djj.open_terminal_with_settings(command, "LinkGrabber", "850, 730, 1650, 960")
-        
+
         elif choice == "6":  # Path Grabber
             command = f"source {self.venv_path}; cd {self.project_path}; python3 -m djjtb.quick_tools.path_grabber"
             djj.open_terminal_with_settings(command, "path_grabber", "850, 450, 1650, 680")
-        
+
         elif choice == "7":  # Multi XMP Viewer
             command = f"source {self.venv_path}; cd {self.project_path}/; python3 -m djjtb.quick_tools.multi_xmp_viewer"
             djj.open_terminal_with_settings(command, "LinkGrabber", "50, 490, 100, 690")
-        
-        elif choice == "8":  # Media Info Viewer
-            command = f"source {self.venv_path}; cd {self.project_path}/; python3 -m djjtb.quick_tools.media_info_viewer"
-            djj.open_terminal_with_settings(command, "LinkGrabber", "50, 80, 80, 280")
-        
-        elif choice == "9":  # Auto Scroller
+
+        elif choice == "8":  # Auto Scroller
             command = f"source {self.venv_path}; cd {self.project_path}; python3 -m djjtb.quick_tools.auto_scroller"
             djj.open_terminal_with_settings(command, "auto_scroller", "50, 180, 380, 350")
-        elif choice == "10":
+
+        elif choice == "9":
                 djj.run_script_in_tab("djjtb.quick_tools.link_scraper", self.venv_path, self.project_path)
 
-        elif choice == "11":  # Mount Movies 4 & 8 — silent background mount
+        elif choice == "10":  # Mount Movies 4 & 8 — silent background mount
             print("\033[93mMounting Disks...\033[0m")
             for disk_uuid in [
                 "4AF0255E-DAEE-41F8-A045-0194DB148A2F",
@@ -690,22 +693,22 @@ class DJJTBLauncher:
                 )
             time.sleep(2)
 
-        elif choice == "12":  # DJJTB Suite (djjtb-suite desktop GUI) — opened like a double-click, own Terminal window/profile
+        elif choice == "11":  # DJJTB Suite (djjtb-suite desktop GUI) — opened like a double-click, own Terminal window/profile
             print("\033[93mLaunching DJJTB Suite...\033[0m")
             djj.open_path("/Users/home/Documents/Scripts/DJJPS/djjtb-suite/run_djjtb_suite_desktop.command")
             time.sleep(2)
 
-        elif choice == "13":  # Smart Crop (smart-crop-djjtb desktop GUI) — opened like a double-click, own Terminal window/profile
+        elif choice == "12":  # Smart Crop (smart-crop-djjtb desktop GUI) — opened like a double-click, own Terminal window/profile
             print("\033[93mLaunching Smart Crop...\033[0m")
             djj.open_path("/Users/home/Documents/Scripts/DJJPS/smart-crop-djjtb/run_smart_crop_desktop.command")
             time.sleep(2)
 
-        elif choice == "14":  # FaceFusion (facefusion-desktop-djjtb desktop GUI) — opened like a double-click, own Terminal window/profile
+        elif choice == "13":  # FaceFusion (facefusion-desktop-djjtb desktop GUI) — opened like a double-click, own Terminal window/profile
             print("\033[93mLaunching FaceFusion...\033[0m")
             djj.open_path("/Users/home/Documents/Scripts/DJJPS/facefusion-desktop-djjtb/run_facefusion_desktop.command")
             time.sleep(2)
 
-        elif choice == "15":  # JoyCaption (joycaption-desktop-ollama-djjtb desktop GUI) — opened like a double-click, own Terminal window/profile
+        elif choice == "14":  # JoyCaption (joycaption-desktop-ollama-djjtb desktop GUI) — opened like a double-click, own Terminal window/profile
             print("\033[93mLaunching JoyCaption...\033[0m")
             djj.open_path("/Users/home/Documents/Scripts/DJJPS/joycaption-desktop-ollama-djjtb/run_joycaption_desktop.command")
             time.sleep(2)
@@ -810,7 +813,7 @@ class DJJTBLauncher:
         while True:
             self.show_main_menu()
             choice = djj.prompt_choice("\033[93mChoose a category\033[0m",
-                                     ['1', '2', '3', '4', '5', '6', '7', '8', '9','10', '11', '12', '13', '14', '15', 'ac', 'ad', 'c', 'x'])
+                                     ['1', '2', '3', '4', '5', '6', '7', '8', '9','10', '11', '12', '13', '14', 'ac', 'ad', 'c', 'x'])
 
             if choice == "1":
                 self.handle_media_tools()
@@ -818,7 +821,7 @@ class DJJTBLauncher:
                 self.handle_ai_tools()
             elif choice == "3":
                 self.handle_file_tools()
-            elif choice in ["4", "5", "6", "7", "8", "9","10", "11", "12", "13", "14", "15"]:
+            elif choice in ["4", "5", "6", "7", "8", "9","10", "11", "12", "13", "14"]:
                 self.handle_quick_tools(choice)
             elif choice == "ac":  # Archived
                 self.handle_archived_tools()

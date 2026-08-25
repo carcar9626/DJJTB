@@ -9,6 +9,7 @@ async-timeout==5.0.1
 attrs==25.3.0
 basicsr==1.4.2
 beautifulsoup4==4.13.4
+bottle==0.13.4
 certifi==2025.7.14
 cffi==2.0.0
 charset-normalizer==3.4.2
@@ -86,6 +87,7 @@ proglog==0.1.12
 propcache==0.3.2
 proto-plus==1.28.0
 protobuf==5.29.6
+proxy_tools==0.1.0
 pyasn1==0.6.3
 pyasn1_modules==0.4.2
 PyAutoGUI==0.9.54
@@ -96,11 +98,14 @@ PyGetWindow==0.0.9
 PyMatting==1.1.15
 PyMsgBox==1.0.9
 pynput==1.8.1
-pyobjc-core==11.1
+pyobjc-core==12.2.2
 pyobjc-framework-ApplicationServices==11.1
-pyobjc-framework-Cocoa==11.1
+pyobjc-framework-Cocoa==12.2.2
 pyobjc-framework-CoreText==11.1
 pyobjc-framework-Quartz==11.1
+pyobjc-framework-Security==12.2.2
+pyobjc-framework-UniformTypeIdentifiers==12.2.2
+pyobjc-framework-WebKit==12.2.2
 pyparsing==3.2.3
 pyperclip==1.9.0
 PyQt5==5.15.11
@@ -116,6 +121,7 @@ python-magic==0.4.27
 pytorch-lightning==2.5.5
 pytweening==1.2.0
 pytz==2025.2
+pywebview==6.2.1
 PyYAML==6.0.2
 realesrgan==0.3.0
 referencing==0.37.0

@@ -288,7 +288,16 @@ def merge_videos_to_file(videos, output_file, sizing_method, crop_aspect, target
 
 # ─── Simple Merge Modes ───────────────────────────────────────────────────────
 
-def simple_merge_single(videos, output_dir, sizing_method, crop_aspect, target_width, target_height):
+def write_order_log(output_file, videos):
+    """Beside output_file, write a numbered manifest of the exact video order
+    used for that merge -- only meaningful (and only called) when shuffle was on,
+    since sequential order otherwise just reflects the file listing already on disk."""
+    log_path = os.path.splitext(output_file)[0] + "_order.txt"
+    with open(log_path, "w") as f:
+        for i, v in enumerate(videos, 1):
+            f.write(f"{i}. {os.path.basename(v)}\n")
+
+def simple_merge_single(videos, output_dir, sizing_method, crop_aspect, target_width, target_height, shuffle_videos=False):
     """Merge all videos into one file."""
     base_name = os.path.splitext(os.path.basename(videos[0]))[0]
     output_file = os.path.join(output_dir, f"{base_name}_merged_all.mp4")
@@ -299,6 +308,8 @@ def simple_merge_single(videos, output_dir, sizing_method, crop_aspect, target_w
     ok, err = merge_videos_to_file(videos, output_file, sizing_method, crop_aspect, target_width, target_height)
     if ok:
         print(f"\033[92m✅ Created: {os.path.basename(output_file)}\033[0m")
+        if shuffle_videos:
+            write_order_log(output_file, videos)
         return 1, 0
     else:
         print(f"\033[91m❌ Merge failed\033[0m")
@@ -308,7 +319,7 @@ def simple_merge_single(videos, output_dir, sizing_method, crop_aspect, target_w
         return 0, 1
 
 
-def simple_merge_per_folder(subfolder_groups, output_dir, sizing_method, crop_aspect, target_width, target_height):
+def simple_merge_per_folder(subfolder_groups, output_dir, sizing_method, crop_aspect, target_width, target_height, shuffle_videos=False):
     """One merged video per subfolder, all outputs flat in output_dir.
     When sizing_method is 'first_video_*', each subfolder resolves its own target
     dimensions from its own first video instead of reusing one global sample --
@@ -335,6 +346,8 @@ def simple_merge_per_folder(subfolder_groups, output_dir, sizing_method, crop_as
         )
         if ok:
             print(f"   \033[92m✅ {os.path.basename(output_file)}\033[0m")
+            if shuffle_videos:
+                write_order_log(output_file, videos)
             success_count += 1
         else:
             print(f"   \033[91m❌ Failed\033[0m")
@@ -373,7 +386,7 @@ def build_count_groups(videos, num_groups):
         idx += size
     return groups
 
-def group_merge_videos(groups, output_dir, use_reencode, sizing_method, crop_aspect, target_width, target_height, label_prefix=""):
+def group_merge_videos(groups, output_dir, use_reencode, sizing_method, crop_aspect, target_width, target_height, label_prefix="", shuffle_videos=False):
     """Merge each pre-built group of videos into its own output file. Returns (success, error) counts."""
     total_groups = len(groups)
     success_count = 0
@@ -396,6 +409,8 @@ def group_merge_videos(groups, output_dir, use_reencode, sizing_method, crop_asp
         )
         if ok:
             print(f"   \033[92m✅ {os.path.basename(output_file)}\033[0m")
+            if shuffle_videos:
+                write_order_log(output_file, group_videos)
             success_count += 1
         else:
             print(f"   \033[91m❌ Failed\033[0m")
@@ -588,12 +603,14 @@ def main():
             if subfolder_mode and subfolder_scope == 'per_folder':
                 success_count, error_count = simple_merge_per_folder(
                     subfolder_groups, output_dir,
-                    sizing_method, crop_aspect, target_width, target_height
+                    sizing_method, crop_aspect, target_width, target_height,
+                    shuffle_videos=shuffle_videos
                 )
             else:
                 success_count, error_count = simple_merge_single(
                     videos, output_dir,
-                    sizing_method, crop_aspect, target_width, target_height
+                    sizing_method, crop_aspect, target_width, target_height,
+                    shuffle_videos=shuffle_videos
                 )
 
         else:
@@ -613,7 +630,7 @@ def main():
                     s, e = group_merge_videos(
                         groups, output_dir, use_reencode,
                         sizing_method, crop_aspect, target_width, target_height,
-                        label_prefix=f"{sf_name}_"
+                        label_prefix=f"{sf_name}_", shuffle_videos=shuffle_videos
                     )
                     success_count += s
                     error_count += e
@@ -622,7 +639,8 @@ def main():
                     else build_count_groups(videos, num_groups)
                 success_count, error_count = group_merge_videos(
                     groups, output_dir, use_reencode,
-                    sizing_method, crop_aspect, target_width, target_height
+                    sizing_method, crop_aspect, target_width, target_height,
+                    shuffle_videos=shuffle_videos
                 )
 
         # ─── Summary ─────────────────────────────────────────────────────────

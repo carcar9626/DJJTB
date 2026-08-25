@@ -2,6 +2,7 @@ import os
 import sys
 import shutil
 import re
+import random
 import pathlib
 import json
 import datetime
@@ -382,6 +383,22 @@ def main():
             default='1'
         )
         print()
+
+        # Shuffle files before sorting by count / group count
+        if sort_mode in ('2', '3'):
+            shuffle_choice = djj.prompt_choice(
+                "\033[93mShuffle files before sorting?\033[0m\n1. Yes\n2. No\n",
+                ['1', '2'],
+                default='1'
+            )
+            print()
+            if shuffle_choice == '1':
+                if folder_file_map:
+                    for folder in folder_file_map:
+                        random.shuffle(folder_file_map[folder])
+                    files = [f for fl in folder_file_map.values() for f in fl]
+                else:
+                    random.shuffle(files)
 
         # ── Collect sort parameters ──────────────────────────────────────────
         match_type = None
