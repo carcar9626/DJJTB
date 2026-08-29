@@ -274,3 +274,38 @@ edit → Tools.
   in this repo doesn't update Open WebUI by itself).
 - Scene/lighting/outfit/composition are untouched by this update — still
   no `image` concept for those categories.
+
+## Update 2026-08-26: outfit image linking + project relocation
+
+- **Outfit image linking added**, mirroring the pose feature above.
+  `resolve_pose_image()` generalized to `resolve_reference_image(category,
+  number, explicit_filename="")`, driven by a new `IMAGE_DIR_BY_CATEGORY`
+  dict (`"pose/action"` → pose images dir, `"outfit"` → outfit images
+  dir). `file_outfit_prompt()` (`server.py` +
+  `openwebui_filers/djjtb_outfit_filer.py`) gained the same
+  `image_filename` passthrough param `file_pose_prompt` already had.
+  **Same caveat as the original pose feature applies here too:**
+  `djjtb_outfit_filer.py` in this repo is just the source copy — it still
+  needs to be manually pasted into Open WebUI's Workspace → Tools editor
+  for the outfit tool actually used in chat to pick up the new
+  `image_filename` parameter. Not yet confirmed done.
+- Also fixed a latent bug found while testing the generalization: the
+  image-filename lookup wasn't zero-padding `number` (`f"p{number}{ext}"`,
+  e.g. searching for `p3.png` instead of the real `p03.png`), even though
+  the entry's *title* always was (`{number:02d}`). Dormant for both
+  categories today since both counters are already past 2 digits, but
+  would've silently no-op'd auto-linking for entries 1-9 if either
+  category's numbering ever restarted. Fixed to
+  `f"{prefix}{number:02d}{ext}"`.
+- **Project relocated**: `prompt_assembler/LOCAL/` → its own repo root at
+  `/Users/home/Documents/Scripts/DJJPA` (`LOCAL` was always a temp name).
+  Old location preserved on disk as an untouched rollback copy, not
+  actively used. `JSON_PATH`/`TXT_FOLDER`/`POSE_IMAGES_DIR`/
+  `OUTFIT_IMAGES_DIR` in `add_pose_prompts.py`, `JSON_PATH` in
+  `server.py` and the orphaned `mcp_server/tools/prompt_assembler.py`,
+  `LOCAL_DEST` in the orphaned `ai_tools/comfyui/csv_to_prompt_assembler.py`,
+  and the "Prompt Assembler" menu entry's command path in `djjtb.py` all
+  repointed at the new location. `com.djjtb.mcpserver` kickstarted after,
+  verified live via a fresh `/outfit/openapi.json` fetch. Every mention of
+  `prompt_assembler/LOCAL/...` above this line describes the state as of
+  its own dated entry — left as historical record, not rewritten.

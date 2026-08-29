@@ -26,7 +26,7 @@ import sys
 import shutil
 import djjtb.utils as djj
 
-LOCAL_DEST = "/Users/home/Documents/Scripts/FLOW_TOOLS/prompt_assembler/LOCAL"
+LOCAL_DEST = "/Users/home/Documents/Scripts/DJJPA"
 DEFAULT_JSON_FILENAME = "prompt_assembler.json"
 
 

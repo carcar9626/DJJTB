@@ -20,10 +20,20 @@ import re
 from pathlib import Path
 
 
-JSON_PATH = Path("/Users/home/Documents/Scripts/FLOW_TOOLS/prompt_assembler/LOCAL/prompt_assembler.json")
-TXT_FOLDER = "/Users/home/Documents/Scripts/FLOW_TOOLS/prompt_assembler/LOCAL/txt"
-POSE_IMAGES_DIR = Path("/Users/home/Documents/Scripts/FLOW_TOOLS/prompt_assembler/LOCAL/pose_images")
+JSON_PATH = Path("/Users/home/Documents/Scripts/DJJPA/prompt_assembler.json")
+TXT_FOLDER = "/Users/home/Documents/Scripts/DJJPA/txt"
+POSE_IMAGES_DIR = Path("/Users/home/Documents/Scripts/DJJPA/pose_images")
+OUTFIT_IMAGES_DIR = Path("/Users/home/Documents/Scripts/DJJPA/outfit_images")
 POSE_IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
+
+# Categories that get an auto-linked `image` field on new entries, and
+# where each one's reference images live. Keyed the same as CATEGORY_PREFIX
+# below -- that prefix (lowercased) is the filename stem each dir is
+# searched for (e.g. "pose_images/p12.jpg", "outfit_images/o03.png").
+IMAGE_DIR_BY_CATEGORY = {
+    "pose/action": POSE_IMAGES_DIR,
+    "outfit": OUTFIT_IMAGES_DIR,
+}
 
 POSE_BLOCK = re.compile(
     r"^#\[?(.+?)\]?#\s*(.+?)(?=\n^#\[?.+?\]?#|\Z)",
@@ -58,28 +68,35 @@ def next_number(data: dict, category: str, prefix: str) -> int:
     return max_n + 1
 
 
-def resolve_pose_image(number: int, explicit_filename: str = "") -> str:
-    """Resolve the prompt_assembler `image` field for a newly-filed pose/action entry.
+def resolve_reference_image(category: str, number: int, explicit_filename: str = "") -> str:
+    """Resolve the prompt_assembler `image` field for a newly-filed entry.
+
+    Only meaningful for categories in IMAGE_DIR_BY_CATEGORY (currently
+    "pose/action" and "outfit"); callers should only invoke this for those.
 
     If explicit_filename is given (passed through verbatim from the caller
     -- only ever set when the user themselves stated a specific filename,
     never guessed by a model), just basename it and point at
-    pose_images/<basename>. No existence check, since the user may state
-    it ahead of actually placing the file.
+    <category's image dir>/<basename>. No existence check, since the user
+    may state it ahead of actually placing the file.
 
     Otherwise, auto-detect: the prompt_assembler app's own naming
-    convention is "p<number>.<ext>" (lowercase, e.g. "p67.jpg") directly
-    under pose_images/ -- see prompt_assembler/LOCAL/pose_images/NAMING_GUIDE.txt.
+    convention is "<prefix><2-digit number>.<ext>" (lowercase prefix,
+    zero-padded, e.g. "p67.jpg", "o03.png" -- matching the zero-padded
+    title itself, "P67-...", "O03-...") directly under that category's
+    image dir -- see DJJPA/pose_images/NAMING_GUIDE.txt.
     Returns "" if no matching file exists yet, same as a preset with no
-    image linked at all; the app's pose-reference pane already handles
+    image linked at all; the app's reference-image pane already handles
     that (shows a placeholder + a manual path input to link it later).
     """
+    image_dir = IMAGE_DIR_BY_CATEGORY[category]
     if explicit_filename:
-        return f"pose_images/{Path(explicit_filename).name}"
+        return f"{image_dir.name}/{Path(explicit_filename).name}"
+    prefix = CATEGORY_PREFIX.get(category, "P").lower()
     for ext in POSE_IMAGE_EXTS:
-        candidate = POSE_IMAGES_DIR / f"p{number}{ext}"
+        candidate = image_dir / f"{prefix}{number:02d}{ext}"
         if candidate.exists():
-            return f"pose_images/{candidate.name}"
+            return f"{image_dir.name}/{candidate.name}"
     return ""
 
 
@@ -97,12 +114,12 @@ def add_pose_prompts(
     backup beside json_path with the pre-write contents before touching
     the file.
 
-    For category == "pose/action" only, each new entry also gets an
-    `image` field: resolved via resolve_pose_image() against the newly
-    assigned number, or against image_filename if given (only meaningful
-    when this call files exactly one pose -- with more than one, which
-    entry it'd apply to is ambiguous, so it's ignored and auto-detection
-    is used for each instead).
+    For categories in IMAGE_DIR_BY_CATEGORY ("pose/action", "outfit")
+    only, each new entry also gets an `image` field: resolved via
+    resolve_reference_image() against the newly assigned number, or
+    against image_filename if given (only meaningful when this call files
+    exactly one entry -- with more than one, which entry it'd apply to is
+    ambiguous, so it's ignored and auto-detection is used for each instead).
     """
     raw_original = json_path.read_text(encoding="utf-8")
     data = json.loads(raw_original)
@@ -124,8 +141,8 @@ def add_pose_prompts(
         number = start + i
         title = f"{prefix}{number:02d}-{block['name']}"
         entry = {"title": title, "prompt": block["description"]}
-        if category == "pose/action":
-            entry["image"] = resolve_pose_image(number, single_block_override)
+        if category in IMAGE_DIR_BY_CATEGORY:
+            entry["image"] = resolve_reference_image(category, number, single_block_override)
         new_entries.append(entry)
 
     data[category].extend(new_entries)

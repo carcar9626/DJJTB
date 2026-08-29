@@ -1213,7 +1213,34 @@ def prompt_choice(prompt, choices, default=None):
         if user_input in choices:
             return user_input
         print(f"\033[93m Please enter one of: {', '.join(choices)}\033[0m", file=sys.stderr)
-        
+
+def get_multi_choice(header, options, allow_all_key=None):
+    """
+    Multi-select via repeated single choice + blank Enter to finish (the
+    "double enter" pattern: Enter after each pick, Enter again on blank to stop).
+    options: dict of {key: label}, used for validation + echo only.
+    allow_all_key: an options key that, alone, selects every other key.
+    Returns list of selected keys in the order picked (never empty).
+    """
+    valid_keys = list(options.keys())
+    print(header)
+    selected = []
+    while True:
+        raw = input("\033[93m > \033[0m").strip()
+        if raw == '':
+            if selected:
+                return selected
+            print("\033[93mSelect at least one option.\033[0m", file=sys.stderr)
+            continue
+        if allow_all_key and raw == allow_all_key:
+            return [k for k in valid_keys if k != allow_all_key]
+        if raw not in valid_keys:
+            print(f"\033[93m Please enter one of: {', '.join(valid_keys)}\033[0m", file=sys.stderr)
+            continue
+        if raw not in selected:
+            selected.append(raw)
+        print(f"\033[92m✓ Added: {options[raw]}. Enter to finish, or add another.\033[0m")
+
 def return_to_djjtb():
 #Keystroke Cmd+1 in front Terminal Window
     """Switch back to DJJTB tab (Command+1)"""

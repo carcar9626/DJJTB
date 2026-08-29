@@ -34,7 +34,7 @@ from djjtb.mcp_server.tools.reddit_research import (
     get_post_comments,
 )
 
-JSON_PATH = Path("/Users/home/Documents/Scripts/FLOW_TOOLS/prompt_assembler/LOCAL/prompt_assembler.json")
+JSON_PATH = Path("/Users/home/Documents/Scripts/DJJPA/prompt_assembler.json")
 
 
 def _parse_category_arg():
@@ -141,7 +141,7 @@ def file_lighting_prompt(raw_text: str) -> list[str]:
     return add_pose_prompts(raw_text, JSON_PATH, category="lighting")
 
 
-def file_outfit_prompt(raw_text: str) -> list[str]:
+def file_outfit_prompt(raw_text: str, image_filename: str = "") -> list[str]:
     """Parse NBP-formatted output and file it into the "outfit" array of the prompt assembler.
 
     Use this for clothing / wardrobe descriptions only.
@@ -154,13 +154,21 @@ def file_outfit_prompt(raw_text: str) -> list[str]:
     from "outfit"'s highest existing "O<number>-" title. Writes a
     backup before any change.
 
+    The new entry's reference image is linked automatically if a file
+    already exists at outfit_images/o<assigned-number>.<ext> -- no action
+    needed for the normal case. Only pass image_filename if the user's own
+    message explicitly named a specific image file for this outfit; never
+    guess, infer, or invent one.
+
     Args:
         raw_text: The raw model output containing one or more outfit blocks.
+        image_filename: Optional. Only set if the user explicitly stated a
+            filename for this outfit's reference image. Leave empty otherwise.
 
     Returns:
         List of titles that were added, e.g. ["O03-MINIMALIST CASUAL SET"].
     """
-    return add_pose_prompts(raw_text, JSON_PATH, category="outfit")
+    return add_pose_prompts(raw_text, JSON_PATH, category="outfit", image_filename=image_filename)
 
 
 def file_composition_prompt(raw_text: str) -> list[str]:

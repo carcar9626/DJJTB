@@ -150,12 +150,13 @@ class DJJTBLauncher:
         print(" 💰 \033[4;93m4\033[0m  Group Merger 📹 🧲")
         print(" 💰 \033[4;93m5\033[0m  Video Splitter 📹 ✂️  ⏱️")
         print(" 💰 \033[4;93m6\033[0m  Video ⟷ Frame Bridge 📹⬌🌃🌆🎆🎇")
+        print(" 💰 \033[4;93m7\033[0m  Video to Audio Extractor 📹🎵")
         print()
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰 \033[4;93m0\033[0m  ⏪ Back to MEDIA TOOLS")
         print(" 💰\033[4;93m00\033[0m ⏮️  MAIN MENU")
         print("\033[92m--------------------------------------------------\033[0m")
-    
+
     def show_image_tools_menu(self):
         """Display image tools menu"""
         os.system('clear')
@@ -361,7 +362,7 @@ class DJJTBLauncher:
             self.show_video_tools_menu()
             
             choice = djj.prompt_choice("\033[93mChoose a Tool\033[0m" if first_entry else "\033[93mChoose another option\033[0m",
-                                     ['1', '2', '3', '4', '5', '6', '0', '00'])
+                                     ['1', '2', '3', '4', '5', '6', '7', '0', '00'])
             first_entry = False
 
             if choice == "1":
@@ -376,6 +377,8 @@ class DJJTBLauncher:
                 djj.run_script_in_tab("djjtb.media_tools.video_tools.video_splitter", self.venv_path, self.project_path)
             elif choice == "6":
                 djj.run_script_in_tab("djjtb.media_tools.video_tools.video_frame_bridge", self.venv_path, self.project_path)
+            elif choice == "7":
+                djj.run_script_in_tab("djjtb.media_tools.video_tools.video_audio_extractor", self.venv_path, self.project_path)
             elif choice == "0":
                 break
             elif choice == "00":
@@ -492,7 +495,7 @@ class DJJTBLauncher:
             elif choice == "7":  # JoyCaption via Ollama (GGUF, no dedicated venv needed)
                 djj.run_script_in_tab("djjtb.ai_tools.joycaption_runner_ollama", self.venv_path, self.project_path)
             elif choice == "8":  # Prompt Assembler
-                command = ("/Users/home/Documents/Scripts/FLOW_TOOLS/prompt_assembler/LOCAL/prompt_assembler_runner.command")
+                command = ("/Users/home/Documents/Scripts/DJJPA/prompt_assembler_runner.command")
                 djj.open_terminal_with_settings(command, "comfyui", "1000, 120, 1700, 700")
             elif choice == "9":  # ComfyUI batch
                 djj.run_script_in_tab("djjtb.ai_tools.comfyui.comfyui_batch", self.venv_path, self.project_path)

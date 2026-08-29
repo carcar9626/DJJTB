@@ -18,7 +18,7 @@ import re
 import sys
 from pathlib import Path
 
-JSON_PATH = Path("/Users/home/Documents/Scripts/FLOW_TOOLS/prompt_assembler/LOCAL/prompt_assembler.json")
+JSON_PATH = Path("/Users/home/Documents/Scripts/DJJPA/prompt_assembler.json")
 
 POSE_BLOCK = re.compile(
     r"POSE No\.\s*(\d+)\s*\n#(.+?)#\s*\n(.+?)(?=\nPOSE No\.|\Z)",
