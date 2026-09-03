@@ -70,7 +70,7 @@ Or double-click `run_djjtb_py.command`.
 | Tool | Venv python | Script / entry point | Runner in `djjtb/ai_tools/` |
 |---|---|---|---|
 | FaceFusion | `ai_models/facefusion/ffvenv/bin/python3` | `ai_models/facefusion/facefusion.py` | `facefusion_runner.py`, `run_facefusion.command` |
-| CodeFormer + Upscaler (combo) | `ai_models/CodeFormer/cfvenv/bin/python3` + `ai_models/upscalers/upsvenv/bin/python3` | `ai_models/CodeFormer/inference_codeformer.py` + an inline upscale script run via `upsvenv` | `cf_ups_runner.py` (menu: AI Tools → "Upscaler AI") |
+| CodeFormer + Upscaler (combo) | `ai_models/CodeFormer/cfvenv/bin/python3` + `ai_models/upscalers/upsvenv/bin/python3` | `ai_models/CodeFormer/inference_codeformer.py` + an inline upscale script run via `upsvenv` | `upscaler_ai.py` (menu: AI Tools → "Upscaler AI") |
 | ComfyUI (server) | `ai_models/ComfyUI_App/ComfyUI/cfuivenv/bin/python3` | `ai_models/ComfyUI_App/ComfyUI/main.py` | `comfyui_runner.command` |
 
 **2026-08-21 — `comfyui_runner.command` reverted to plain `python3 main.py` (no `tee`/`awk` pipe).** What: removed the startup-noise filter added 2026-07-25. Why: piping stdout through `tee`/`awk` made it a non-tty, so tqdm's sampler progress bar rendered inconsistently in the terminal. How: edited from a ComfyUI-side Claude Code session (confirmed with user first); the per-run `user/comfyui_launch_*.log` file and startup-noise filtering are gone as a side effect — raw output again, matching pre-2026-07-22 behavior.
@@ -80,7 +80,7 @@ Or double-click `run_djjtb_py.command`.
 | Open WebUI | — no venv, Docker container (`docker start open-webui`) | — | `open_webui_runner.command` |
 | Smart Crop (AI) | `ai_models/smart_crop/scvenv/bin/python3` (detection only — orchestration/crop runs in DJJTB's own venv) | `ai_models/smart_crop/models/yolox_l.onnx` via an inline detection script run through `scvenv` | `smart_crop_runner.py` (menu: AI Tools → 14) |
 
-Standalone `codeformer_runner.py` and `upscaler_runner.py` no longer exist — both fully retired during the `djjtb/bak`/`old_versions` cleanup, superseded by the combined `cf_ups_runner.py` row above (confirmed intentional, not an accident: the two were already redundant with the combo runner). Unlike the Watermark Remover retirement below, these weren't parked in `old_versions/` — they're gone from disk, recoverable only via git history if ever needed again.
+Standalone `codeformer_runner.py` and `upscaler_runner.py` no longer exist — both fully retired during the `djjtb/bak`/`old_versions` cleanup, superseded by the combined runner row above (confirmed intentional, not an accident: the two were already redundant with the combo runner). Unlike the Watermark Remover retirement below, these weren't parked in `old_versions/` — they're gone from disk, recoverable only via git history if ever needed again. **Renamed `cf_ups_runner.py` → `upscaler_ai.py` (2026-09-01)** — plain rename to match its menu label ("Upscaler AI"), no logic change; `djjtb.py`'s choice "1" dispatch and `smart_crop_runner.py`'s convention-reference comment updated to match. Older entries elsewhere in this file (finalize-effects tuning, CF/UPS order findings, dedup-plan history) still say `cf_ups_runner.py` — left as-is since they're dated history, not live references.
 
 - **`joytag_tagger.py` fixed to actually use `jtvenv`'s GPU support (2026-08-12).** Real trigger: a sibling project (`stories-with-DJJ`) imports this file directly and asked whether it was CPU-bound for a reason worth respecting or just stale. Investigated properly before touching anything: `JoyTagProcessor.__init__` has always computed `self.device = "mps" if torch.backends.mps.is_available() else "cpu"` and printed it, but `load_model()` never used that value at all — the actual `ort.InferenceSession(...)` call was hardcoded to `providers = ["CPUExecutionProvider"]`, a leftover from when this was written on an M2 MacBook Air, before `jtvenv` existed in its current form. The device check was pure decoration; every JoyTag run to date, on any hardware, has been CPU-only regardless of what was available. First suspected the real blocker might be `jtvenv`'s own dependencies (owner's own recollection of "a numpy vs onnxruntime dependency nightmare" from setting this up originally) — checked directly rather than assumed: `jtvenv`'s `torch` (2.10.0, MPS available) and `onnxruntime` (1.24.3, `CoreMLExecutionProvider` available) are both completely healthy, zero conflicts. The dependency nightmare the owner remembered was very likely DJJTB's *main* venv, which genuinely does have a broken onnxruntime (NumPy 2.x ABI mismatch, confirmed via a direct import — `AttributeError: _ARRAY_API not found`) — but that venv never actually runs JoyTag at all, so it was an irrelevant red herring, not the real cause.
   Fix: `load_model()` now checks `ort.get_available_providers()` live and picks `["CoreMLExecutionProvider", "CPUExecutionProvider"]` when CoreML is actually available in whatever venv is running it, falling back to CPU-only otherwise — no environment/dependency changes anywhere, purely a code fix, and it degrades identically to today's behavior in any environment where CoreML isn't available (this file is also imported directly by `stories-with-DJJ` under its own separate venv, which doesn't have `torch` installed at all but does have a CoreML-capable `onnxruntime` — the live check handles that case correctly too, without needing torch). Verified for real, not just import-tested: ran a full `load_model()` + `process_image()` call through `jtvenv`'s actual interpreter against a real image — logged `Inference provider: CoreMLExecutionProvider`, and the returned tags matched a prior CPU-only run on the same image tag-for-tag, confidence values identical to 3 decimal places (correctness-verified, not just a speed change). Scope was deliberately kept to this one file only, per the owner's explicit instruction — no other DJJTB script or dependency touched.
@@ -282,6 +282,45 @@ cropped) before being called done.
   choice `13`, via `djj.open_path()` on `run_smart_crop_desktop.command` — see the equivalent
   note under djjtb-suite above for why `open_path()` (double-click equivalent) was used instead
   of the venv-sourcing tab launchers.
+
+## upscaler-ai-desktop-djjtb (desktop GUI built on this repo)
+
+`/Users/home/Documents/Scripts/DJJPS/upscaler-ai-desktp-djjtb` (folder name carries its own
+typo — "desktp" — left as-is, matches what's actually on disk) is a standalone pywebview + React
+desktop GUI wrapping `djjtb/ai_tools/upscaler_ai.py` ("CF + UPS Runner": CodeFormer face restore
++ selectable RRDBNet upscaler, 4 modes) — same pattern as the other three (pywebview `js_api`
+bridge, no HTTP/FastAPI), not a djjtb-suite feature. Built 2026-09-03. See its own CLAUDE.md for
+full architecture; pushed to GitHub, private, `main` branch. Dock/Cmd+Tab icon applied and
+verified the same external-process way as the others (`DJJ_mono_fixed_v2_Upcaler_ai.png` —
+that asset's own filename typo, "Upcaler", also left as-is for now, user says they'll fix both
+typos later).
+
+- Installed as an editable dependency into *its own* venv (`pip install -e
+  /Users/home/Documents/Scripts/DJJTB`), same pattern as the other three. Confirmed pulling in
+  zero extra dependencies beyond `djjtb` itself, same as `facefusion_runner.py`'s import needing
+  only stdlib + `djjtb.utils`.
+- Imports unchanged, as pure functions/constants: `run_cf_single`, `run_ups_single`,
+  `run_finalize`, `find_cf_output`, `cleanup_cf_extras`, `resolve_output_dirs`,
+  `collect_files_from_folder`, `tag_files`, plus `IMAGE_EXTS`/`VIDEO_EXTS`/`CF_PYTHON`/
+  `CF_SCRIPT`/`CF_DIR`/`CF_TAG`/`UPS_PYTHON`/`UPS_TAG`/`UPSCALER_FOLDER`/`UPSCALER_CHOICES`.
+  Never the interactive ones (`get_inputs`, `prompt_cf_options`, `prompt_upscaler_model`,
+  `prompt_ups_options`, `prompt_finalize_options`, `prompt_passthrough_options`, `main`).
+- **Also not imported — `run_pipeline_mode1..4` and `verify_all`**, even though not interactive
+  in the prompting sense: they `print()` directly and the pipeline functions end with
+  `djj.prompt_open_folder`, so they're not reusable as-is. The GUI's `backend/jobs.py`
+  reimplements their mode-dispatch loops using the lower-level engine functions above instead
+  (same reason facefusion-desktop-djjtb doesn't import `process_face_swap()`), and deliberately
+  drops Mode 1's CF "folder mode" batch optimization (a CLI-only speed shortcut) in favor of
+  always running CF per-file, so the GUI can push per-file progress.
+- **Changing `upscaler_ai.py`**: before changing the signature or behavior of any function in
+  the "imported unchanged" list above, check upscaler-ai-desktop-djjtb's own CLAUDE.md — same
+  blind-spot rule as the other three conversions.
+- **Wired into `djjtb.py`'s main menu (2026-09-03)**: QUICK TOOLS → "DJJPS (GUI)" sub-heading,
+  choice `15`, via `djj.open_path()` on `run_upscaler_ai_desktop.command` — same pattern as the
+  other four DJJPS GUI apps (choices 11-14: DJJTB Suite, Smart Crop, FaceFusion, JoyCaption — the
+  numbering above was previously misstated as 12-15, corrected here). Added to the menu print,
+  the `choice == "15"` dispatch in `handle_quick_tools()`, and both `prompt_choice` valid-choice
+  lists in `run()` (the top-level `1..14` list and the `handle_quick_tools` sub-dispatch list).
 
 ## MCP server — prompt filing (djjtb/mcp_server/)
 

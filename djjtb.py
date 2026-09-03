@@ -97,7 +97,7 @@ class DJJTBLauncher:
         print(" 💰 \033[4;93m8\033[0m  Auto Scroller ⚙️ ⏬")
         #
         print(" 💰 \033[4;93m9\033[0m  Link Scraper 🔗🪏")
-        print(" 💰\033[4;93m10\033[0m  Mount Movies 4 & 8 💽")
+        print(" 💰\033[4;93m10\033[0m  Mount Movies 4,8 & SC 💽")
         print()
         print("\033[1;93m DJJPS (GUI)\033[0m")
         print("\033[92m--------------------------------------------------\033[0m")
@@ -105,6 +105,7 @@ class DJJTBLauncher:
         print(" 💰\033[4;93m12\033[0m  Smart Crop 🖥️")
         print(" 💰\033[4;93m13\033[0m  FaceFusion 🖥️")
         print(" 💰\033[4;93m14\033[0m  JoyCaption 🖥️")
+        print(" 💰\033[4;93m15\033[0m  Upscaler AI 🖥️")
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰\033[4;91mX\033[0m  Exit 👋🏻✈️         💰\033[4;91mAD\033[0m  ADMIN TOOLS 🔐")
         print("\033[92m==================================================\033[0m")
@@ -291,8 +292,8 @@ class DJJTBLauncher:
         print(" 💰 \033[4;93m5\033[0m  Diskutil List 💽")
         print(" 💰 \033[4;93m6\033[0m  Command Help ❓")
         print(" 💰 \033[4;93m7\033[0m  VLC Screenshot Renamer 📸")
-        print(" 💰 \033[4;93m8\033[0m  Mount Movies 4 & 8 💽")
-        print(" 💰\033[4;93m8a\033[0m  Unmount Movies 4 & 8 ⏏️")
+        print(" 💰 \033[4;93m8\033[0m  Mount Movies 4,8 & SC 💽")
+        print(" 💰\033[4;93m8a\033[0m  Unmount Movies 4,8 & SC ⏏️")
         # print(" 💰 \033[4;93m9\033[0m  Stop ComfyUI 🛑")
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰 \033[4;93m0\033[0m  ⏪ Back")
@@ -476,7 +477,7 @@ class DJJTBLauncher:
                 os.system(f"source {self.venv_path}; cd {self.project_path}/; python3 -m djjtb.ai_tools.merge_loras.py")
             """
             if choice == "1":  # Upscaler AI (CF + UPS combined runner)
-                djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path}/; python3 -m djjtb.ai_tools.cf_ups_runner")
+                djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path}/; python3 -m djjtb.ai_tools.upscaler_ai")
             elif choice == "2":  # Joytag
                 command = f"source /Users/home/Documents/ai_models/joytag/jtvenv/bin/activate; cd {self.project_path}/; python3 -m djjtb.ai_tools.joytag_tagger"
                 djj.open_terminal_with_settings(command, "tagger", "525, 120, 1460, 700")
@@ -683,11 +684,12 @@ class DJJTBLauncher:
         elif choice == "9":
                 djj.run_script_in_tab("djjtb.quick_tools.link_scraper", self.venv_path, self.project_path)
 
-        elif choice == "10":  # Mount Movies 4 & 8 — silent background mount
+        elif choice == "10":  # Mount Movies 4, 8 & SC — silent background mount
             print("\033[93mMounting Disks...\033[0m")
             for disk_uuid in [
                 "4AF0255E-DAEE-41F8-A045-0194DB148A2F",
                 "284C712E-9F72-46B8-AF7A-4FB416299AF2",
+                "1186E094-4CAA-4DDD-B431-EDC9F1F37FA7",
             ]:
                 subprocess.Popen(
                     ["diskutil", "mount", disk_uuid],
@@ -714,6 +716,11 @@ class DJJTBLauncher:
         elif choice == "14":  # JoyCaption (joycaption-desktop-ollama-djjtb desktop GUI) — opened like a double-click, own Terminal window/profile
             print("\033[93mLaunching JoyCaption...\033[0m")
             djj.open_path("/Users/home/Documents/Scripts/DJJPS/joycaption-desktop-ollama-djjtb/run_joycaption_desktop.command")
+            time.sleep(2)
+
+        elif choice == "15":  # Upscaler AI (upscaler-ai-desktop-djjtb desktop GUI) — opened like a double-click, own Terminal window/profile
+            print("\033[93mLaunching Upscaler AI...\033[0m")
+            djj.open_path("/Users/home/Documents/Scripts/DJJPS/upscaler-ai-desktp-djjtb/run_upscaler_ai_desktop.command")
             time.sleep(2)
 
 
@@ -759,11 +766,12 @@ class DJJTBLauncher:
                     f"source {self.venv_path}; cd {self.project_path}; "
                     f"python3 djjtb/helpers/vlc/vlc_renamer.py"
                 )
-            elif choice == "8":  # Mount Movies 4 & 8 — silent background mount
+            elif choice == "8":  # Mount Movies 4, 8 & SC — silent background mount
                 print("\033[93mMounting Disks...\033[0m")
                 for disk_uuid in [
                     "4AF0255E-DAEE-41F8-A045-0194DB148A2F",
                     "284C712E-9F72-46B8-AF7A-4FB416299AF2",
+                    "1186E094-4CAA-4DDD-B431-EDC9F1F37FA7",
                 ]:
                     subprocess.Popen(
                         ["diskutil", "mount", disk_uuid],
@@ -771,11 +779,12 @@ class DJJTBLauncher:
                         stderr=subprocess.DEVNULL
                     )
                 time.sleep(2)
-            elif choice == "8a":  # Mount Movies 4 & 8 — silent background mount
+            elif choice == "8a":  # Unmount Movies 4, 8 & SC — silent background unmount
                 print("\033[93mUnmounting Disks...\033[0m")
                 for disk_uuid in [
                     "4AF0255E-DAEE-41F8-A045-0194DB148A2F",
                     "284C712E-9F72-46B8-AF7A-4FB416299AF2",
+                    "1186E094-4CAA-4DDD-B431-EDC9F1F37FA7",
                 ]:
                     subprocess.Popen(
                         ["diskutil", "unmount", disk_uuid],
@@ -816,7 +825,7 @@ class DJJTBLauncher:
         while True:
             self.show_main_menu()
             choice = djj.prompt_choice("\033[93mChoose a category\033[0m",
-                                     ['1', '2', '3', '4', '5', '6', '7', '8', '9','10', '11', '12', '13', '14', 'ac', 'ad', 'c', 'x'])
+                                     ['1', '2', '3', '4', '5', '6', '7', '8', '9','10', '11', '12', '13', '14', '15', 'ac', 'ad', 'c', 'x'])
 
             if choice == "1":
                 self.handle_media_tools()
@@ -824,7 +833,7 @@ class DJJTBLauncher:
                 self.handle_ai_tools()
             elif choice == "3":
                 self.handle_file_tools()
-            elif choice in ["4", "5", "6", "7", "8", "9","10", "11", "12", "13", "14"]:
+            elif choice in ["4", "5", "6", "7", "8", "9","10", "11", "12", "13", "14", "15"]:
                 self.handle_quick_tools(choice)
             elif choice == "ac":  # Archived
                 self.handle_archived_tools()

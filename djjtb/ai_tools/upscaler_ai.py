@@ -72,8 +72,8 @@ scale          = int(os.environ.get("UPS_SCALE", "4"))
 resize_edge    = int(os.environ.get("UPS_RESIZE_EDGE", "0"))
 blend_strength = float(os.environ.get("UPS_BLEND", "1.0"))
 post_mode      = os.environ.get("UPS_POST", "none")
-grain_strength = float(os.environ.get("UPS_GRAIN", "0.03"))
-edge_sharpen   = float(os.environ.get("UPS_SHARPEN", "0.5"))
+grain_strength = float(os.environ.get("UPS_GRAIN", "0.006"))
+edge_sharpen   = float(os.environ.get("UPS_SHARPEN", "0.15"))
 
 # ── Old-arch RRDBNet (original ESRGAN key naming — 4x-UltraSharp) ────────────
 
@@ -241,13 +241,27 @@ def process_image(img_bgr, tile_size, tile_pad, scale, model, device):
     out_np = out_t.squeeze(0).permute(1,2,0).clamp(0,1).numpy()
     return (out_np*255.0).astype(np.uint8)
 
-def apply_edge_sharpen(img, strength):
-    blur = cv2.GaussianBlur(img, (0,0), sigmaX=2.0)
-    return cv2.addWeighted(img, 1.0+strength, blur, -strength, 0)
+def apply_edge_sharpen(img, strength, radius=1.4, threshold=3):
+    # Threshold-based unsharp mask (Amount/Radius/Threshold, like Lightroom) —
+    # ignores micro-contrast below `threshold` so it skips print/scan halftone
+    # texture and upscaler ringing instead of amplifying them as if they were
+    # real detail. Tighter radius (1.4 vs the old flat 2.0) keeps it local.
+    blur = cv2.GaussianBlur(img, (0,0), sigmaX=radius)
+    diff = img.astype(np.int16) - blur.astype(np.int16)
+    if threshold > 0:
+        diff = diff * (np.abs(diff) >= threshold)
+    sharpened = img.astype(np.float32) + diff.astype(np.float32)*strength
+    return np.clip(sharpened, 0, 255).astype(np.uint8)
 
-def apply_grain(img, strength):
+def apply_grain(img, strength, grain_size=3):
+    # Correlated ("clumped") noise: generate at 1/grain_size resolution then
+    # upsample, instead of independent per-pixel white noise. Reads as film
+    # grain rather than sensor static, at a much lower strength for the same
+    # felt effect. Still midtone-weighted (attenuated in shadows/highlights).
     h, w = img.shape[:2]
-    noise = np.random.normal(0, strength*255, (h,w)).astype(np.float32)
+    small_h, small_w = max(1, h//grain_size), max(1, w//grain_size)
+    noise_small = np.random.normal(0, strength*255, (small_h, small_w)).astype(np.float32)
+    noise = cv2.resize(noise_small, (w, h), interpolation=cv2.INTER_CUBIC)
     img_f = img.astype(np.float32)
     gray  = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.float32)/255.0
     weight = 1.0-(2.0*gray-1.0)**2
@@ -276,15 +290,20 @@ if blend_strength < 1.0:
     bicubic = cv2.resize(img_bgr, (w_out, h_out), interpolation=cv2.INTER_CUBIC)
     result_bgr = cv2.addWeighted(result_bgr, blend_strength, bicubic, 1.0-blend_strength, 0)
 
+if resize_edge > 0:
+    result_bgr = resize_to_longest_edge(result_bgr, resize_edge)
+
+# Post-processing runs AFTER resize — sharpening at 4x scale and then
+# downsampling aliases fine sharpened detail into noise, and grain applied
+# pre-resize gets diluted or amplified unpredictably depending on how much
+# the user resizes down. Applying at final delivered resolution is consistent
+# regardless of resize_edge.
 if post_mode == 'natural':
     result_bgr = apply_edge_sharpen(result_bgr, edge_sharpen)
     result_bgr = apply_grain(result_bgr, grain_strength)
 elif post_mode == 'custom':
     if edge_sharpen > 0: result_bgr = apply_edge_sharpen(result_bgr, edge_sharpen)
     if grain_strength > 0: result_bgr = apply_grain(result_bgr, grain_strength)
-
-if resize_edge > 0:
-    result_bgr = resize_to_longest_edge(result_bgr, resize_edge)
 
 cv2.imwrite(str(out_file), result_bgr)
 print(f"SAVED:{out_file}")
@@ -307,17 +326,31 @@ input_path     = os.environ["FIN_INPUT"]
 output_path    = os.environ["FIN_OUTPUT"]
 suffix         = os.environ["FIN_SUFFIX"]
 post_mode      = os.environ.get("FIN_POST", "none")
-grain_strength = float(os.environ.get("FIN_GRAIN", "0.03"))
-edge_sharpen   = float(os.environ.get("FIN_SHARPEN", "0.5"))
+grain_strength = float(os.environ.get("FIN_GRAIN", "0.006"))
+edge_sharpen   = float(os.environ.get("FIN_SHARPEN", "0.15"))
 resize_edge    = int(os.environ.get("FIN_RESIZE", "0"))
 
-def apply_edge_sharpen(img, strength):
-    blur = cv2.GaussianBlur(img, (0,0), sigmaX=2.0)
-    return cv2.addWeighted(img, 1.0+strength, blur, -strength, 0)
+def apply_edge_sharpen(img, strength, radius=1.4, threshold=3):
+    # Threshold-based unsharp mask (Amount/Radius/Threshold, like Lightroom) —
+    # ignores micro-contrast below `threshold` so it skips print/scan halftone
+    # texture and upscaler ringing instead of amplifying them as if they were
+    # real detail. Tighter radius (1.4 vs the old flat 2.0) keeps it local.
+    blur = cv2.GaussianBlur(img, (0,0), sigmaX=radius)
+    diff = img.astype(np.int16) - blur.astype(np.int16)
+    if threshold > 0:
+        diff = diff * (np.abs(diff) >= threshold)
+    sharpened = img.astype(np.float32) + diff.astype(np.float32)*strength
+    return np.clip(sharpened, 0, 255).astype(np.uint8)
 
-def apply_grain(img, strength):
+def apply_grain(img, strength, grain_size=3):
+    # Correlated ("clumped") noise: generate at 1/grain_size resolution then
+    # upsample, instead of independent per-pixel white noise. Reads as film
+    # grain rather than sensor static, at a much lower strength for the same
+    # felt effect. Still midtone-weighted (attenuated in shadows/highlights).
     h, w = img.shape[:2]
-    noise = np.random.normal(0, strength*255, (h,w)).astype(np.float32)
+    small_h, small_w = max(1, h//grain_size), max(1, w//grain_size)
+    noise_small = np.random.normal(0, strength*255, (small_h, small_w)).astype(np.float32)
+    noise = cv2.resize(noise_small, (w, h), interpolation=cv2.INTER_CUBIC)
     img_f = img.astype(np.float32)
     gray  = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.float32)/255.0
     weight = 1.0-(2.0*gray-1.0)**2
@@ -338,15 +371,16 @@ img = cv2.imread(str(input_p), cv2.IMREAD_COLOR)
 if img is None:
     print(f"ERROR: Could not read: {input_p}"); sys.exit(1)
 
+if resize_edge > 0:
+    img = resize_to_longest_edge(img, resize_edge)
+
+# Post-processing runs AFTER resize — see UPS_INFERENCE's matching comment.
 if post_mode == 'natural':
     img = apply_edge_sharpen(img, edge_sharpen)
     img = apply_grain(img, grain_strength)
 elif post_mode == 'custom':
     if edge_sharpen > 0: img = apply_edge_sharpen(img, edge_sharpen)
     if grain_strength > 0: img = apply_grain(img, grain_strength)
-
-if resize_edge > 0:
-    img = resize_to_longest_edge(img, resize_edge)
 
 # Keep original extension if possible, fall back to PNG
 ext = input_p.suffix.lower()
@@ -728,7 +762,12 @@ def prompt_ups_options():
 def prompt_finalize_options(label=""):
     """
     Full finalize: grain + sharpen + resize. Used for saved outputs and modes 1/2.
-    Natural defaults: grain=0.015 (subtle), no sharpening — matches chaiNNer workflow.
+    Natural defaults: grain=0.006 (clumped/correlated noise — see apply_grain),
+    sharpen=0.15 (threshold-based unsharp — see apply_edge_sharpen). Retuned
+    2026-08-31: previous defaults (grain=0.015 flat white noise, sharpen=0,
+    applied BEFORE resize) read as "enlarged but grainy" — noise amplified by
+    resize-after-sharpen aliasing, and plain per-pixel noise reads as digital
+    static rather than grain. Both engines now sharpen/grain AFTER resize.
     Returns (post_mode, grain_strength, edge_sharpen, resize_edge).
     """
     header = f"\033[1;93m✨ Finalize{' — ' + label if label else ''}\033[0m"
@@ -747,20 +786,24 @@ def prompt_finalize_options(label=""):
         post_mode = 'none'
     elif post_choice == '2':
         post_mode = 'natural'
-        grain = 0.015   # subtle — matches chaiNNer grain level
-        sharpen = 0.0   # no sharpening by default
+        grain = 0.006    # clumped noise, applied post-resize — see apply_grain
+        sharpen = 0.15   # threshold-based unsharp — see apply_edge_sharpen
     else:
         post_mode = 'custom'
-        g_raw = input("\033[93mGrain strength (0–100, default 15):\033[0m\n > ").strip()
+        # Grain's usable range is small (0.0-0.03ish) so it gets its own
+        # finer 0-30 scale (/1000) rather than reusing sharpen's 0-100 (/100) —
+        # the old shared 0-100 scale meant a blank Enter here (default "15" ->
+        # 0.15) silently gave 10x the grain "Natural" calls subtle (0.015).
+        g_raw = input("\033[93mGrain strength (0–30, subtle–heavy, default 6):\033[0m\n > ").strip()
         try:
-            grain = (int(g_raw) if g_raw else 15) / 100.0
+            grain = (int(g_raw) if g_raw else 6) / 1000.0
         except ValueError:
-            grain = 0.015
-        s_raw = input("\033[93mEdge sharpen (0–100, default 0):\033[0m\n > ").strip()
+            grain = 0.006
+        s_raw = input("\033[93mEdge sharpen (0–100, default 15):\033[0m\n > ").strip()
         try:
-            sharpen = (int(s_raw) if s_raw else 0) / 100.0
+            sharpen = (int(s_raw) if s_raw else 15) / 100.0
         except ValueError:
-            sharpen = 0.0
+            sharpen = 0.15
 
     do_resize = djj.prompt_choice(
         "\033[93mResize to longest edge?\033[0m\n1. Yes\n2. No",

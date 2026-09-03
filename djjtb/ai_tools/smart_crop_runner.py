@@ -48,7 +48,7 @@ def get_op_logger(op_name="crop"):
 
 # ─── Detection — shells out to scvenv, one call for the whole batch ────────
 # Passed to scvenv python via -c so no file needs to live on disk (matches
-# cf_ups_runner.py's UPS_INFERENCE convention). Standard YOLOX letterbox
+# upscaler_ai.py's UPS_INFERENCE convention). Standard YOLOX letterbox
 # preprocessing (pad=114, no normalization) + anchor-free grid decode over
 # strides 8/16/32, filtered to the person class, single best box per image.
 
