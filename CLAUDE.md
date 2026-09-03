@@ -209,6 +209,23 @@ since it's single-user/single-tool, a deliberately different stack from djjtb-su
   choice `14`, via `djj.open_path()` on `run_facefusion_desktop.command` — see the equivalent
   note under djjtb-suite above for why `open_path()` (double-click equivalent) was used instead
   of the venv-sourcing tab launchers.
+- **Audio-copy toggle added (2026-09-03).** Root cause: `facefusion.ini` (in `FACEFUSION_DIR`,
+  the cwd every `headless-run` subprocess runs from) sets `output_audio_volume = 0`, and
+  `build_facefusion_args()` never passed `--output-audio-volume` to override it — so every
+  video-target run silently muted/stripped the target's original audio, regardless of user
+  intent. Fixed by having `build_facefusion_args()` always emit `--output-audio-volume`
+  explicitly (`100` or `0`) based on a new `copy_audio=True` param, threaded through
+  `process_single_headless()` and `process_face_swap()` down from a new prompt in `main()`
+  ("Copy target's audio to output? 1. Yes (copy audio) / 2. No (strip audio)", default Yes).
+  Deliberately not gated on target being a video — the flag is a harmless no-op for image
+  targets (facefusion's audio-restore step only runs on its video code path), so mixed
+  image/video batches don't need per-file detection. **Both params default to `True`**, added
+  strictly as new trailing optional args — confirmed backward-compatible with this GUI's own
+  `backend/jobs.py`, which calls `process_single_headless()` positionally with exactly the
+  prior 7 args (source, target, output, face_enhancer, blend, expression_restorer, factor) and
+  never calls `build_facefusion_args()` directly, so it now gets audio copied by default with
+  zero changes needed on this repo's side. If the GUI ever wants its own audio toggle, it's a
+  new `copy_audio` kwarg to add on that end, not a required change here.
 
 ## joycaption-desktop-ollama-djjtb (desktop GUI built on this repo)
 

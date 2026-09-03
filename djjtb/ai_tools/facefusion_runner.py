@@ -186,15 +186,21 @@ def collect_files_from_folder(input_path, subfolders=False):
     return sorted([str(f) for f in files], key=str.lower)
 
 def build_facefusion_args(face_enhancer=None, face_enhancer_blend=FACE_ENHANCER_DEFAULT_BLEND,
-                          expression_restorer=False, expression_restorer_factor=EXPRESSION_RESTORER_DEFAULT_FACTOR):
+                          expression_restorer=False, expression_restorer_factor=EXPRESSION_RESTORER_DEFAULT_FACTOR,
+                          copy_audio=True):
     """Build FaceFusion arguments from configuration.
     face_enhancer: None = no enhancer, 'gfpgan_1.4' or 'codeformer' = use it
     face_enhancer_blend: 0-100 blend strength
     expression_restorer: True = add expression_restorer to processors list
     expression_restorer_factor: 0-100 restore factor (default 80)
+    copy_audio: True = restore/copy the target's original audio track (video only,
+        harmless no-op for image targets); False = strip it. Passed explicitly
+        because facefusion.ini's own output_audio_volume default is 0 (mute) —
+        without this flag every video run would silently lose its audio.
     """
     args = []
 
+    args.extend(["--output-audio-volume", "100" if copy_audio else "0"])
     args.extend(["--face-mask-padding", str(FACE_MASK_PADDING)])
     args.extend(["--face-mask-blur", str(FACE_MASK_BLUR)])
     args.extend(["--face-selector-gender", str(FACE_SELECTOR_GENDER)])
@@ -501,7 +507,8 @@ def generate_output_filename(source_file, target_file, output_path, add_suffix=T
 
 def process_single_headless(source_file, target_file, output_file,
                             face_enhancer=None, face_enhancer_blend=FACE_ENHANCER_DEFAULT_BLEND,
-                            expression_restorer=False, expression_restorer_factor=EXPRESSION_RESTORER_DEFAULT_FACTOR):
+                            expression_restorer=False, expression_restorer_factor=EXPRESSION_RESTORER_DEFAULT_FACTOR,
+                            copy_audio=True):
     """Process single source to single target using headless-run"""
     cmd = [
         FACEFUSION_VENV_PYTHON, FACEFUSION_SCRIPT_PATH, "headless-run",
@@ -511,7 +518,8 @@ def process_single_headless(source_file, target_file, output_file,
     ]
 
     cmd.extend(build_facefusion_args(face_enhancer, face_enhancer_blend,
-                                     expression_restorer, expression_restorer_factor))
+                                     expression_restorer, expression_restorer_factor,
+                                     copy_audio))
 
     try:
         result = subprocess.run(cmd, cwd=FACEFUSION_DIR,
@@ -532,7 +540,7 @@ def process_face_swap(mode, source_files, target_files, output_path, output_mode
                       target_action, face_enhancer=None,
                       face_enhancer_blend=FACE_ENHANCER_DEFAULT_BLEND,
                       expression_restorer=False, expression_restorer_factor=EXPRESSION_RESTORER_DEFAULT_FACTOR,
-                      include_source_name=True):
+                      include_source_name=True, copy_audio=True):
     """Main processing function that routes to appropriate method"""
 
     print("\n" * 2)
@@ -571,6 +579,7 @@ def process_face_swap(mode, source_files, target_files, output_path, output_mode
         print(f"\033[93m😮 Expression Restorer:\033[0m {EXPRESSION_RESTORER_DEFAULT_MODEL}  factor: {expression_restorer_factor}")
     else:
         print(f"\033[93m😮 Expression Restorer:\033[0m off")
+    print(f"\033[93m🔊 Audio:\033[0m {'Copy from target' if copy_audio else 'Strip'}")
 
     print("\033[92m=\033[0m" * 50)
     print()
@@ -592,7 +601,8 @@ def process_face_swap(mode, source_files, target_files, output_path, output_mode
         success, error_msg = process_single_headless(
             source_file, target_file, output_file,
             face_enhancer, face_enhancer_blend,
-            expression_restorer, expression_restorer_factor
+            expression_restorer, expression_restorer_factor,
+            copy_audio
         )
 
         if success:
@@ -615,7 +625,8 @@ def process_face_swap(mode, source_files, target_files, output_path, output_mode
             success, error_msg = process_single_headless(
                 source_file, target_file, output_file,
                 face_enhancer, face_enhancer_blend,
-                expression_restorer, expression_restorer_factor
+                expression_restorer, expression_restorer_factor,
+                copy_audio
             )
             if success:
                 print(f"\033[92m✅ Done\033[0m")
@@ -644,7 +655,8 @@ def process_face_swap(mode, source_files, target_files, output_path, output_mode
             success, error_msg = process_single_headless(
                 source_file, target_file, output_file,
                 face_enhancer, face_enhancer_blend,
-                expression_restorer, expression_restorer_factor
+                expression_restorer, expression_restorer_factor,
+                copy_audio
             )
 
             if success:
@@ -689,7 +701,8 @@ def process_face_swap(mode, source_files, target_files, output_path, output_mode
                 success, error_msg = process_single_headless(
                     source_file, target_file, output_file,
                     face_enhancer, face_enhancer_blend,
-                    expression_restorer, expression_restorer_factor
+                    expression_restorer, expression_restorer_factor,
+                    copy_audio
                 )
 
                 if success:
@@ -823,6 +836,13 @@ def main():
             print(f"✅ \033[92mExpression Restorer:\033[0m live_portrait  factor: {expression_restorer_factor}")
             print()
 
+        copy_audio = djj.prompt_choice(
+            "\033[93m🔊 Copy target's audio to output?\033[0m\n1. Yes (copy audio)\n2. No (strip audio)",
+            ['1', '2'],
+            default='1'
+        ) == '1'
+        print()
+
         os.system('clear')
         print("\n" * 2)
         print("🔍 Analyzing inputs...")
@@ -861,7 +881,7 @@ def main():
         process_face_swap(mode, source_files, target_files, output_path, output_mode, add_suffix, tag_source,
                           target_action, face_enhancer, face_enhancer_blend,
                           use_expression_restorer, expression_restorer_factor,
-                          include_source_name)
+                          include_source_name, copy_audio)
         
         print()
         action = djj.what_next()
