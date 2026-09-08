@@ -75,10 +75,11 @@ Or double-click `run_djjtb_py.command`.
 
 **2026-08-21 — `comfyui_runner.command` reverted to plain `python3 main.py` (no `tee`/`awk` pipe).** What: removed the startup-noise filter added 2026-07-25. Why: piping stdout through `tee`/`awk` made it a non-tty, so tqdm's sampler progress bar rendered inconsistently in the terminal. How: edited from a ComfyUI-side Claude Code session (confirmed with user first); the per-run `user/comfyui_launch_*.log` file and startup-noise filtering are gone as a side effect — raw output again, matching pre-2026-07-22 behavior.
 | JoyTag | `ai_models/joytag/jtvenv/bin/python` | in-process ONNX inference, no separate script invoked | `joytag_tagger.py` |
-| JoyCaption | `ai_models/joycaption/jcvenv/bin/python3` | runs in-process inside jcvenv | `joycaption_runner.py` |
 | Image Finder | — runs in DJJTB's own venv, no separate `ai_models` venv | self | `image_finder.py` |
-| Open WebUI | — no venv, Docker container (`docker start open-webui`) | — | `open_webui_runner.command` |
-| Smart Crop (AI) | `ai_models/smart_crop/scvenv/bin/python3` (detection only — orchestration/crop runs in DJJTB's own venv) | `ai_models/smart_crop/models/yolox_l.onnx` via an inline detection script run through `scvenv` | `smart_crop_runner.py` (menu: AI Tools → 14) |
+| Open WebUI | — no venv, Docker container (`docker start open-webui`) | — | `open_webui_runner.command` (no longer menu-wired — see below) |
+| Smart Crop (AI) | `ai_models/smart_crop/scvenv/bin/python3` (detection only — orchestration/crop runs in DJJTB's own venv) | `ai_models/smart_crop/models/yolox_l.onnx` via an inline detection script run through `scvenv` | `smart_crop_runner.py` (menu: AI Tools → 12) |
+| GPT-SoVITS webui | — standalone install, own conda env (`GPTSoVits`), not `ai_models` symlink tree | `/Users/home/Documents/ai_models/GPT-SoVITS/GPT_SoVITS/inference_webui.py` | `gptsovits_runner.command` (menu: AI Tools → 13) |
+| IndexTTS-2.5 webui | — standalone install, own `uv`-managed `.venv`, not `ai_models` symlink tree | `/Users/home/Documents/ai_models/IndexTTS-2/webui.py` | `indextts2_runner.command` (menu: AI Tools → 14) |
 
 Standalone `codeformer_runner.py` and `upscaler_runner.py` no longer exist — both fully retired during the `djjtb/bak`/`old_versions` cleanup, superseded by the combined runner row above (confirmed intentional, not an accident: the two were already redundant with the combo runner). Unlike the Watermark Remover retirement below, these weren't parked in `old_versions/` — they're gone from disk, recoverable only via git history if ever needed again. **Renamed `cf_ups_runner.py` → `upscaler_ai.py` (2026-09-01)** — plain rename to match its menu label ("Upscaler AI"), no logic change; `djjtb.py`'s choice "1" dispatch and `smart_crop_runner.py`'s convention-reference comment updated to match. Older entries elsewhere in this file (finalize-effects tuning, CF/UPS order findings, dedup-plan history) still say `cf_ups_runner.py` — left as-is since they're dated history, not live references.
 
@@ -89,6 +90,19 @@ Standalone `codeformer_runner.py` and `upscaler_runner.py` no longer exist — b
 
 Paths resolve on disk, but not in daily use — decide keep/delete per tool, don't assume either way:
 
+- **JoyCaption (jcvenv, non-Ollama) — retired 2026-09-08.** Superseded in daily use by
+  `joycaption_runner_ollama.py` (JoyCaption Beta One served via Ollama) some time ago, but the
+  old jcvenv-based menu entry lingered. Cleaned up alongside the DJJTB.py AI Tools menu
+  renumbering that also added the GPT-SoVITS/IndexTTS-2.5 webui runners: `joycaption_runner.py`
+  moved to `djjtb/old_versions/`, its menu entry removed (choice 6 → JoyCaption Ollama moved up
+  to fill the gap, cascading every entry after it down by one), and `ai_models/joycaption/models/`
+  (16GB of model weights) deleted to reclaim disk space. `ai_models/joycaption/jcvenv` (750MB)
+  deliberately kept as a just-in-case safety net rather than deleted outright — the venv alone
+  is small, and re-downloading the weights later is the expensive part if ever needed again.
+  Same pass also dropped the **Open WebUI** menu entry (old choice 13, at the user's request,
+  unrelated to JoyCaption) — the Docker container and `open_webui_runner.command` file are
+  untouched, only the DJJTB quick-launch shortcut is gone; Open WebUI is still very much live
+  infrastructure elsewhere (see DJJIF's `ai_stack_port_registry.md`).
 - **Watermark Remover — retired.** All 4 variants (`watermark_remover_auto.py`, `watermark_remover_ref.py`, `watermark_remover_pkfpl.py`, `watermark_remover_unified.py`) plus `watermark_remover_settings.txt.py` moved to `djjtb/old_versions/` — slow, imprecise (brush-style, not true inpainting), and superseded by batch inpainting via Qwen Edit. Not wired into `djjtb.py`'s menu. Their shared venv, `ai_models/watermark_remover/wmrmvenv` (**1.08GB**), is now orphaned — flagged for a future disk-space cleanup pass, not deleted yet.
 - **codeformer_runner_liveprompt.py** — same `cfvenv` as the combo runner above, resolves; not wired into `djjtb.py`'s menu.
 - **gfpgan_runner.py** — `ai_models/GFPGAN/gfvenv/bin/python3` + `inference_gfpgan.py`, resolves.

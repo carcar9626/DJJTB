@@ -187,17 +187,15 @@ class DJJTBLauncher:
         print(" 💰 \033[4;93m3\033[0m  Image Finder (AI) 🔎")
         print(" 💰 \033[4;93m4\033[0m  FaceFusion (NSFW Patched) 👿➡︎😇")
         print(" 💰 \033[4;93m5\033[0m  FaceFusion WebUI 🌐 👿➡︎😇")
-        print(" 💰 \033[4;93m6\033[0m  JoyCaption (AI) 🏷️")
-        print(" 💰 \033[4;93m7\033[0m  JoyCaption Ollama (AI) 🏷️")
-        print(" 💰 \033[4;93m8\033[0m  Prompt Assembler 📝")
-        print(" 💰 \033[4;93m9\033[0m  Comfyui Batch Process ▶️")
-        print(" 💰\033[4;93m10\033[0m  OpenCode (Local AI Agent) 🖥️🤖")
-        print(" 💰\033[4;93m11\033[0m  Vocab + Mask Generator 🔤")
-        print(" 💰\033[4;93m12\033[0m  Category Sorter (AI)(CLIP) 🗂️")
-        print(" 💰\033[4;93m13\033[0m  Open WebUI 🌐🧠")
-        print(" 💰\033[4;93m14\033[0m  Smart Crop (AI) ✂️")
-        print(" 💰\033[4;93m15\033[0m  GPT-SoVITS WebUI 🎙️")
-        print(" 💰\033[4;93m16\033[0m  IndexTTS-2.5 WebUI 🎭")
+        print(" 💰 \033[4;93m6\033[0m  JoyCaption Ollama (AI) 🏷️")
+        print(" 💰 \033[4;93m7\033[0m  Prompt Assembler 📝")
+        print(" 💰 \033[4;93m8\033[0m  Comfyui Batch Process ▶️")
+        print(" 💰 \033[4;93m9\033[0m  OpenCode (Local AI Agent) 🖥️🤖")
+        print(" 💰\033[4;93m10\033[0m  Vocab + Mask Generator 🔤")
+        print(" 💰\033[4;93m11\033[0m  Category Sorter (AI)(CLIP) 🗂️")
+        print(" 💰\033[4;93m12\033[0m  Smart Crop (AI) ✂️")
+        print(" 💰\033[4;93m13\033[0m  GPT-SoVITS WebUI 🎙️")
+        print(" 💰\033[4;93m14\033[0m  IndexTTS-2.5 WebUI 🎭")
         print()
         print("\033[1;93m 🤖  AI AGENTS  🤖\033[0m")
         print("\033[92m--------------------------------------------------\033[0m")
@@ -468,7 +466,7 @@ class DJJTBLauncher:
         while True:
             self.show_ai_tools_menu()
             choice = djj.prompt_choice("\033[93mChoose an AI tool\033[0m",
-                                     ['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','hm','cu','ch','cw','cj', 'jc','atk', '0', '00'])
+                                     ['1','2','3','4','5','6','7','8','9','10','11','12','13','14','hm','cu','ch','cw','cj', 'jc','atk', '0', '00'])
             """
             if choice == "1":  # Prompt Randomizer
                 djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path}/djjtb/ai_tools/; python3 -m djjtb.media_tools.ai_tools.prompt_randomizer")
@@ -490,35 +488,26 @@ class DJJTBLauncher:
             elif choice == "5":  # FaceFusion webUI
                 command = (f"{self.project_path}/djjtb/ai_tools/run_facefusion.command")
                 djj.open_terminal_with_settings(command, "tagger", "525, 120, 1225, 700")
-            elif choice == "6":  # JoyCaption
-                djj.run_command_in_tab(
-                  f"source /Users/home/Documents/ai_models/joycaption/jcvenv/bin/activate; "
-                  f"cd {self.project_path}/; python3 -m djjtb.ai_tools.joycaption_runner"
-              )
-            elif choice == "7":  # JoyCaption via Ollama (GGUF, no dedicated venv needed)
+            elif choice == "6":  # JoyCaption via Ollama (GGUF, no dedicated venv needed)
                 djj.run_script_in_tab("djjtb.ai_tools.joycaption_runner_ollama", self.venv_path, self.project_path)
-            elif choice == "8":  # Prompt Assembler
+            elif choice == "7":  # Prompt Assembler
                 command = ("/Users/home/Documents/Scripts/DJJPA/prompt_assembler_runner.command")
                 djj.open_terminal_with_settings(command, "comfyui", "1000, 120, 1700, 700")
-            elif choice == "9":  # ComfyUI batch
+            elif choice == "8":  # ComfyUI batch
                 djj.run_script_in_tab("djjtb.ai_tools.comfyui.comfyui_batch", self.venv_path, self.project_path)
-            elif choice == "10":  # OpenCode
+            elif choice == "9":  # OpenCode
                 command = f"cd {self.project_path}; opencode"
                 djj.open_terminal_with_settings(command, "home_profile", "1000, 120, 1700, 700")
-            elif choice == "11":  # Vocab + Mask Generator
+            elif choice == "10":  # Vocab + Mask Generator
                 djj.run_script_in_tab("djjtb.ai_tools.vocab_mask_generator", self.venv_path, self.project_path)
-            elif choice == "12":  # Category Sorter
+            elif choice == "11":  # Category Sorter
                 djj.run_script_in_tab("djjtb.ai_tools.category_sorter.category_sorter", self.venv_path, self.project_path)
-            elif choice == "13":  # Open WebUI — just starts the docker container + opens the web app, no terminal needed
-                subprocess.run(["docker", "start", "open-webui"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                subprocess.run(["open", "/Users/home/Applications/Open WebUI.app"])
-                djj.wait_with_skip(2, "Launching Open WebUI")
-            elif choice == "14":  # Smart Crop (AI) — orchestration in main venv, detection shells to its own scvenv
+            elif choice == "12":  # Smart Crop (AI) — orchestration in main venv, detection shells to its own scvenv
                 djj.run_script_in_tab("djjtb.ai_tools.smart_crop_runner", self.venv_path, self.project_path)
-            elif choice == "15":  # GPT-SoVITS WebUI — standalone install, own conda env
+            elif choice == "13":  # GPT-SoVITS WebUI — standalone install, own conda env
                 command = (f"{self.project_path}/djjtb/ai_tools/gptsovits_runner.command")
                 djj.open_terminal_with_settings(command, "comfyui", "1000, 120, 1700, 700")
-            elif choice == "16":  # IndexTTS-2.5 WebUI — standalone install, own uv venv
+            elif choice == "14":  # IndexTTS-2.5 WebUI — standalone install, own uv venv
                 command = (f"{self.project_path}/djjtb/ai_tools/indextts2_runner.command")
                 djj.open_terminal_with_settings(command, "comfyui", "1000, 120, 1700, 700")
             elif choice == "hm":  # Hermes Helper
