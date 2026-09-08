@@ -717,7 +717,7 @@ class DJJTBLauncher:
 
         elif choice == "15":  # Upscaler AI (upscaler-ai-desktop-djjtb desktop GUI) — opened like a double-click, own Terminal window/profile
             print("\033[93mLaunching Upscaler AI...\033[0m")
-            djj.open_path("/Users/home/Documents/Scripts/DJJPS/upscaler-ai-desktp-djjtb/run_upscaler_ai_desktop.command")
+            djj.open_path("/Users/home/Documents/Scripts/DJJPS/upscaler-ai-desktop-djjtb/run_upscaler_ai_desktop.command")
             time.sleep(2)
 
 

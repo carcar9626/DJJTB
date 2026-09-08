@@ -316,15 +316,20 @@ cropped) before being called done.
 
 ## upscaler-ai-desktop-djjtb (desktop GUI built on this repo)
 
-`/Users/home/Documents/Scripts/DJJPS/upscaler-ai-desktp-djjtb` (folder name carries its own
-typo — "desktp" — left as-is, matches what's actually on disk) is a standalone pywebview + React
+`/Users/home/Documents/Scripts/DJJPS/upscaler-ai-desktop-djjtb` is a standalone pywebview + React
 desktop GUI wrapping `djjtb/ai_tools/upscaler_ai.py` ("CF + UPS Runner": CodeFormer face restore
 + selectable RRDBNet upscaler, 4 modes) — same pattern as the other three (pywebview `js_api`
 bridge, no HTTP/FastAPI), not a djjtb-suite feature. Built 2026-09-03. See its own CLAUDE.md for
 full architecture; pushed to GitHub, private, `main` branch. Dock/Cmd+Tab icon applied and
-verified the same external-process way as the others (`DJJ_mono_fixed_v2_Upcaler_ai.png` —
-that asset's own filename typo, "Upcaler", also left as-is for now, user says they'll fix both
-typos later).
+verified the same external-process way as the others (`DJJ_mono_fixed_v2_Upcaler_ai.png` — that
+asset's own filename typo, "Upcaler", left as-is for now, user says they'll fix it later).
+
+**Folder/repo typo fixed 2026-09-08**: both the local folder and the GitHub repo were originally
+created as `...-desktp-djjtb` (missing the "o" in "desktop") — renamed to `...-desktop-djjtb` on
+both sides. This file and `djjtb.py`'s choice-15 launcher path (line ~720) were updated to match;
+the app's own venv and frontend `node_modules`/`dist` were deleted and rebuilt fresh at the new
+path rather than just moved, since the venv's activation scripts bake in the absolute install
+path.
 
 - Installed as an editable dependency into *its own* venv (`pip install -e
   /Users/home/Documents/Scripts/DJJTB`), same pattern as the other three. Confirmed pulling in
