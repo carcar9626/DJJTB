@@ -196,6 +196,8 @@ class DJJTBLauncher:
         print(" 💰\033[4;93m12\033[0m  Category Sorter (AI)(CLIP) 🗂️")
         print(" 💰\033[4;93m13\033[0m  Open WebUI 🌐🧠")
         print(" 💰\033[4;93m14\033[0m  Smart Crop (AI) ✂️")
+        print(" 💰\033[4;93m15\033[0m  GPT-SoVITS WebUI 🎙️")
+        print(" 💰\033[4;93m16\033[0m  IndexTTS-2.5 WebUI 🎭")
         print()
         print("\033[1;93m 🤖  AI AGENTS  🤖\033[0m")
         print("\033[92m--------------------------------------------------\033[0m")
@@ -466,7 +468,7 @@ class DJJTBLauncher:
         while True:
             self.show_ai_tools_menu()
             choice = djj.prompt_choice("\033[93mChoose an AI tool\033[0m",
-                                     ['1','2','3','4','5','6','7','8','9','10','11','12','13','14','hm','cu','ch','cw','cj', 'jc','atk', '0', '00'])
+                                     ['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','hm','cu','ch','cw','cj', 'jc','atk', '0', '00'])
             """
             if choice == "1":  # Prompt Randomizer
                 djj.run_command_in_tab(f"source {self.venv_path}; cd {self.project_path}/djjtb/ai_tools/; python3 -m djjtb.media_tools.ai_tools.prompt_randomizer")
@@ -513,6 +515,12 @@ class DJJTBLauncher:
                 djj.wait_with_skip(2, "Launching Open WebUI")
             elif choice == "14":  # Smart Crop (AI) — orchestration in main venv, detection shells to its own scvenv
                 djj.run_script_in_tab("djjtb.ai_tools.smart_crop_runner", self.venv_path, self.project_path)
+            elif choice == "15":  # GPT-SoVITS WebUI — standalone install, own conda env
+                command = (f"{self.project_path}/djjtb/ai_tools/gptsovits_runner.command")
+                djj.open_terminal_with_settings(command, "comfyui", "1000, 120, 1700, 700")
+            elif choice == "16":  # IndexTTS-2.5 WebUI — standalone install, own uv venv
+                command = (f"{self.project_path}/djjtb/ai_tools/indextts2_runner.command")
+                djj.open_terminal_with_settings(command, "comfyui", "1000, 120, 1700, 700")
             elif choice == "hm":  # Hermes Helper
                 result = self.handle_hermes_helper()
                 if result == "main_menu":
