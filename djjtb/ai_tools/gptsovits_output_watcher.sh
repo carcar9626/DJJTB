@@ -8,7 +8,7 @@
 # Meant to be launched in the background by gptsovits_runner.command, not run
 # standalone. Loops until killed.
 
-DEST="/Volumes/Movies_2SSD/UD_Gens/Characters/TTS_SD/Output/WebUI"
+DEST="/Volumes/Movies_2SSD/UD_Gens/Characters/TTS_SD/Output/GPT-SoVIT"
 GRADIO_TMP="${TMPDIR%/}/gradio"
 SEEN_LOG="/tmp/gptsovits_watcher_seen.txt"
 PIDFILE="/tmp/gptsovits_watcher.pid"
