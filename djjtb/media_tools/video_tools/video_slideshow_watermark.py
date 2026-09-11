@@ -145,6 +145,46 @@ def build_slideshow_native_size(images, image_duration, video_duration, output_p
 
     concat_list.unlink(missing_ok=True)
 
+def build_slideshow_fixed_width(images, image_duration, video_duration, target_width, output_path, fps=30):
+    """
+    Build a slideshow scaled to a fixed width (height auto, aspect preserved).
+    Used by Split Composite mode for the two side-column slideshows, which
+    need a known width so they can be stacked and cropped to fit their cell.
+    """
+    concat_list = output_path.with_suffix(".txt")
+    loop_count = max(1, int(video_duration // (image_duration * len(images))) + 1)
+
+    with open(concat_list, "w") as f:
+        for _ in range(loop_count):
+            for img in images:
+                f.write(f"file '{os.path.abspath(img)}'\n")
+                f.write(f"duration {image_duration}\n")
+        f.write(f"file '{os.path.abspath(images[-1])}'\n")
+
+    safe_width = target_width if target_width % 2 == 0 else target_width - 1
+
+    print(f"🛠️ Building slideshow for: {output_path.name}")
+    print(f"   {len(images)} images x {loop_count} loops → width {safe_width} | {fps}fps")
+
+    subprocess.run([
+        "ffmpeg", "-y",
+        "-f", "concat", "-safe", "0",
+        "-i", str(concat_list),
+        "-vf", f"scale={safe_width}:-2",
+        "-r", str(fps),
+        "-pix_fmt", "yuv420p",
+        "-color_range", "mpeg",
+        "-t", str(video_duration),
+        str(output_path),
+    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    if not output_path.exists() or output_path.stat().st_size == 0:
+        print(f"❌ Failed to generate slideshow: {output_path.name}")
+    else:
+        print(f"✅ Slideshow created: {output_path}")
+
+    concat_list.unlink(missing_ok=True)
+
 # Block 3 – Overlay slideshow with flexible positioning
 def get_overlay_position(position_choice):
     """Get overlay position coordinates based on user choice"""
@@ -675,7 +715,205 @@ def process_collage_join_flat(parent, position, audio_choice,
         print()
 
 
-# Block 10 – Main Loop
+# Block 10 – Split Composite (Mode 6) processors
+def compose_split_screen(video_path, slideshow_bottom_path, slideshow_top_path, output_path, side_choice, audio_choice):
+    """
+    Composite a full-height 9:16 video alongside a 2-cell stacked column of
+    cropped slideshows, into one 8:9 canvas.
+
+    H  = video's native height (kept full, uncropped)
+    W  = H * 8/9              (target 8:9 canvas width)
+    Wm = H * video_w/video_h  (main column width, native aspect preserved)
+    Ws = W - Wm               (side column width, split into 2 cells of H/2)
+
+    side_choice: '1' = slideshows on left (video on right), '2' = slideshows on right (video on left)
+    slideshow_bottom_path: fills the BOTTOM cell, cropped to keep its TOP portion (chops off the bottom)
+    slideshow_top_path:    fills the TOP cell, cropped to keep its BOTTOM portion (chops off the top)
+    """
+    video_duration, video_width, video_height, fps = get_video_info(str(video_path))
+    if not video_duration or not video_width or not video_height:
+        print(f"  ❌ Could not read video info: {video_path}")
+        return False
+
+    H = video_height if video_height % 2 == 0 else video_height - 1
+    W = int(round(H * 8 / 9 / 2)) * 2
+    Wm = int(round(H * video_width / video_height / 2)) * 2
+    Ws = W - Wm
+    cell_h = H // 2
+    cell_h = cell_h if cell_h % 2 == 0 else cell_h - 1
+
+    if Ws <= 0:
+        print(f"  ❌ Video isn't tall/narrow enough for an 8:9 split composite "
+              f"(main column alone is {Wm}px, target canvas is {W}px wide). Skipping.")
+        return False
+
+    main_scale = f"[0:v]scale={Wm}:{H}[main]"
+    bottom_crop = f"[1:v]scale={Ws}:-2,crop={Ws}:{cell_h}:0:0[bot]"
+    top_crop = f"[2:v]scale={Ws}:-2,crop={Ws}:{cell_h}:0:ih-{cell_h}[top]"
+    side_stack = "[top][bot]vstack=inputs=2[side]"
+
+    if side_choice == '1':  # slideshows on left, video on right
+        final_stack = "[side][main]hstack=inputs=2[out]"
+    else:  # slideshows on right, video on left
+        final_stack = "[main][side]hstack=inputs=2[out]"
+
+    filter_complex = f"{main_scale};{bottom_crop};{top_crop};{side_stack};{final_stack}"
+
+    if audio_choice == '3':
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", str(video_path),
+            "-i", str(slideshow_bottom_path),
+            "-i", str(slideshow_top_path),
+            "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
+            "-filter_complex", filter_complex,
+            "-map", "[out]", "-map", "3:a",
+            "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+            "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest",
+            str(output_path)
+        ]
+    else:
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", str(video_path),
+            "-i", str(slideshow_bottom_path),
+            "-i", str(slideshow_top_path),
+            "-filter_complex", filter_complex,
+            "-map", "[out]",
+        ]
+        if audio_choice == '1':
+            cmd += ["-map", "0:a?", "-c:a", "aac"]
+        cmd += [
+            "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+            "-pix_fmt", "yuv420p", "-shortest",
+            str(output_path)
+        ]
+
+    result = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    if result.returncode != 0:
+        print(f"  ❌ FFmpeg error:\n{result.stderr[-300:]}")
+        return False
+    return True
+
+
+def process_split_composite_folder(folder, image_duration, image_duration2, side_choice, audio_choice):
+    """
+    Subfolder mode for Split Composite.
+    Expects exactly 1 video + images per subfolder.
+    Splits the images into 2 groups (same split_images_for_two logic as
+    Slideshow Only), builds 2 slideshows sized to the side column's width,
+    then composites them alongside the video into one 8:9 split-screen video.
+    Output: parent/Output/Split_Composite/
+    """
+    videos = [f for f in os.listdir(folder) if f.lower().endswith(VIDEO_EXTS)]
+    if len(videos) != 1:
+        print(f"  ⚠️  Skipping {Path(folder).name}: needs exactly 1 video (found {len(videos)})")
+        return
+
+    video_path = os.path.join(folder, videos[0])
+    video_stem = Path(video_path).stem
+
+    images = sorted([
+        os.path.join(folder, f) for f in os.listdir(folder)
+        if f.lower().endswith(IMAGE_EXTS)
+    ])
+    if not images:
+        print(f"  ⚠️  No images found in {Path(folder).name}, skipping.")
+        return
+
+    video_duration, video_width, video_height, fps = get_video_info(video_path)
+    if not video_duration:
+        print(f"  ❌ Could not get video duration: {video_path}")
+        return
+
+    out_dir = Path(folder).parent / "Output" / "Split_Composite"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    H = video_height if video_height % 2 == 0 else video_height - 1
+    W = int(round(H * 8 / 9 / 2)) * 2
+    Wm = int(round(H * video_width / video_height / 2)) * 2
+    Ws = W - Wm
+
+    group_bottom, group_top = split_images_for_two(images)
+
+    temp_bottom = Path(folder) / f"{video_stem}_temp_split_bottom.mp4"
+    temp_top = Path(folder) / f"{video_stem}_temp_split_top.mp4"
+
+    build_slideshow_fixed_width(group_bottom, image_duration, video_duration, Ws, temp_bottom, fps=fps)
+    build_slideshow_fixed_width(group_top, image_duration2, video_duration, Ws, temp_top, fps=fps)
+
+    output_path = out_dir / f"{video_stem}_split.mp4"
+    print(f"  🔀 Compositing split screen...")
+    success = compose_split_screen(video_path, temp_bottom, temp_top, output_path, side_choice, audio_choice)
+
+    temp_bottom.unlink(missing_ok=True)
+    temp_top.unlink(missing_ok=True)
+
+    if success:
+        print(f"  ✅ Output: {output_path.name}")
+    print()
+
+
+def process_split_composite_flat(parent, image_duration, image_duration2, side_choice, audio_choice):
+    """
+    Flat mode for Split Composite. Pairs each video with matching-stem images.
+    Output: parent/Output/Split_Composite/
+    """
+    videos = sorted([f for f in os.listdir(parent) if f.lower().endswith(VIDEO_EXTS)])
+    total = len(videos)
+    if total == 0:
+        print("⚠️  No videos found in folder.")
+        return
+
+    out_dir = Path(parent) / "Output" / "Split_Composite"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    for idx, video_file in enumerate(videos, 1):
+        percent = int((idx / total) * 100)
+        print(f"\033[93m🔀 Processing \033[0m{idx}\033[93m/\033[0m{total} ({percent}%)\033[93m...\033[0m")
+
+        video_path = os.path.join(parent, video_file)
+        video_stem = Path(video_file).stem
+
+        images = sorted([
+            os.path.join(parent, f) for f in os.listdir(parent)
+            if f.lower().endswith(IMAGE_EXTS) and Path(f).stem.startswith(video_stem)
+        ])
+        if not images:
+            print(f"  ⚠️  No matching images for {video_file}, skipping.")
+            continue
+
+        video_duration, video_width, video_height, fps = get_video_info(video_path)
+        if not video_duration:
+            print(f"  ❌ Could not get video duration: {video_path}")
+            continue
+
+        H = video_height if video_height % 2 == 0 else video_height - 1
+        W = int(round(H * 8 / 9 / 2)) * 2
+        Wm = int(round(H * video_width / video_height / 2)) * 2
+        Ws = W - Wm
+
+        group_bottom, group_top = split_images_for_two(images)
+
+        temp_bottom = Path(parent) / f"{video_stem}_temp_split_bottom.mp4"
+        temp_top = Path(parent) / f"{video_stem}_temp_split_top.mp4"
+
+        build_slideshow_fixed_width(group_bottom, image_duration, video_duration, Ws, temp_bottom, fps=fps)
+        build_slideshow_fixed_width(group_top, image_duration2, video_duration, Ws, temp_top, fps=fps)
+
+        output_path = out_dir / f"{video_stem}_split.mp4"
+        print(f"  🔀 Compositing split screen...")
+        success = compose_split_screen(video_path, temp_bottom, temp_top, output_path, side_choice, audio_choice)
+
+        temp_bottom.unlink(missing_ok=True)
+        temp_top.unlink(missing_ok=True)
+
+        if success:
+            print(f"  ✅ Output: {output_path.name}")
+        print()
+
+
+# Block 11 – Main Loop
 def main():
     print()
     print()
@@ -692,8 +930,8 @@ def main():
 
         # ── Step 2: top-level mode ──────────────────────────────────────────
         top_mode = djj.prompt_choice(
-            "🎬 What would you like to do?\n1. Slideshow + Watermark\n2. Slideshow Only\n3. Image Join\n4. Slideshow + Join\n5. Collage + Join",
-            ['1', '2', '3', '4', '5'],
+            "🎬 What would you like to do?\n1. Slideshow + Watermark\n2. Slideshow Only\n3. Image Join\n4. Slideshow + Join\n5. Collage + Join\n6. Split Composite (video + 2 slideshows → 8:9)",
+            ['1', '2', '3', '4', '5', '6'],
             default='1'
         )
         print()
@@ -979,6 +1217,61 @@ def main():
                     process_collage_join_folder(sub, position, audio_choice, collage_direction, collage_longest_edge)
 
             out_folder = Path(parent) / "Output" / "Collage_Joined"
+            djj.prompt_open_folder(str(out_folder) if out_folder.exists() else parent)
+
+        # ── SPLIT COMPOSITE branch ───────────────────────────────────────────
+        elif top_mode == '6':
+
+            mode = djj.prompt_choice(
+                "📂 Are files in subfolders?\n1. Yes (per-video subfolders), 2. No (flat folder) ",
+                ['1', '2'],
+                default='1'
+            )
+            is_flat_mode = mode == '2'
+            print()
+
+            def ask_split_duration(label):
+                val = djj.get_float_input(label, min_val=0.1, max_val=30.0)
+                return val if val is not None else 3.0
+
+            print("\033[93mℹ️  Images will be split as evenly as possible between the two side slideshows.\033[0m")
+            print()
+
+            image_duration = ask_split_duration(
+                "🕒 Bottom slideshow — duration per slide (default 3, decimals ok e.g. 2.5): "
+            )
+            image_duration2 = ask_split_duration(
+                "🕒 Top slideshow — duration per slide (default 3, decimals ok e.g. 2.5): "
+            )
+            print()
+
+            print("\033[93m🖼️  Slideshow Position:\033[0m")
+            print("1. Left   (video on right)")
+            print("2. Right  (video on left)")
+            side_choice = djj.prompt_choice("\033[93mChoice\033[0m", ['1', '2'], default='1')
+            print()
+
+            print("\033[93m🔊 Audio:\033[0m")
+            print("1. Keep video's audio")
+            print("2. Strip audio")
+            print("3. Add silent audio track")
+            audio_choice = djj.prompt_choice("\033[93mChoice\033[0m", ['1', '2', '3'], default='1')
+            print()
+
+            if is_flat_mode:
+                process_split_composite_flat(parent, image_duration, image_duration2, side_choice, audio_choice)
+            else:
+                subdirs = [
+                    os.path.join(parent, d) for d in sorted(os.listdir(parent))
+                    if os.path.isdir(os.path.join(parent, d))
+                ]
+                total = len(subdirs)
+                for idx, sub in enumerate(subdirs, 1):
+                    percent = int((idx / total) * 100)
+                    print(f"\033[93m🔀 Processing folder \033[0m{idx}\033[93m/\033[0m{total} ({percent}%)\033[93m...\033[0m")
+                    process_split_composite_folder(sub, image_duration, image_duration2, side_choice, audio_choice)
+
+            out_folder = Path(parent) / "Output" / "Split_Composite"
             djj.prompt_open_folder(str(out_folder) if out_folder.exists() else parent)
 
         # ── What Next ───────────────────────────────────────────────────────
