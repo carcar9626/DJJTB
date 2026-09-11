@@ -842,7 +842,7 @@ def process_split_composite_folder(folder, image_duration, image_duration2, side
     build_slideshow_fixed_width(group_bottom, image_duration, video_duration, Ws, temp_bottom, fps=fps)
     build_slideshow_fixed_width(group_top, image_duration2, video_duration, Ws, temp_top, fps=fps)
 
-    output_path = out_dir / f"{video_stem}_split.mp4"
+    output_path = out_dir / f"{video_stem}{djj.position_suffix(side_choice)}.mp4"
     print(f"  🔀 Compositing split screen...")
     success = compose_split_screen(video_path, temp_bottom, temp_top, output_path, side_choice, audio_choice)
 
@@ -901,7 +901,7 @@ def process_split_composite_flat(parent, image_duration, image_duration2, side_c
         build_slideshow_fixed_width(group_bottom, image_duration, video_duration, Ws, temp_bottom, fps=fps)
         build_slideshow_fixed_width(group_top, image_duration2, video_duration, Ws, temp_top, fps=fps)
 
-        output_path = out_dir / f"{video_stem}_split.mp4"
+        output_path = out_dir / f"{video_stem}{djj.position_suffix(side_choice)}.mp4"
         print(f"  🔀 Compositing split screen...")
         success = compose_split_screen(video_path, temp_bottom, temp_top, output_path, side_choice, audio_choice)
 
