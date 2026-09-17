@@ -450,10 +450,28 @@ def find_cf_output(cf_output_dir, original_stem, cf_suffix, video=False):
     original_stem (case-insensitive). Among those, prefer the one whose stem
     is longest (most specific match). Return None only if nothing matches.
     Pass video=True to look for a video output instead of an image.
+
+    The real composited result always lands as a direct child of
+    cf_output_dir. CF also writes per-face crops into cropped_faces/ and
+    restored_faces/ subdirs whose filenames incidentally start with the same
+    stem but run LONGER (they append a "_00" face index before the suffix,
+    e.g. "{stem}_00_CF.png" vs. the real result's "{stem}_CF.png") — so a
+    naive longest-stem search over the whole tree picks the face crop over
+    the actual result every time. Search direct children first and only
+    fall back to the full recursive scan (which can surface those subdir
+    files) if nothing matches at the top level.
     """
     base = pathlib.Path(cf_output_dir)
     original_lower = original_stem.lower()
     match_exts = set(VIDEO_EXTS) if video else {'.png', '.jpg', '.jpeg', '.tiff', '.tif', '.bmp'}
+
+    direct_candidates = [
+        p for p in base.iterdir()
+        if p.is_file() and p.suffix.lower() in match_exts
+        and p.stem.lower().startswith(original_lower)
+    ]
+    if direct_candidates:
+        return max(direct_candidates, key=lambda p: len(p.stem))
 
     candidates = []
     for path in base.rglob("*"):

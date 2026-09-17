@@ -32,6 +32,17 @@ AR_PRESETS = [
     ("1:1", 1, 1),
 ]
 
+# Output filename suffix per preset, matching media_sorter.py's aspect-ratio
+# tag convention — only the categories that have a preset here are included.
+AR_SUFFIXES = {
+    (8, 9): "_Phf",
+    (3, 4): "_P34",
+    (4, 3): "_L43",
+    (9, 16): "_916",
+    (16, 9): "_169",
+    (1, 1): "_SQR",
+}
+
 
 def get_op_logger(op_name="crop"):
     log_file = LOG_DIR / f"smart_crop_{op_name}_log.txt"
@@ -296,6 +307,8 @@ def smart_crop_images(images, ar_w, ar_h, conf_thresh, resize_target=None, logge
 
     print(f"\033[93mCropping to {ar_w}:{ar_h}...\033[0m")
 
+    suffix = AR_SUFFIXES.get((ar_w, ar_h), "_smartcrop")
+
     successful, failed, skipped, no_detection = [], [], [], []
     output_dirs_used = set()
 
@@ -318,7 +331,7 @@ def smart_crop_images(images, ar_w, ar_h, conf_thresh, resize_target=None, logge
                 img_path_obj = pathlib.Path(img_path)
                 img_output_dir = img_path_obj.parent / "Output" / "SmartCrop"
                 img_output_dir.mkdir(parents=True, exist_ok=True)
-                output_path = img_output_dir / f"{img_path_obj.stem}_smartcrop{file_ext}"
+                output_path = img_output_dir / f"{img_path_obj.stem}{suffix}{file_ext}"
 
                 if output_path.exists():
                     skipped.append(img_path_obj.name)
