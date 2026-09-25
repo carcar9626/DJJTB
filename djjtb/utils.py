@@ -445,10 +445,11 @@ def get_multifile_input(prompt_text="📁 Enter file paths", extensions=None, ma
             elif path_obj.is_dir():
                 # Collect files from directory
                 dir_files = []
-                for file_path in path_obj.rglob('*'):
-                    if (file_path.is_file() and
-                        (not extensions or file_path.suffix.lower() in extensions)):
-                        dir_files.append(str(file_path))
+                for root, _, fnames in walk_dirs(path_obj):
+                    for fname in fnames:
+                        fp = pathlib.Path(root) / fname
+                        if not extensions or fp.suffix.lower() in extensions:
+                            dir_files.append(str(fp))
                 
                 if dir_files:
                     valid_files.extend(sorted(dir_files))
@@ -517,10 +518,13 @@ def parse_multipath_input(raw_input, extensions=None, include_subfolders=False):
                 if not extensions or path_obj.suffix.lower() in extensions:
                     valid_files.append(str(path_obj))
             elif path_obj.is_dir():
-                walker = path_obj.rglob('*') if include_subfolders else path_obj.glob('*')
+                if include_subfolders:
+                    candidates = (pathlib.Path(r) / f for r, _, fs in walk_dirs(path_obj) for f in fs)
+                else:
+                    candidates = (f for f in path_obj.glob('*') if f.is_file())
                 valid_files.extend(
-                    str(f) for f in walker
-                    if f.is_file() and (not extensions or f.suffix.lower() in extensions)
+                    str(f) for f in candidates
+                    if not extensions or f.suffix.lower() in extensions
                 )
         except Exception:
             continue
@@ -1106,7 +1110,7 @@ def collect_media_files(input_path, extensions=None):
         return [str(input_path)] if input_path.suffix.lower() in extensions else []
     elif input_path.is_dir():
         media_files = []
-        for root, _, files in os.walk(input_path):
+        for root, _, files in walk_dirs(input_path):
             for file in sorted(files):
                 if file.lower().endswith(extensions):
                     media_files.append(os.path.join(root, file))
@@ -1280,6 +1284,7 @@ def run_again():
 # Re-exported here so all existing scripts using djj.* continue to work unchanged.
 
 from djjtb.media_utils import (
+    walk_dirs,
     make_even_dimensions,
     get_pad_filter,
     get_gif_dimensions,

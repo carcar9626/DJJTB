@@ -195,13 +195,13 @@ def check_xmp_files_in_folder(folder_path, extensions=('.jpg', '.jpeg', '.png', 
     """Check XMP file status for all images in a folder."""
     folder_path = pathlib.Path(folder_path)
 
-    images = []
-    scan = folder_path.rglob if include_subfolders else folder_path.glob
-    for ext in extensions:
-        images.extend(scan(f'*{ext}'))
-        images.extend(scan(f'*{ext.upper()}'))
-
-    images = [str(img) for img in images]
+    exts = tuple(e.lower() for e in extensions)
+    if include_subfolders:
+        images = [os.path.join(r, f) for r, _, fs in walk_dirs(folder_path)
+                  for f in fs if f.lower().endswith(exts)]
+    else:
+        images = [str(f) for f in folder_path.iterdir()
+                  if f.is_file() and f.name.lower().endswith(exts)]
     without_xmp, with_xmp, stats = filter_images_without_xmp(images, show_stats=False)
 
     return {
@@ -213,6 +213,35 @@ def check_xmp_files_in_folder(folder_path, extensions=('.jpg', '.jpeg', '.png', 
         'sample_with_xmp': with_xmp[:5] if with_xmp else [],
         'sample_without_xmp': without_xmp[:5] if without_xmp else []
     }
+
+
+# ─── Directory Walking (symlink-aware) ───────────────────────────────────────
+
+def walk_dirs(root, prune_output=True):
+    """
+    Drop-in os.walk() that follows symlinked directories — use this instead of
+    os.walk/rglob for ANY folder scan in DJJTB, so a folder made of symlinks to
+    other folders works like a real one.
+
+    Yields (dirpath, dirnames, filenames) like os.walk, with three differences:
+    - symlinked directories are descended into (plain os.walk/rglob skip them)
+    - each real directory is visited once (realpath-tracked), so symlink loops
+      or two links to the same folder can't recurse forever or double-count
+    - 'Output' folders are pruned (prune_output=True) and broken symlinks
+      are dropped from filenames
+    Paths keep the symlinked route (link/sub/img.png), not the resolved target.
+    """
+    seen = set()
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=True):
+        real = os.path.realpath(dirpath)
+        if real in seen:
+            dirnames[:] = []
+            continue
+        seen.add(real)
+        if prune_output:
+            dirnames[:] = [d for d in dirnames if d.lower() != 'output']
+        dirnames.sort(key=str.lower)
+        yield dirpath, dirnames, [f for f in filenames if os.path.exists(os.path.join(dirpath, f))]
 
 
 # ─── Image Collection & Validation Helpers ───────────────────────────────────
@@ -254,9 +283,7 @@ def collect_images_from_folder(folder_path, include_subfolders=False, extensions
     images = []
     if folder_path_obj.is_dir():
         if include_subfolders:
-            for root, dirs, files in os.walk(folder_path):
-                # Prune Output folders in-place so walk never descends into them
-                dirs[:] = [d for d in dirs if d.lower() != 'output']
+            for root, dirs, files in walk_dirs(folder_path):
                 images.extend(pathlib.Path(root) / f for f in files if pathlib.Path(f).suffix.lower() in extensions)
         else:
             images = [f for f in folder_path_obj.glob('*') if f.suffix.lower() in extensions and f.is_file()]
@@ -348,9 +375,7 @@ def collect_videos_from_folder(folder_path, include_subfolders=False):
     videos = []
     if folder_path_obj.is_dir():
         if include_subfolders:
-            for root, dirs, files in os.walk(folder_path):
-                # Prune Output folders in-place so walk never descends into them
-                dirs[:] = [d for d in dirs if d.lower() != 'output']
+            for root, dirs, files in walk_dirs(folder_path):
                 videos.extend(pathlib.Path(root) / f for f in files if pathlib.Path(f).suffix.lower() in VIDEO_EXTENSIONS)
         else:
             videos = [f for f in folder_path_obj.glob('*') if f.suffix.lower() in VIDEO_EXTENSIONS and f.is_file()]

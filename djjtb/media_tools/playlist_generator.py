@@ -17,7 +17,7 @@ def collect_media_files(input_path, include_subfolders=False):
     elif input_path.is_dir():
         media_files = []
         if include_subfolders:
-            for root, _, files in os.walk(input_path):
+            for root, _, files in djj.walk_dirs(input_path):
                 for file in sorted(files):
                     if file.lower().endswith(MEDIA_EXTENSIONS):
                         media_files.append(os.path.join(root, file))
