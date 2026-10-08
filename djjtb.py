@@ -294,7 +294,8 @@ class DJJTBLauncher:
         print(" 💰 \033[4;93m7\033[0m  VLC Screenshot Renamer 📸")
         print(" 💰 \033[4;93m8\033[0m  Mount Movies 4,8 & SC 💽")
         print(" 💰\033[4;93m8a\033[0m  Unmount Movies 4,8 & SC ⏏️")
-        # print(" 💰 \033[4;93m9\033[0m  Stop ComfyUI 🛑")
+        print(" 💰 \033[4;93m9\033[0m  Port Manager (check/restart/stop) 🔌")
+        # print(" 💰\033[4;93m10\033[0m  Stop ComfyUI 🛑")
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰 \033[4;93m0\033[0m  ⏪ Back")
         print(" 💰\033[4;93m00\033[0m ⏮️  MAIN MENU")
@@ -737,7 +738,7 @@ class DJJTBLauncher:
 
         while True:
             self.show_admin_tools_menu()
-            choice = djj.prompt_choice("\033[91mChoose an admin tool\033[0m", ['1', '2', '3', '4', '5', '6', '7', '8', '8a', '0', '00'])  # '9' (Stop ComfyUI) commented out below
+            choice = djj.prompt_choice("\033[91mChoose an admin tool\033[0m", ['1', '2', '3', '4', '5', '6', '7', '8', '8a', '9', '0', '00'])  # '10' (Stop ComfyUI) commented out below
 
             if choice == "1":  # djjtb_scan.py
                 djj.run_command_in_tab(
@@ -789,7 +790,12 @@ class DJJTBLauncher:
                         stderr=subprocess.DEVNULL
                     )
                 time.sleep(2)
-            # elif choice == "9":  # Stop ComfyUI (disabled for now; comfyui_stop.command still exists)
+            elif choice == "9":  # Port Manager (check / restart / stop localhost port)
+                djj.run_command_in_tab(
+                    f"source {self.venv_path}; cd {self.project_path}; "
+                    f"python3 -m djjtb.admin_tools.port_manager"
+                )
+            # elif choice == "10":  # Stop ComfyUI (disabled for now; comfyui_stop.command still exists)
             #     djj.run_command_in_tab(
             #         f"bash {self.project_path}/djjtb/ai_tools/comfyui_stop.command"
             #     )
