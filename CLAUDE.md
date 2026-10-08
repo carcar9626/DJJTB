@@ -388,7 +388,7 @@ path.
 
 ## Port Manager (`djjtb/admin_tools/port_manager.py`, 2026-10-08)
 
-Interactive CLI to check / restart / stop whatever is listening on a localhost TCP port (e.g. the Hermes gateway, ComfyUI, mcpo). Wired into `djjtb.py` → ADMIN TOOLS menu, choice `9` (the old commented-out "Stop ComfyUI" slot moved to `10`), launched via `djj.run_command_in_tab` with DJJTB's venv. Enter a port → pick 1 Check / 2 Restart / 3 Stop. Logs to `djjtb/logs/port_manager_log.txt` (append); relaunched non-launchd processes write stdout/stderr to `djjtb/logs/port_manager_<port>.log`. It claims **no** port itself, so `ai_stack_port_registry.md` needs no entry.
+Interactive CLI to check / restart / stop whatever is listening on a localhost TCP port (e.g. the Hermes gateway, ComfyUI, mcpo). Wired into `djjtb.py` → ADMIN TOOLS menu (a password-gated "speedbump" submenu; the other entries are 1 Usage Scan, 2 Env Backup, 3 Push to GitHub, 4 List Open Ports, 5 Diskutil List, 6 Command Help, 7 VLC Screenshot Renamer, 8/8a Mount/Unmount Movies & SC), choice `9` (the old commented-out "Stop ComfyUI" slot moved to `10`), launched via `djj.run_command_in_tab` with DJJTB's venv. Enter a port → pick 1 Check / 2 Restart / 3 Stop. Logs to `djjtb/logs/port_manager_log.txt` (append); relaunched non-launchd processes write stdout/stderr to `djjtb/logs/port_manager_<port>.log`. It claims **no** port itself, so `ai_stack_port_registry.md` needs no entry.
 
 - **Find:** `lsof -iTCP:<port> -sTCP:LISTEN` → PID, user, full command line, cwd, and the owning launchd label (matched via `launchctl list`).
 - **launchd-owned listener** (LaunchAgent with KeepAlive, e.g. `com.djjtb.mcpserver`): Restart = `launchctl kickstart -k gui/<uid>/<label>`, waits up to ~15s for a *new* PID. Stop = `launchctl bootout` (a plain kill is pointless, KeepAlive respawns it), then prints the `launchctl bootstrap gui/<uid> <plist>` command to bring it back.
@@ -406,7 +406,7 @@ The workflows live in `~/Library/Services/` and are **not tracked in git** — e
   - **Modes:** **plain** (default) → transparent PNG only, `RMBG/<name>.png`, called by the **`RMBG`** Quick Action. **`--grey`** (first arg) → mid-grey (128) background RGB PNG only, `RMBG/<name>_gry.png`, called by the **`RMBG-Grey`** Quick Action. Verified by reading both workflows' `document.wflow` — each runs the wrapper, `RMBG-Grey` with `--grey`.
   - **Log:** `DJJTB/logs/rmbg.log` (a top-level `logs/` dir, gitignored via `*.log`) — **not** the `djjtb/logs/<op>_log.txt` convention used everywhere else. Not changed, just noted; move it when next touching the wrapper.
   - Not yet run end-to-end by me (rule: don't execute without asking) — only read.
-- **`a01_RENAME`** — pose renumber; the script is **embedded inside the workflow itself**, not a file in this repo. Edit it in the workflow; don't look for it here.
+- **`a01_RENAME`** — pose renumber (e.g. `..._low-002-a01.png` → `..._low-a01.png`); the script is **embedded inside the workflow itself**, not a file in this repo. Edit it in the workflow; don't look for it here. It appends every rename to `DJJTB/logs/finder_rename.log` (top-level `logs/`, same gitignored dir as `rmbg.log` — both Quick Actions log there instead of `djjtb/logs/`), each run headed `=== <timestamp> | DRY_RUN=<0|1> ===` and each line `RENAMED: old -> new [folder]`, so a bad run can be reversed from the log.
 - Other workflows in that folder (Claude - ask/codeHere/send, Dock*, Symlink, TextEdit, New Txt File, Shuffle_Photo_Titles) are unrelated to this repo.
 
 ## MCP server — prompt filing (djjtb/mcp_server/)
@@ -458,6 +458,9 @@ pointer + latest change.
   `multi_category_pipeline.md`'s matching 2026-08-26 entry for the fuller list.
 
 ## Working with me
+
+- **Source of truth:** this local repo root (`/Users/home/Documents/Scripts/DJJTB`), this `CLAUDE.md`, the user, and Claude Code. Anything learned or changed here that isn't obvious from the code gets documented here, and GitHub `main` should mirror the local repo at the end of a work session (still ask before pushing, per the user's standing rule). Work done in other places (Claude Chat, Automator workflows, LaunchAgents) is invisible from the repo until it's written down here.
+- `.DS_Store` is gitignored and untracked as of 2026-10-08 — don't re-add it.
 
 - I'm a workflow builder, not a traditional coder. Explain the "why" behind
   implementation choices; don't over-explain basics.
