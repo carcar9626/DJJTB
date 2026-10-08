@@ -54,6 +54,7 @@ def wait_for_vlc():
 def monitor_screenshots():
     """Monitor and rename screenshots while VLC is running"""
     seen = set(SNAPSHOT_DIR.glob(f"{SNAPSHOT_PREFIX}*"))
+    warned = set()  # so a retrying file only logs its warning once
     
     while is_vlc_running():
         current = set(SNAPSHOT_DIR.glob(f"{SNAPSHOT_PREFIX}*"))
@@ -62,7 +63,9 @@ def monitor_screenshots():
         for file in sorted(new_files):
             video_path = get_video_filepath()
             if not video_path or not video_path.exists():
-                print("⚠️  Could not fetch current video path from VLC.")
+                if file not in warned:
+                    print(f"⚠️  Could not fetch current video path from VLC for {file.name} - will retry.")
+                    warned.add(file)
                 continue
             
             base_name = video_path.stem  # e.g., "MyVideo"
@@ -73,9 +76,12 @@ def monitor_screenshots():
                 shutil.move(str(file), str(target_path))
                 print(f"✅ Moved & Renamed: {file.name} → {target_path}")
             except Exception as e:
-                print(f"❌ Failed to move {file.name}: {e}")
+                if file not in warned:
+                    print(f"❌ Failed to move {file.name}: {e} - will retry.")
+                    warned.add(file)
         
-        seen = current
+        # NOTE: `seen` is no longer overwritten with `current` here. Moved files
+        # leave the folder on their own; files that failed stay "new" and retry.
         time.sleep(0.5)
     
     print("🛑 VLC closed. Stopping screenshot monitoring...")
