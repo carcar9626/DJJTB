@@ -83,7 +83,7 @@ def run_undo(parent_folder):
             continue
         try:
             os.makedirs(os.path.dirname(src), exist_ok=True)
-            shutil.move(dest, src)
+            move_path(dest, src)
             restored += 1
         except Exception as e:
             print(f"  \033[91m❌ Error restoring {os.path.basename(dest)}: {e}\033[0m")
@@ -109,6 +109,22 @@ def run_undo(parent_folder):
     if failed:
         print(f"\033[91m❌ Failed:\033[0m    {failed}")
     print()
+
+def move_path(src, dst):
+    """
+    shutil.move that keeps symlinks working. A symlink is moved as a link (never
+    its target); relative link targets are rewritten absolute first, since a
+    relative link dropped into a subfolder would otherwise silently break.
+    """
+    if os.path.islink(src):
+        target = os.readlink(src)
+        if not os.path.isabs(target):
+            target = os.path.normpath(os.path.join(os.path.dirname(src), target))
+        os.symlink(target, dst)
+        os.unlink(src)
+    else:
+        shutil.move(src, dst)
+
 
 def collect_files_from_folder(folder_path, extensions=None):
     """Collect files from a folder (non-recursive)."""
@@ -180,7 +196,7 @@ def sort_files_by_pattern(files, match_type, char_count, parent_folder, move_map
         dest_path = os.path.join(dest_folder, filename)
         
         try:
-            shutil.move(file_path, dest_path)
+            move_path(file_path, dest_path)
             move_map[dest_path] = file_path
             sorted_count += 1
         except Exception as e:
@@ -230,7 +246,7 @@ def sort_files_by_count(files, files_per_folder, parent_folder, num_groups=None,
             filename  = os.path.basename(file_path)
             dest_path = os.path.join(dest_folder, filename)
             try:
-                shutil.move(file_path, dest_path)
+                move_path(file_path, dest_path)
                 move_map[dest_path] = file_path
                 sorted_count += 1
             except Exception as e:
@@ -245,7 +261,7 @@ def sort_files_by_count(files, files_per_folder, parent_folder, num_groups=None,
             filename  = os.path.basename(file_path)
             dest_path = os.path.join(orphan_folder, filename)
             try:
-                shutil.move(file_path, dest_path)
+                move_path(file_path, dest_path)
                 move_map[dest_path] = file_path
                 sorted_count += 1
             except Exception as e:
@@ -318,7 +334,7 @@ def main():
             if include_sub:
                 # Build per-folder map so we sort within each folder independently
                 folder_file_map = {}
-                for root, dirs, filenames in os.walk(parent_folder):
+                for root, dirs, filenames in djj.walk_dirs(parent_folder, prune_output=False):
                     # Skip hidden dirs (including .djjtb) and dirs created by previous sorts
                     dirs[:] = [d for d in dirs if not d.startswith('.')]
                     folder_files = sorted(

@@ -22,14 +22,15 @@ def collect_files(input_path, include_subfolders=False):
     files = []
     if input_path_obj.is_dir():
         if include_subfolders:
-            for root, _, filenames in os.walk(input_path):
+            for root, _, filenames in djj.walk_dirs(input_path, prune_output=False, keep_broken=True):
                 for filename in filenames:
                     file_path = pathlib.Path(root) / filename
                     if file_path.is_symlink() or file_path.suffix.lower() in extensions:
                         files.append(file_path)
         else:
             for file_path in input_path_obj.iterdir():
-                if file_path.is_file() and (file_path.is_symlink() or file_path.suffix.lower() in extensions):
+                is_file_like = file_path.is_file() or (file_path.is_symlink() and not file_path.is_dir())
+                if is_file_like and (file_path.is_symlink() or file_path.suffix.lower() in extensions):
                     files.append(file_path)
     
     return sorted(files, key=lambda x: x.name.lower())
@@ -58,7 +59,7 @@ def collect_folders(parent_path, include_subfolders=False):
     folders = []
 
     if include_subfolders:
-        for root, dirnames, _ in os.walk(parent_path):
+        for root, dirnames, _ in djj.walk_dirs(parent_path, prune_output=False):
             # Prune hidden dirs so we never descend into them
             dirnames[:] = [d for d in dirnames if not d.startswith('.')]
             for dirname in dirnames:

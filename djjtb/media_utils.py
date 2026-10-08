@@ -217,7 +217,7 @@ def check_xmp_files_in_folder(folder_path, extensions=('.jpg', '.jpeg', '.png', 
 
 # ─── Directory Walking (symlink-aware) ───────────────────────────────────────
 
-def walk_dirs(root, prune_output=True):
+def walk_dirs(root, prune_output=True, keep_broken=False):
     """
     Drop-in os.walk() that follows symlinked directories — use this instead of
     os.walk/rglob for ANY folder scan in DJJTB, so a folder made of symlinks to
@@ -228,7 +228,8 @@ def walk_dirs(root, prune_output=True):
     - each real directory is visited once (realpath-tracked), so symlink loops
       or two links to the same folder can't recurse forever or double-count
     - 'Output' folders are pruned (prune_output=True) and broken symlinks
-      are dropped from filenames
+      are dropped from filenames (keep_broken=True keeps them, for tools that
+      rename/move the link itself)
     Paths keep the symlinked route (link/sub/img.png), not the resolved target.
     """
     seen = set()
@@ -241,7 +242,8 @@ def walk_dirs(root, prune_output=True):
         if prune_output:
             dirnames[:] = [d for d in dirnames if d.lower() != 'output']
         dirnames.sort(key=str.lower)
-        yield dirpath, dirnames, [f for f in filenames if os.path.exists(os.path.join(dirpath, f))]
+        yield dirpath, dirnames, (filenames if keep_broken else
+                                  [f for f in filenames if os.path.exists(os.path.join(dirpath, f))])
 
 
 # ─── Image Collection & Validation Helpers ───────────────────────────────────
