@@ -234,3 +234,5 @@ djjtb/experiment/
 # Logo/icon source assets (large binaries, referenced read-only by sibling
 # DJJPS repos via absolute path, not needed in this repo's own git history)
 assets/logo/
+# macOS Finder junk
+.DS_Store
