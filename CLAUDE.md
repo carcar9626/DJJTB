@@ -400,9 +400,12 @@ Interactive CLI to check / restart / stop whatever is listening on a localhost T
 
 The workflows live in `~/Library/Services/` and are **not tracked in git** — editing one means editing it in Automator (or its `.workflow` bundle on disk); a repo change alone won't reach them. Only RMBG's logic is in this repo.
 
-- **`djjtb/ai_tools/rembg_quickaction.sh`** (background removal, `rmbgvenv`, `birefnet-general`, CPU) — no dialog anymore (removed 2026-10-08). Writes to `RMBG/` beside each input, skips if that mode's output already exists:
-  - **plain (default)** → transparent PNG only, `RMBG/<name>.png`. Called by the **`RMBG`** Quick Action.
-  - **`--grey`** (first arg) → mid-grey (128) background RGB PNG only, `RMBG/<name>_gry.png`. Called by the **`RMBG-Grey`** Quick Action.
+- **RMBG (background removal, `ai_models/rembg/rmbgvenv`)** — two files, split 2026-10-08 (the old "also make grey versions?" dialog is gone; the choice is now which Quick Action you click):
+  - **`djjtb/ai_tools/rembg_quickaction.sh`** — thin shell wrapper the workflows call (`~/Documents/Scripts/DJJTB/djjtb/ai_tools/rembg_quickaction.sh [--grey] "$@"`). Holds a settings block at the top: `MODEL_NAME` (default `birefnet-general`; `birefnet-general-lite` noted as the faster option), `PROVIDER` (`cpu`, or `coreml` to try Apple GPU/Neural Engine — untested, onnxruntime falls back to CPU with a log warning), `LOG`. Filters the selection to images (jpg/jpeg/png/webp/bmp/tiff/tif), hands them to the worker in **one** Python process, logs a summary line, and posts a macOS notification with the result.
+  - **`djjtb/ai_tools/rembg_batch.py`** — the worker: `rembg_batch.py <plain|grey> <image>...`, settings via `RMBG_MODEL`/`RMBG_PROVIDER` env vars. Loads the model **once** for the whole batch (the earlier per-file version reloaded it for every image), skips any image whose output already exists, per-image try/except so one failure doesn't stop the batch, prints a single summary line on stdout (`N done, M failed | model load Xs | Ys/image | model/provider`), details to stderr. Output lands in `RMBG/` beside each input.
+  - **Modes:** **plain** (default) → transparent PNG only, `RMBG/<name>.png`, called by the **`RMBG`** Quick Action. **`--grey`** (first arg) → mid-grey (128) background RGB PNG only, `RMBG/<name>_gry.png`, called by the **`RMBG-Grey`** Quick Action. Verified by reading both workflows' `document.wflow` — each runs the wrapper, `RMBG-Grey` with `--grey`.
+  - **Log:** `DJJTB/logs/rmbg.log` (a top-level `logs/` dir, gitignored via `*.log`) — **not** the `djjtb/logs/<op>_log.txt` convention used everywhere else. Not changed, just noted; move it when next touching the wrapper.
+  - Not yet run end-to-end by me (rule: don't execute without asking) — only read.
 - **`a01_RENAME`** — pose renumber; the script is **embedded inside the workflow itself**, not a file in this repo. Edit it in the workflow; don't look for it here.
 - Other workflows in that folder (Claude - ask/codeHere/send, Dock*, Symlink, TextEdit, New Txt File, Shuffle_Photo_Titles) are unrelated to this repo.
 
