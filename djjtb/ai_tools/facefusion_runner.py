@@ -64,6 +64,9 @@ FACEFUSION_SCRIPT_PATH = "/Users/home/Documents/ai_models/facefusion/facefusion.
 FACEFUSION_VENV_PYTHON = "/Users/home/Documents/ai_models/facefusion/ffvenv/bin/python3"
 FACEFUSION_DIR = "/Users/home/Documents/ai_models/facefusion"
 
+# Per-file subprocess timeout for headless runs (seconds) — long videos need far more than 10 min
+FF_TIMEOUT_SECONDS = 3600
+
 def verify_facefusion_exists():
     """Check if FaceFusion installation exists"""
     required_paths = [
@@ -526,13 +529,13 @@ def process_single_headless(source_file, target_file, output_file,
                               stdout=subprocess.PIPE,
                               stderr=subprocess.STDOUT,
                               text=True,
-                              timeout=600)
+                              timeout=FF_TIMEOUT_SECONDS)
 
         if result.returncode == 0:
             write_cmd_log(output_file, cmd)
         return result.returncode == 0, result.stdout if result.stdout else "No output"
     except subprocess.TimeoutExpired:
-        return False, "Timeout (processing took too long)"
+        return False, f"Timeout (processing exceeded {FF_TIMEOUT_SECONDS // 60} min)"
     except Exception as e:
         return False, str(e)
 

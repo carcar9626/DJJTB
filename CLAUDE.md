@@ -268,6 +268,18 @@ since it's single-user/single-tool, a deliberately different stack from djjtb-su
   never calls `build_facefusion_args()` directly, so it now gets audio copied by default with
   zero changes needed on this repo's side. If the GUI ever wants its own audio toggle, it's a
   new `copy_audio` kwarg to add on that end, not a required change here.
+- **Headless timeout raised 600 s → 3600 s (2026-10-08).** New module constant `FF_TIMEOUT_SECONDS`
+  in `facefusion_runner.py`, used by `process_single_headless()`'s `subprocess.run` (timeout message
+  now reports the minutes). No signature change. Checked facefusion-desktop-djjtb's CLAUDE.md and
+  code: no references to the old 600 s value, so it inherits the change silently.
+  `py_compile`-checked only.
+- **Local patch in the FF install, NOT in git (2026-10-08):** `ai_models/facefusion/facefusion/execution.py`
+  has an uncommitted `FF_COREML_FORMAT` / `FF_COREML_UNITS` env-var switch in the coreml branch of
+  `create_inference_session_providers()` (sets `ModelFormat` + a `.caches_<format>` cache dir, and
+  `MLComputeUnits`); unset = stock behavior. For benchmarking whether CoreML MLProgram beats the
+  default. **Must be re-applied if FF is ever updated, reset or re-cloned** (FF is a separate git
+  clone with other local edits too: `core.py` NSFW patch, `jobs/job_helper.py`, `json.py`, `uis/*`).
+  A pre-patch diff backup is at `~/Desktop/ff_bench/ff_local_patches_before.patch`.
 
 ## joycaption-desktop-ollama-djjtb (desktop GUI built on this repo)
 
