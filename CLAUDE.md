@@ -272,7 +272,10 @@ since it's single-user/single-tool, a deliberately different stack from djjtb-su
   in `facefusion_runner.py`, used by `process_single_headless()`'s `subprocess.run` (timeout message
   now reports the minutes). No signature change. Checked facefusion-desktop-djjtb's CLAUDE.md and
   code: no references to the old 600 s value, so it inherits the change silently.
-  `py_compile`-checked only.
+  `py_compile`-checked only. **Mirrored 2026-10-09:** verified the GUI's `backend/venv` is an editable
+  install of this repo and `backend/jobs.py` goes through `process_single_headless()`, so no code change
+  was needed there; a paired SYNC ORDER note went into its CLAUDE.md (also covering the FF-install
+  local patch and `facefusion.ini` output settings, which the GUI shares with the CLI).
 - **Local patch in the FF install, NOT in git (2026-10-08):** `ai_models/facefusion/facefusion/execution.py`
   has an uncommitted `FF_COREML_FORMAT` / `FF_COREML_UNITS` env-var switch in the coreml branch of
   `create_inference_session_providers()` (sets `ModelFormat` + a `.caches_<format>` cache dir, and
