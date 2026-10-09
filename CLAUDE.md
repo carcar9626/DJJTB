@@ -279,7 +279,21 @@ since it's single-user/single-tool, a deliberately different stack from djjtb-su
   `MLComputeUnits`); unset = stock behavior. For benchmarking whether CoreML MLProgram beats the
   default. **Must be re-applied if FF is ever updated, reset or re-cloned** (FF is a separate git
   clone with other local edits too: `core.py` NSFW patch, `jobs/job_helper.py`, `json.py`, `uis/*`).
-  A pre-patch diff backup is at `~/Desktop/ff_bench/ff_local_patches_before.patch`.
+  A pre-patch diff backup is at `Documents/Scripts/DJJTB_output/ff_bench/ff_local_patches_before.patch`.
+- **CoreML/MLProgram tested 2026-10-08 — blocked by `bisenet_resnet_34.onnx` (the face parser), NOT by the
+  swapper or restorer.** With `FF_COREML_FORMAT=MLProgram`, the run aborts (SIGABRT, macOS "Python quit
+  unexpectedly" dialog) in MPSGraph: `'mps.concat' op invalid input tensor shapes ... failed assertion
+  'original module failed verification'`. Identified from the ORT cache entry's `model.txt`
+  (`.caches_mlprogram/14563123857276237454` → bisenet). It is shared by every run, so a full pipeline
+  (swapper→restorer→enhancer) and a restorer-only run crash identically, at the same point, before any
+  frame is processed. The other 6 models (xseg, fairface, arcface, fan_68_5, retinaface, 2dfan4) compiled
+  fine. **hyperswap and live_portrait were never reached, so whether MLProgram helps them is still
+  unknown** (an earlier note blaming the swapper was wrong). Possible next step, not done: exclude
+  bisenet from the MLProgram path. Stock run is CPU-bound (~730–770% CPU, GPU ~200 mW / ANE ~100 mW ≈ idle);
+  `expression_restorer` is ~2.0–2.7 s/frame, ~65–70% of a run. Output size: FF's local `facefusion.ini` sets
+  `output_video_quality = 100` + `h264_videotoolbox` (→ `-b:v` ≈ 50.5 Mbps), so a 10 s clip is ~70 MB vs ~7 MB
+  source; audio is re-encoded to FLAC (first in FF's audio-encoder list, ini value empty). Bench files:
+  `Documents/Scripts/DJJTB_output/ff_bench/` (see `RESULTS.md`, `RESULTS_ADDENDUM.md`).
 
 ## joycaption-desktop-ollama-djjtb (desktop GUI built on this repo)
 
