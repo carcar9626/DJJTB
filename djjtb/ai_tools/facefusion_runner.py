@@ -41,6 +41,13 @@ FACE_DETECTOR_MODEL = 'retinaface'
 FACE_MASK_TYPES = ['box', 'occlusion']
 FACE_SELECTOR_GENDER = 'female'
 
+# Face selector order — which face gets picked first when a frame has several.
+# Same 8 options as the FaceFusion webui's "FACE SELECTOR ORDER" dropdown.
+# None/unset = flag not passed, FaceFusion uses its own default ('large-small').
+FACE_SELECTOR_ORDERS = ['left-right', 'right-left', 'top-bottom', 'bottom-top',
+                        'small-large', 'large-small', 'best-worst', 'worst-best']
+FACE_SELECTOR_ORDER_FF_DEFAULT = 'large-small'
+
 # Face enhancer applied after the swap
 # Options: 'gfpgan_1.4', 'codeformer'
 # Blend: 0–100 (how strongly the enhancer is applied over the raw swap)
@@ -190,7 +197,7 @@ def collect_files_from_folder(input_path, subfolders=False):
 
 def build_facefusion_args(face_enhancer=None, face_enhancer_blend=FACE_ENHANCER_DEFAULT_BLEND,
                           expression_restorer=False, expression_restorer_factor=EXPRESSION_RESTORER_DEFAULT_FACTOR,
-                          copy_audio=True):
+                          copy_audio=True, face_selector_order=None):
     """Build FaceFusion arguments from configuration.
     face_enhancer: None = no enhancer, 'gfpgan_1.4' or 'codeformer' = use it
     face_enhancer_blend: 0-100 blend strength
@@ -200,6 +207,8 @@ def build_facefusion_args(face_enhancer=None, face_enhancer_blend=FACE_ENHANCER_
         harmless no-op for image targets); False = strip it. Passed explicitly
         because facefusion.ini's own output_audio_volume default is 0 (mute) —
         without this flag every video run would silently lose its audio.
+    face_selector_order: None = don't pass the flag (FaceFusion's own default,
+        'large-small'); otherwise one of FACE_SELECTOR_ORDERS
     """
     args = []
 
@@ -207,6 +216,8 @@ def build_facefusion_args(face_enhancer=None, face_enhancer_blend=FACE_ENHANCER_
     args.extend(["--face-mask-padding", str(FACE_MASK_PADDING)])
     args.extend(["--face-mask-blur", str(FACE_MASK_BLUR)])
     args.extend(["--face-selector-gender", str(FACE_SELECTOR_GENDER)])
+    if face_selector_order:
+        args.extend(["--face-selector-order", str(face_selector_order)])
     args.extend(["--face-detector-score", str(FACE_DETECTOR_SCORE)])
     args.extend(["--face-landmarker-score", str(FACE_LANDMARKER_SCORE)])
     args.extend(["--face-detector-model", FACE_DETECTOR_MODEL])
@@ -511,7 +522,7 @@ def generate_output_filename(source_file, target_file, output_path, add_suffix=T
 def process_single_headless(source_file, target_file, output_file,
                             face_enhancer=None, face_enhancer_blend=FACE_ENHANCER_DEFAULT_BLEND,
                             expression_restorer=False, expression_restorer_factor=EXPRESSION_RESTORER_DEFAULT_FACTOR,
-                            copy_audio=True):
+                            copy_audio=True, face_selector_order=None):
     """Process single source to single target using headless-run"""
     cmd = [
         FACEFUSION_VENV_PYTHON, FACEFUSION_SCRIPT_PATH, "headless-run",
@@ -522,7 +533,7 @@ def process_single_headless(source_file, target_file, output_file,
 
     cmd.extend(build_facefusion_args(face_enhancer, face_enhancer_blend,
                                      expression_restorer, expression_restorer_factor,
-                                     copy_audio))
+                                     copy_audio, face_selector_order))
 
     try:
         result = subprocess.run(cmd, cwd=FACEFUSION_DIR,
@@ -543,7 +554,7 @@ def process_face_swap(mode, source_files, target_files, output_path, output_mode
                       target_action, face_enhancer=None,
                       face_enhancer_blend=FACE_ENHANCER_DEFAULT_BLEND,
                       expression_restorer=False, expression_restorer_factor=EXPRESSION_RESTORER_DEFAULT_FACTOR,
-                      include_source_name=True, copy_audio=True):
+                      include_source_name=True, copy_audio=True, face_selector_order=None):
     """Main processing function that routes to appropriate method"""
 
     print("\n" * 2)
@@ -583,6 +594,7 @@ def process_face_swap(mode, source_files, target_files, output_path, output_mode
     else:
         print(f"\033[93m😮 Expression Restorer:\033[0m off")
     print(f"\033[93m🔊 Audio:\033[0m {'Copy from target' if copy_audio else 'Strip'}")
+    print(f"\033[93m🔢 Face Order:\033[0m {face_selector_order or FACE_SELECTOR_ORDER_FF_DEFAULT + ' (default)'}")
 
     print("\033[92m=\033[0m" * 50)
     print()
@@ -605,7 +617,7 @@ def process_face_swap(mode, source_files, target_files, output_path, output_mode
             source_file, target_file, output_file,
             face_enhancer, face_enhancer_blend,
             expression_restorer, expression_restorer_factor,
-            copy_audio
+            copy_audio, face_selector_order
         )
 
         if success:
@@ -629,7 +641,7 @@ def process_face_swap(mode, source_files, target_files, output_path, output_mode
                 source_file, target_file, output_file,
                 face_enhancer, face_enhancer_blend,
                 expression_restorer, expression_restorer_factor,
-                copy_audio
+                copy_audio, face_selector_order
             )
             if success:
                 print(f"\033[92m✅ Done\033[0m")
@@ -659,7 +671,7 @@ def process_face_swap(mode, source_files, target_files, output_path, output_mode
                 source_file, target_file, output_file,
                 face_enhancer, face_enhancer_blend,
                 expression_restorer, expression_restorer_factor,
-                copy_audio
+                copy_audio, face_selector_order
             )
 
             if success:
@@ -705,7 +717,7 @@ def process_face_swap(mode, source_files, target_files, output_path, output_mode
                     source_file, target_file, output_file,
                     face_enhancer, face_enhancer_blend,
                     expression_restorer, expression_restorer_factor,
-                    copy_audio
+                    copy_audio, face_selector_order
                 )
 
                 if success:
@@ -846,6 +858,23 @@ def main():
         ) == '1'
         print()
 
+        face_selector_order = None
+        set_face_order = djj.prompt_choice(
+            f"\033[93m🔢 Set face selector order?\033[0m\n1. Yes\n2. No (FF default: {FACE_SELECTOR_ORDER_FF_DEFAULT})",
+            ['1', '2'],
+            default='2'
+        ) == '1'
+        if set_face_order:
+            order_menu = "\n".join(f"{i}. {o}" for i, o in enumerate(FACE_SELECTOR_ORDERS, 1))
+            order_choice = djj.prompt_choice(
+                f"\033[93mFace selector order:\033[0m\n{order_menu}",
+                [str(i) for i in range(1, len(FACE_SELECTOR_ORDERS) + 1)],
+                default=str(FACE_SELECTOR_ORDERS.index(FACE_SELECTOR_ORDER_FF_DEFAULT) + 1)
+            )
+            face_selector_order = FACE_SELECTOR_ORDERS[int(order_choice) - 1]
+            print(f"✅ \033[92mFace order:\033[0m {face_selector_order}")
+        print()
+
         os.system('clear')
         print("\n" * 2)
         print("🔍 Analyzing inputs...")
@@ -884,8 +913,8 @@ def main():
         process_face_swap(mode, source_files, target_files, output_path, output_mode, add_suffix, tag_source,
                           target_action, face_enhancer, face_enhancer_blend,
                           use_expression_restorer, expression_restorer_factor,
-                          include_source_name, copy_audio)
-        
+                          include_source_name, copy_audio, face_selector_order)
+
         print()
         action = djj.what_next()
         if action == 'exit':

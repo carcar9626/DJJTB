@@ -297,6 +297,23 @@ since it's single-user/single-tool, a deliberately different stack from djjtb-su
   `output_video_quality = 100` + `h264_videotoolbox` (→ `-b:v` ≈ 50.5 Mbps), so a 10 s clip is ~70 MB vs ~7 MB
   source; audio is re-encoded to FLAC (first in FF's audio-encoder list, ini value empty). Bench files:
   `Documents/Scripts/DJJTB_output/ff_bench/` (see `RESULTS.md`, `RESULTS_ADDENDUM.md`).
+- **Face selector order prompt added (2026-10-11).** `main()` now asks "Set face selector order?"
+  (default No) after the audio prompt; Yes shows the same 8 options as FF's webui dropdown
+  (`FACE_SELECTOR_ORDERS`: left-right, right-left, top-bottom, bottom-top, small-large, large-small,
+  best-worst, worst-best; picker defaults to `large-small`, FF's own default). No = the
+  `--face-selector-order` flag isn't passed at all, so behavior is byte-identical to before (FF falls
+  back to `large-small`, since `facefusion.ini`'s `face_selector_order` is blank). It matters because the
+  ini sets `face_selector_mode = one` + gender `female`: the order decides *which* face gets swapped when a
+  frame has several. Threaded as a new **trailing optional `face_selector_order=None`** param through
+  `build_facefusion_args()` → `process_single_headless()` → `process_face_swap()` (all 4 modes); also
+  shown in the run summary header. Backward compatible with facefusion-desktop-djjtb's `backend/jobs.py`
+  (it calls `process_single_headless()` positionally with the prior 8 args and never calls
+  `build_facefusion_args()`), so the GUI keeps working and simply never passes it. **The GUI does not
+  expose this yet** — adding it there is a new `face_selector_order` kwarg + a dropdown, to be done on
+  request (DJJTB leads). **Verified end-to-end 2026-10-11:** a real run (2-person target, `right-left`,
+  via `process_single_headless()`) put `--face-selector-order right-left` in the logged command and
+  changed only the right-hand face (pixel diff vs target: 0 changed pixels in the left half, the whole
+  change confined to the right face); the `main()` prompt flow itself is still only `py_compile`-checked.
 
 ## joycaption-desktop-ollama-djjtb (desktop GUI built on this repo)
 
