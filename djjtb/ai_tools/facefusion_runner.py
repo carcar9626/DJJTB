@@ -52,7 +52,7 @@ FACE_SELECTOR_ORDER_FF_DEFAULT = 'large-small'
 # Options: 'gfpgan_1.4', 'codeformer'
 # Blend: 0–100 (how strongly the enhancer is applied over the raw swap)
 FACE_ENHANCER_DEFAULT_MODEL = 'gfpgan_1.4'
-FACE_ENHANCER_DEFAULT_BLEND = 60
+FACE_ENHANCER_DEFAULT_BLEND = 40
 
 # Expression restorer (Live Portrait) — restores target facial expression onto swapped face
 # Only model available in FF 3.3.2: 'live_portrait'

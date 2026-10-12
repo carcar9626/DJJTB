@@ -308,12 +308,21 @@ since it's single-user/single-tool, a deliberately different stack from djjtb-su
   `build_facefusion_args()` → `process_single_headless()` → `process_face_swap()` (all 4 modes); also
   shown in the run summary header. Backward compatible with facefusion-desktop-djjtb's `backend/jobs.py`
   (it calls `process_single_headless()` positionally with the prior 8 args and never calls
-  `build_facefusion_args()`), so the GUI keeps working and simply never passes it. **The GUI does not
-  expose this yet** — adding it there is a new `face_selector_order` kwarg + a dropdown, to be done on
-  request (DJJTB leads). **Verified end-to-end 2026-10-11:** a real run (2-person target, `right-left`,
+  `build_facefusion_args()`), so the GUI kept working untouched. **Mirrored into the GUI the same day
+  (2026-10-11):** `backend/jobs.py` passes a new `face_selector_order` param (default `None`), and a
+  "Face selector order" button/radio panel sits beside "Advanced face-alignment settings" — see its own
+  CLAUDE.md's matching SYNC ORDER note. The GUI reads `FACE_SELECTOR_ORDERS` /
+  `FACE_SELECTOR_ORDER_FF_DEFAULT` from this module via `get_defaults()`, so **renaming or removing
+  either constant breaks it**. **Verified end-to-end 2026-10-11:** a real run (2-person target, `right-left`,
   via `process_single_headless()`) put `--face-selector-order right-left` in the logged command and
   changed only the right-hand face (pixel diff vs target: 0 changed pixels in the left half, the whole
   change confined to the right face); the `main()` prompt flow itself is still only `py_compile`-checked.
+- **Face enhancer default blend 60 → 40 (2026-10-11).** `FACE_ENHANCER_DEFAULT_BLEND` in
+  `facefusion_runner.py` (the single source — the CLI prompt and every function default read it). The
+  desktop GUI follows automatically via `get_defaults()`; only its pre-load fallback `useState(60)` in
+  `App.tsx` was hardcoded and was updated to 40 in the same pass. Note this changes the default for any
+  caller that omits the blend, not just the UI. Existing run logs (`.<name>_FF_cmd.txt`) still show the
+  blend each past output actually used.
 
 ## joycaption-desktop-ollama-djjtb (desktop GUI built on this repo)
 
