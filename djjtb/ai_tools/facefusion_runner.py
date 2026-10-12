@@ -833,6 +833,10 @@ def main():
                 default='1'
             )
             face_enhancer = 'gfpgan_1.4' if enhancer_choice == '1' else 'codeformer'
+            face_enhancer_blend = djj.get_int_input(
+                f"   Enhancer blend (0–100, default {FACE_ENHANCER_DEFAULT_BLEND})",
+                min_val=0, max_val=100, default=FACE_ENHANCER_DEFAULT_BLEND
+            )
             print(f"✅ \033[92mEnhancer:\033[0m {face_enhancer}  blend: {face_enhancer_blend}")
             print()
 

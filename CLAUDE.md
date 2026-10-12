@@ -322,7 +322,13 @@ since it's single-user/single-tool, a deliberately different stack from djjtb-su
   desktop GUI follows automatically via `get_defaults()`; only its pre-load fallback `useState(60)` in
   `App.tsx` was hardcoded and was updated to 40 in the same pass. Note this changes the default for any
   caller that omits the blend, not just the UI. Existing run logs (`.<name>_FF_cmd.txt`) still show the
-  blend each past output actually used.
+  blend each past output actually used. **CLI prompt added (2026-10-11, same day):** `main()` previously
+  had no blend prompt at all (it printed the constant and moved on, so the CLI could never change it
+  per run); it now asks "Enhancer blend (0–100, default 40)" right after the enhancer model choice,
+  via `djj.get_int_input` (Enter = default, out-of-range re-prompts). Only asked when the enhancer is
+  on. The value was already threaded through `process_face_swap()` → `process_single_headless()`, so
+  no signature change and the desktop GUI (which already had a Blend field) is unaffected.
+  `py_compile`-checked only.
 
 ## joycaption-desktop-ollama-djjtb (desktop GUI built on this repo)
 
