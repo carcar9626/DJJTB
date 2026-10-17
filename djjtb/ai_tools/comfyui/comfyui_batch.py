@@ -1405,6 +1405,11 @@ def main():
                 print(f"  ... and {len(pairs) - 5} more")
             print()
             print(f"\033[93m📊 Total jobs to queue:\033[0m {len(pairs)}")
+            print()
+
+            # Sources and refs are all staged under their bare filename in ComfyUI's input folder
+            if not confirm_duplicate_filenames(sorted({Path(p) for pair in pairs for p in pair})):
+                continue
 
             confirm = djj.prompt_choice(
                 "\033[93mProceed with these pairs?\033[0m\n1. Yes\n2. No, go back",

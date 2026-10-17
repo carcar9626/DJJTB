@@ -177,8 +177,8 @@ context is needed before implementing.
   staged copies go into ComfyUI's input folder under their bare filename, so same-named files from
   different folders overwrite each other before ComfyUI reads them (a pre-existing hazard that
   "include subfolders" already allowed, now easier to hit with hand-picked files); it warns and defaults
-  to "go back", and only appears when duplicates exist. **Dual-input has the same hazard and is not
-  guarded yet.** (c) `get_images_from_folder()` now scans via `djj.walk_dirs` (symlink-following, per the
+  to "go back", and only appears when duplicates exist. **Dual-input is now guarded too (same
+  prompt, run over the distinct sources + refs, before "Proceed with these pairs?").** (c) `get_images_from_folder()` now scans via `djj.walk_dirs` (symlink-following, per the
   folder-scan rule below; it prunes `Output` dirs); (d) the single-input summary says "N files from M
   folders" instead of the first file's parent when the files come from several folders. Node-ID prompt
   now comes *after* the images are collected. `py_compile`-checked only — not yet run end-to-end.
@@ -480,6 +480,39 @@ path.
   numbering above was previously misstated as 12-15, corrected here). Added to the menu print,
   the `choice == "15"` dispatch in `handle_quick_tools()`, and both `prompt_choice` valid-choice
   lists in `run()` (the top-level `1..14` list and the `handle_quick_tools` sub-dispatch list).
+
+## comfyui-batch-desktop-djjtb (desktop GUI built on this repo)
+
+`/Users/home/Documents/Scripts/DJJPS/comfyui-batch-desktop-djjtb` is a standalone pywebview + React desktop GUI
+wrapping `djjtb/ai_tools/comfyui/comfyui_batch.py` — **single-input and dual-input modes only** (the icon batch +
+IG carousel mode stays CLI-only). Same pattern as facefusion-desktop-djjtb (pywebview `js_api`, no HTTP, copied
+scaffold/theme). Built 2026-10-17; local git repo only, no GitHub remote yet. See its own CLAUDE.md for the full
+architecture and what's verified (real window probe + an end-to-end run of `jobs.run_batch()` against a mock
+ComfyUI server; **not yet run against a live ComfyUI**).
+
+- Installed as an editable dependency into *its own* venv (`pip install -e /Users/home/Documents/Scripts/DJJTB`);
+  backend venv is `djjtb` + `pywebview` + `requests` + `Pillow` (comfyui_batch.py imports PIL/requests at module level).
+- Imports unchanged: `ComfyUIBatchProcessor` (`load_workflow`, `queue_single_one`, `queue_pair_one`,
+  `wait_for_queue_drain`, `cleanup_symlinks`, `check_comfyui_running`, `get_queue_status`), `build_pairs`,
+  `get_images_from_folder`, `get_next_job_id`, `log_job`, and the constants `COMFYUI_URL`, `COMFYUI_INPUT_FOLDER`,
+  `COMFYUI_OUTPUT_FOLDER`, `DEFAULT_WORKFLOW_FOLDER`, `DEFAULT_WORKFLOW_FOLDER_QWEN`, `DEFAULT_SINGLE_NODE_ID`,
+  `QWEN_SOURCE_NODE_ID`, `QWEN_POSE_NODE_ID`, `KSAMPLER_NODE_ID`, `DEFAULT_STEPS`, `IMAGE_EXTENSIONS`, `QUEUE_DELAY`; plus
+  `djj.list_files_in_folder`. Never the interactive ones (`process_single_input`/`process_dual_input` — their
+  loops are reimplemented in the GUI's `backend/jobs.py` on top of `queue_*_one`, `build_pairs_mode1..5`,
+  `get_image_list_input`, `get_single_image_input`, `prompt_steps_override`, `select_workflow_from_folder`,
+  `confirm_duplicate_filenames`, `main`).
+- **Changing `comfyui_batch.py`**: before changing the signature or behavior of anything in the list above, check
+  that app's own CLAUDE.md — same blind spot as every other GUI wrapper. `queue_single_one`/`queue_pair_one`/
+  `wait_for_queue_drain`/`build_pairs`/`DEFAULT_SINGLE_NODE_ID` exist *because of* this app (extracted CLI-first,
+  zero behavior change); the CLI's individual-files single input and the duplicate-filename guard were added
+  CLI-first too, then mirrored in the GUI.
+- **Wired into `djjtb.py`'s main menu (2026-10-17):** QUICK TOOLS → "DJJPS (GUI)", choice `16`, via `djj.open_path()` on
+  `run_comfyui_batch_desktop.command` (the double-click equivalent — same reasoning as the other DJJPS GUI entries).
+  Added to the menu print, the `choice == "16"` dispatch in `handle_quick_tools()`, and both valid-choice lists in
+  `run()`. `py_compile`-checked only.
+- **Icon:** `assets/logo/DJJ_mono_fixed_v2_comfyui_batch.png` — a magenta recolor of the base mark (corners `#F058C0`,
+  center `#F890E0`), the app's accent colour too. `assets/logo/` is gitignored, so this file is local-only like the
+  rest of the registry.
 
 ## Port Manager (`djjtb/admin_tools/port_manager.py`, 2026-10-08)
 

@@ -106,6 +106,7 @@ class DJJTBLauncher:
         print(" 💰\033[4;93m13\033[0m  FaceFusion 🖥️")
         print(" 💰\033[4;93m14\033[0m  JoyCaption 🖥️")
         print(" 💰\033[4;93m15\033[0m  Upscaler AI 🖥️")
+        print(" 💰\033[4;93m16\033[0m  ComfyUI Batch 🖥️")
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰\033[4;91mX\033[0m  Exit 👋🏻✈️         💰\033[4;91mAD\033[0m  ADMIN TOOLS 🔐")
         print("\033[92m==================================================\033[0m")
@@ -721,6 +722,11 @@ class DJJTBLauncher:
             djj.open_path("/Users/home/Documents/Scripts/DJJPS/upscaler-ai-desktop-djjtb/run_upscaler_ai_desktop.command")
             time.sleep(2)
 
+        elif choice == "16":  # ComfyUI Batch (comfyui-batch-desktop-djjtb desktop GUI) — opened like a double-click, own Terminal window/profile
+            print("\033[93mLaunching ComfyUI Batch...\033[0m")
+            djj.open_path("/Users/home/Documents/Scripts/DJJPS/comfyui-batch-desktop-djjtb/run_comfyui_batch_desktop.command")
+            time.sleep(2)
+
 
     def handle_admin_tools(self):
         """Handle Admin Tools submenu (password-protected, not fancy — just a speedbump)"""
@@ -831,7 +837,7 @@ class DJJTBLauncher:
         while True:
             self.show_main_menu()
             choice = djj.prompt_choice("\033[93mChoose a category\033[0m",
-                                     ['1', '2', '3', '4', '5', '6', '7', '8', '9','10', '11', '12', '13', '14', '15', 'ac', 'ad', 'c', 'x'])
+                                     ['1', '2', '3', '4', '5', '6', '7', '8', '9','10', '11', '12', '13', '14', '15', '16', 'ac', 'ad', 'c', 'x'])
 
             if choice == "1":
                 self.handle_media_tools()
@@ -839,7 +845,7 @@ class DJJTBLauncher:
                 self.handle_ai_tools()
             elif choice == "3":
                 self.handle_file_tools()
-            elif choice in ["4", "5", "6", "7", "8", "9","10", "11", "12", "13", "14", "15"]:
+            elif choice in ["4", "5", "6", "7", "8", "9","10", "11", "12", "13", "14", "15", "16"]:
                 self.handle_quick_tools(choice)
             elif choice == "ac":  # Archived
                 self.handle_archived_tools()
