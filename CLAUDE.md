@@ -269,6 +269,11 @@ provisionally CLI-only).
   `backend/app/routers/ai_launcher.py` keeps its own app registry + psutil-based detection; it should eventually import
   `djjtb.desktop_apps` instead of duplicating it. Verified live: launch → detected → second call focused it → missing-venv
   error → stopped; `find_pids` against a `.command`-started app. The menu itself (typing 11–16) is `py_compile`-checked only.
+  **Admin Tools → "GUIs" section (same day):** entries `11`–`16` (same numbers/order as the main menu's DJJPS (GUI) entries) call
+  `rebuild_desktop_app()` → `desktop_apps.rebuild_and_launch()`, which `open`s the app's `run_*_desktop.command` (Terminal window,
+  `npm run build`, then the app in that window) — the way to pick up a frontend change. Refused while that app is already running
+  (it would open a second copy; close it first). Verified: the refusal, and that all six `.command` files exist; the actual
+  rebuild-and-open path was not run (it's the same `open <.command>` the old menu entries used).
 - **Wired into `djjtb.py`'s main menu (2026-07-31)**: QUICK TOOLS → new "DJJPS (GUI)" sub-heading,
   choice `12`. Launched via `djj.open_path()` on `run_djjtb_suite_desktop.command` — deliberately
   *not* `run_command_in_tab`/`run_script_in_tab` (which `source` DJJTB's own venv into the
