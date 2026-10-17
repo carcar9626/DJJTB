@@ -245,6 +245,15 @@ provisionally CLI-only).
   duplicating it here would go stale). A behavior change to one of these silently affects the web
   UI with zero signal from this side, since a DJJTB session has no visibility into djjtb-suite by
   default.
+- **AI Tools are now launchable from the suite (2026-10-17, branch `ai-tools-merge`, not on `main` yet).** The old
+  "AI Tools permanently CLI-only" scoping was reversed by the user: the suite gets an **AI Tools** category whose cards
+  launch/focus the standalone desktop apps (FaceFusion, Smart Crop, JoyCaption, Upscaler AI, ComfyUI Batch; the Media
+  Dashboard under Quick Tools) via `backend/app/routers/ai_launcher.py`. First slice only — nothing is ported and no
+  DJJTB code is imported by it, so there's nothing to sync from this side. The user's longer-term goal is to merge the
+  standalone apps into the suite one tool at a time (durable jobs first); work happens in the worktree
+  `DJJPS/djjtb-suite.ai-tools` (own venv/node_modules, ports 8011/5174 reserved in `DJJIF/ai_stack_port_registry.md`).
+  See the suite's CLAUDE.md, "AI Tools launcher". Keep the standalone apps and their `djjtb.py` menu entries 11–16 working
+  throughout.
 - **Wired into `djjtb.py`'s main menu (2026-07-31)**: QUICK TOOLS → new "DJJPS (GUI)" sub-heading,
   choice `12`. Launched via `djj.open_path()` on `run_djjtb_suite_desktop.command` — deliberately
   *not* `run_command_in_tab`/`run_script_in_tab` (which `source` DJJTB's own venv into the
