@@ -506,6 +506,16 @@ ComfyUI server; **not yet run against a live ComfyUI**).
   `wait_for_queue_drain`/`build_pairs`/`DEFAULT_SINGLE_NODE_ID` exist *because of* this app (extracted CLI-first,
   zero behavior change); the CLI's individual-files single input and the duplicate-filename guard were added
   CLI-first too, then mirrored in the GUI.
+- **Start ComfyUI from the CLI and the GUI (2026-10-17, CLI first).** `comfyui_batch.py` gained `launch_comfyui_background()`
+  (detached `Popen` of `cfuivenv/bin/python3 main.py --listen 0.0.0.0 --port 8188` in the ComfyUI dir — the
+  `comfyui_runner.command` recipe minus its `open -a ComfyUI.app` window — output appended to
+  `djjtb/logs/comfyui_server_log.txt`, own session so it outlives the caller; non-blocking, returns `(proc, message)`),
+  `wait_for_comfyui(proc, timeout, on_tick)`, and a once-per-run CLI prompt `offer_to_start_comfyui()` ("ComfyUI isn't
+  running — start it in the background now? 1. Yes (default) / 2. No") before the main loop. New constants
+  `COMFYUI_PORT`, `COMFYUI_DIR`, `COMFYUI_PYTHON`, `COMFYUI_SERVER_LOG`. The desktop app's "Start ComfyUI" button calls
+  `launch_comfyui_background()` through `Api.start_comfyui()`. `launch_comfyui_background()` verified live (ComfyUI up in
+  ~20 s, detached, repeat call a no-op, log written); the CLI prompt itself is only `py_compile`-checked. No stop
+  function — use Port Manager (Admin Tools 9).
 - **Wired into `djjtb.py`'s main menu (2026-10-17):** QUICK TOOLS → "DJJPS (GUI)", choice `16`, via `djj.open_path()` on
   `run_comfyui_batch_desktop.command` (the double-click equivalent — same reasoning as the other DJJPS GUI entries).
   Added to the menu print, the `choice == "16"` dispatch in `handle_quick_tools()`, and both valid-choice lists in

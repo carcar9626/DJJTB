@@ -16,6 +16,7 @@ import argparse
 import json
 import copy
 import requests
+import subprocess
 import time
 from pathlib import Path
 from datetime import datetime
@@ -24,6 +25,13 @@ import djjtb.utils as djj
 
 # ComfyUI server address
 COMFYUI_URL = "http://127.0.0.1:8188"
+
+COMFYUI_PORT = "8188"   # keep in sync with COMFYUI_URL above
+
+# ComfyUI install (for launching the server in the background — see launch_comfyui_background)
+COMFYUI_DIR    = "/Users/home/Documents/ai_models/ComfyUI_App/ComfyUI"
+COMFYUI_PYTHON = f"{COMFYUI_DIR}/cfuivenv/bin/python3"
+COMFYUI_SERVER_LOG = Path("/Users/home/Documents/Scripts/DJJTB/djjtb/logs/comfyui_server_log.txt")
 
 # ComfyUI input folder
 COMFYUI_INPUT_FOLDER = "/Users/home/Documents/ai_models/ComfyUI_App/ComfyUI/input"
@@ -548,6 +556,56 @@ def check_comfyui_connection():
         return requests.get(f"{COMFYUI_URL}/system_stats", timeout=5).status_code == 200
     except Exception:
         return False
+
+
+def launch_comfyui_background():
+    """
+    Start ComfyUI's server detached from this process — no Terminal window, and it keeps running
+    after this script/app exits. Same command as comfyui_runner.command (cfuivenv's python, main.py,
+    --listen 0.0.0.0 --port) minus the `open -a ComfyUI.app` window. Output goes to
+    djjtb/logs/comfyui_server_log.txt (append). Does NOT wait for it to come up (ComfyUI takes a
+    while to load its nodes) — poll check_comfyui_connection() / use wait_for_comfyui().
+    Returns (proc, message): proc is the Popen handle, or None if nothing was started
+    (already running, or the install wasn't found — message says which).
+    """
+    if check_comfyui_connection():
+        return None, "ComfyUI is already running."
+    if not Path(COMFYUI_PYTHON).exists() or not (Path(COMFYUI_DIR) / "main.py").exists():
+        return None, f"ComfyUI install not found at {COMFYUI_DIR}"
+
+    COMFYUI_SERVER_LOG.parent.mkdir(parents=True, exist_ok=True)
+    log = open(COMFYUI_SERVER_LOG, "ab")
+    log.write(f"\n=== launched {datetime.now():%Y-%m-%d %H:%M:%S} ===\n".encode())
+    log.flush()
+    proc = subprocess.Popen(
+        [COMFYUI_PYTHON, "main.py", "--listen", "0.0.0.0", "--port", COMFYUI_PORT],
+        cwd=COMFYUI_DIR,
+        stdin=subprocess.DEVNULL,
+        stdout=log,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,   # own session: closing the launching terminal/app doesn't kill it
+    )
+    log.close()   # the child holds its own copy of the file descriptor
+    return proc, f"ComfyUI starting (log: {COMFYUI_SERVER_LOG})"
+
+
+def wait_for_comfyui(proc=None, timeout=180, poll_seconds=2, on_tick=None):
+    """
+    Block until ComfyUI answers, up to `timeout` seconds. If `proc` (from launch_comfyui_background)
+    exits first, gives up immediately. on_tick(elapsed_seconds) is called on every poll.
+    Returns True once it's responding.
+    """
+    waited = 0
+    while waited < timeout:
+        if check_comfyui_connection():
+            return True
+        if proc is not None and proc.poll() is not None:
+            return False
+        if on_tick:
+            on_tick(waited)
+        time.sleep(poll_seconds)
+        waited += poll_seconds
+    return check_comfyui_connection()
 
 
 def submit_icon_workflow(workflow_dict):
@@ -1219,8 +1277,38 @@ class ComfyUIBatchProcessor:
 #  Main
 # ─────────────────────────────────────────────────────────────────────────────
 
+def offer_to_start_comfyui():
+    """If ComfyUI isn't answering, offer to start it silently in the background (once per run)."""
+    if check_comfyui_connection():
+        return
+    print()
+    print(f"⚠️  \033[93mComfyUI isn't running at\033[0m {COMFYUI_URL}")
+    start = djj.prompt_choice(
+        "\033[93mStart it in the background now?\033[0m\n1. Yes\n2. No",
+        ['1', '2'],
+        default='1'
+    )
+    if start != '1':
+        return
+    proc, message = launch_comfyui_background()
+    print(message)
+    if proc is None:
+        time.sleep(2)
+        return
+    up = wait_for_comfyui(
+        proc,
+        on_tick=lambda waited: print(f"   \033[93m...still starting\033[0m ({waited}s)") if waited and waited % 10 == 0 else None
+    )
+    if up:
+        print("✅ \033[92mComfyUI is up\033[0m")
+    else:
+        print(f"❌ \033[93mComfyUI didn't come up — see\033[0m {COMFYUI_SERVER_LOG}")
+    time.sleep(2)   # main()'s loop clears the screen right after this
+
+
 def main():
     cli_args = parse_cli_args()
+    offer_to_start_comfyui()
 
     while True:
         os.system('clear')
