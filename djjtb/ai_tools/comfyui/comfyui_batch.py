@@ -42,6 +42,9 @@ IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.bmp']
 # Wait time between submissions (seconds)
 QUEUE_DELAY = 1
 
+# Default Load Image node ID for single-input workflows
+DEFAULT_SINGLE_NODE_ID = "232"
+
 # Default node IDs for the Qwen pose-transfer workflow
 QWEN_SOURCE_NODE_ID = "151"   # LoadImageReturnFilename — subject (OG)
 QWEN_POSE_NODE_ID   = "162"   # LoadImageReturnFilename — pose reference
@@ -312,6 +315,38 @@ def select_workflow_from_folder(folder_path):
 #  Dual-input pair builders  (5 modes)
 # ─────────────────────────────────────────────────────────────────────────────
 
+def build_pairs(mode, sources, refs):
+    """
+    Pure pairing logic for the 5 dual-input modes ('1'..'5'), no prompting/printing.
+    sources/refs are lists of Paths (modes that use one source/ref use element [0]).
+    Returns (pairs, label, note) — note is a warning string (mode 4 count mismatch) or None.
+    """
+    note = None
+    if mode == '1':    # 1 source → many pose refs
+        pairs = [(sources[0], ref) for ref in refs]
+        label = f"1 source → {len(refs)} targets"
+    elif mode == '2':  # 1 source → 1 pose ref
+        pairs = [(sources[0], refs[0])]
+        label = "1 source → 1 target"
+    elif mode == '3':  # many sources → 1 pose ref
+        pairs = [(src, refs[0]) for src in sources]
+        label = f"{len(sources)} sources → 1 target"
+    elif mode == '4':  # many ↔ many, paired by sort order
+        if len(sources) != len(refs):
+            count = min(len(sources), len(refs))
+            note = (f"Count mismatch: {len(sources)} sources vs {len(refs)} refs. "
+                    f"Pairing the first {count} from each.")
+            sources = sources[:count]
+            refs    = refs[:count]
+        pairs = list(zip(sources, refs))
+        label = f"{len(pairs)} sources → {len(pairs)} targets (paired)"
+    else:              # '5': full matrix, every source × every ref
+        from itertools import product
+        pairs = list(product(sources, refs))
+        label = f"{len(sources)} sources × {len(refs)} targets = {len(pairs)} jobs (full matrix)"
+    return pairs, label, note
+
+
 def build_pairs_mode1():
     """1 source → many pose refs"""
     source = get_single_image_input("source subject")
@@ -320,7 +355,8 @@ def build_pairs_mode1():
     refs = get_image_list_input("pose references (targets)")
     if not refs:
         return None, None
-    return [(source, ref) for ref in refs], f"1 source → {len(refs)} targets"
+    pairs, label, _ = build_pairs('1', [source], refs)
+    return pairs, label
 
 
 def build_pairs_mode2():
@@ -331,7 +367,8 @@ def build_pairs_mode2():
     ref = get_single_image_input("pose reference (target)")
     if not ref:
         return None, None
-    return [(source, ref)], "1 source → 1 target"
+    pairs, label, _ = build_pairs('2', [source], [ref])
+    return pairs, label
 
 
 def build_pairs_mode3():
@@ -342,7 +379,8 @@ def build_pairs_mode3():
     ref = get_single_image_input("pose reference (target)")
     if not ref:
         return None, None
-    return [(src, ref) for src in sources], f"{len(sources)} sources → 1 target"
+    pairs, label, _ = build_pairs('3', sources, [ref])
+    return pairs, label
 
 
 def build_pairs_mode4():
@@ -356,19 +394,14 @@ def build_pairs_mode4():
     refs = get_image_list_input("pose references (targets)")
     if not refs:
         return None, None
-    if len(sources) != len(refs):
-        count = min(len(sources), len(refs))
-        print(f"\n⚠️  \033[93mCount mismatch: {len(sources)} sources vs {len(refs)} refs. "
-              f"Pairing the first {count} from each.\033[0m")
-        sources = sources[:count]
-        refs    = refs[:count]
-    pairs = list(zip(sources, refs))
-    return pairs, f"{len(pairs)} sources → {len(pairs)} targets (paired)"
+    pairs, label, note = build_pairs('4', sources, refs)
+    if note:
+        print(f"\n⚠️  \033[93m{note}\033[0m")
+    return pairs, label
 
 
 def build_pairs_mode5():
     """Full matrix: every source × every pose ref (itertools.product)"""
-    from itertools import product
     print()
     print("\033[93m⚠️  Full matrix mode: every source will be paired with every pose ref.\033[0m")
     print("\033[93m   e.g. 4 sources × 6 refs = 24 jobs.\033[0m")
@@ -378,8 +411,8 @@ def build_pairs_mode5():
     refs = get_image_list_input("pose references (targets)")
     if not refs:
         return None, None
-    pairs = list(product(sources, refs))
-    return pairs, f"{len(sources)} sources × {len(refs)} targets = {len(pairs)} jobs (full matrix)"
+    pairs, label, _ = build_pairs('5', sources, refs)
+    return pairs, label
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -952,6 +985,55 @@ class ComfyUIBatchProcessor:
             pass
         return 0, 0
 
+    # ── Per-item queueing (pure: no prompting or printing) ─────────────────
+    # Each returns (ok, stage, detail): stage is where it stopped — 'copy' / 'source_copy' /
+    # 'ref_copy' / 'submit' — or 'queued' on success; detail is the error text, or the
+    # prompt_id when queued. The CLI loops below print from these results.
+
+    def queue_single_one(self, base_workflow, image_path, node_id, steps_override=None):
+        image_path = Path(image_path)
+        ok, err = self.create_symlink(image_path)
+        if not ok:
+            return False, 'copy', err
+        wf = copy.deepcopy(base_workflow)
+        wf = self.update_node_image(wf, node_id, image_path.name)
+        if steps_override is not None:
+            wf = self.update_ksampler_steps(wf, steps_override)
+        ok, result = self.submit_workflow(wf)
+        return ok, ('queued' if ok else 'submit'), result
+
+    def queue_pair_one(self, base_workflow, source_path, ref_path, source_node_id, ref_node_id,
+                       steps_override=None):
+        source_path = Path(source_path)
+        ref_path    = Path(ref_path)
+        ok, err = self.create_symlink(source_path)
+        if not ok:
+            return False, 'source_copy', err
+        if ref_path.resolve() != source_path.resolve():
+            ok, err = self.create_symlink(ref_path)
+            if not ok:
+                return False, 'ref_copy', err
+        wf = copy.deepcopy(base_workflow)
+        wf = self.update_node_image(wf, source_node_id, source_path.name)
+        wf = self.update_node_image(wf, ref_node_id,    ref_path.name)
+        if steps_override is not None:
+            wf = self.update_ksampler_steps(wf, steps_override)
+        ok, result = self.submit_workflow(wf)
+        return ok, ('queued' if ok else 'submit'), result
+
+    def wait_for_queue_drain(self, on_tick=None, poll_seconds=5):
+        """Block until ComfyUI's queue is empty. on_tick(running, pending, waited_seconds)
+        is called on every poll that finds work still queued."""
+        waited = 0
+        while True:
+            running, pending = self.get_queue_status()
+            if running == 0 and pending == 0:
+                return
+            if on_tick:
+                on_tick(running, pending, waited)
+            time.sleep(poll_seconds)
+            waited += poll_seconds
+
     # ── Single-input batch ────────────────────────────────────────────────
 
     def process_single_input(self, images, node_id, steps_override=None, cleanup_after=False):
@@ -976,21 +1058,15 @@ class ComfyUIBatchProcessor:
         for idx, image_path in enumerate(images, 1):
             print(f"\n\033[93m[{idx}/{len(images)}]\033[0m {image_path.name}")
 
-            ok, err = self.create_symlink(image_path)
-            if not ok:
-                print(f"    ❌ \033[93mCopy failed:\033[0m {err}")
+            ok, stage, result = self.queue_single_one(base_workflow, image_path, node_id, steps_override)
+            if stage == 'copy':
+                print(f"    ❌ \033[93mCopy failed:\033[0m {result}")
                 failed += 1
                 continue
             staged += 1
             print(f"    ✅ \033[92mCopied\033[0m")
 
-            wf = copy.deepcopy(base_workflow)
-            wf = self.update_node_image(wf, node_id, image_path.name)
-            if steps_override is not None:
-                wf = self.update_ksampler_steps(wf, steps_override)
-
             print(f"    📤 \033[93mSubmitting...\033[0m")
-            ok, result = self.submit_workflow(wf)
             if ok:
                 print(f"    ✅ \033[92mQueued\033[0m (ID: {result})")
                 successful += 1
@@ -1047,29 +1123,21 @@ class ComfyUIBatchProcessor:
             print(f"    📸 \033[93mSource:\033[0m   {source_path.name}")
             print(f"    🕺 \033[93mPose ref:\033[0m {ref_path.name}")
 
-            ok, err = self.create_symlink(source_path)
-            if not ok:
-                print(f"    ❌ \033[93mSource copy failed:\033[0m {err}")
+            ok, stage, result = self.queue_pair_one(
+                base_workflow, source_path, ref_path, source_node_id, ref_node_id, steps_override
+            )
+            if stage == 'source_copy':
+                print(f"    ❌ \033[93mSource copy failed:\033[0m {result}")
+                failed += 1
+                continue
+            if stage == 'ref_copy':
+                print(f"    ❌ \033[93mRef copy failed:\033[0m {result}")
                 failed += 1
                 continue
 
-            if ref_path.resolve() != source_path.resolve():
-                ok, err = self.create_symlink(ref_path)
-                if not ok:
-                    print(f"    ❌ \033[93mRef copy failed:\033[0m {err}")
-                    failed += 1
-                    continue
-
             print(f"    ✅ \033[92mCopies staged\033[0m")
 
-            wf = copy.deepcopy(base_workflow)
-            wf = self.update_node_image(wf, source_node_id, source_path.name)
-            wf = self.update_node_image(wf, ref_node_id,    ref_path.name)
-            if steps_override is not None:
-                wf = self.update_ksampler_steps(wf, steps_override)
-
             print(f"    📤 \033[93mSubmitting...\033[0m")
-            ok, result = self.submit_workflow(wf)
             if ok:
                 print(f"    ✅ \033[92mQueued\033[0m (ID: {result})")
                 successful += 1
@@ -1132,16 +1200,11 @@ class ComfyUIBatchProcessor:
             # directory" mid-run. Wait for the whole queue to actually drain first.
             print()
             print("⏳ \033[93mWaiting for ComfyUI to finish processing before cleanup...\033[0m")
-            waited = 0
-            while True:
-                running, pending = self.get_queue_status()
-                if running == 0 and pending == 0:
-                    break
+            def _tick(running, pending, waited):
                 if waited > 0 and waited % 60 == 0:
                     print(f"   \033[93m...still processing\033[0m ({running} running, {pending} pending, "
                           f"{waited}s elapsed)")
-                time.sleep(5)
-                waited += 5
+            self.wait_for_queue_drain(on_tick=_tick)
             print("✅ \033[92mQueue drained.\033[0m")
             self.cleanup_symlinks()
         else:
@@ -1268,8 +1331,8 @@ def main():
                 continue
 
             load_image_node = djj.get_string_input(
-                "\033[93m🔢 Enter Load Image node ID (default: 232):\033[0m\n > ",
-                default='232'
+                f"\033[93m🔢 Enter Load Image node ID (default: {DEFAULT_SINGLE_NODE_ID}):\033[0m\n > ",
+                default=DEFAULT_SINGLE_NODE_ID
             )
             print()
 

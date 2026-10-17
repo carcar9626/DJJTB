@@ -182,6 +182,22 @@ context is needed before implementing.
   folder-scan rule below; it prunes `Output` dirs); (d) the single-input summary says "N files from M
   folders" instead of the first file's parent when the files come from several folders. Node-ID prompt
   now comes *after* the images are collected. `py_compile`-checked only — not yet run end-to-end.
+- **`comfyui_batch.py` pure extractions for the desktop GUI (2026-10-17, zero CLI behavior change).**
+  Same precedent as `video_processor.py`'s `_one` functions. New: `build_pairs(mode, sources, refs)`
+  → `(pairs, label, note)` for the 5 dual-input modes (`build_pairs_mode1..5` now just collect input and
+  call it; mode 4's count-mismatch warning is the returned `note`, printed with the same text);
+  `ComfyUIBatchProcessor.queue_single_one()` / `.queue_pair_one()` → `(ok, stage, detail)` (stage =
+  `'copy'`/`'source_copy'`/`'ref_copy'`/`'submit'`/`'queued'`; detail = error text or prompt_id) holding the
+  stage-copy → patch-workflow → submit body that used to sit inline in both loops; `.wait_for_queue_drain(on_tick)`
+  (the loop that used to live inside `_footer`'s cleanup path; `_footer` passes a callback that prints the
+  same "...still processing" line every 60 s); `DEFAULT_SINGLE_NODE_ID = "232"` (was hardcoded in `main()`).
+  One cosmetic ordering change: the CLI loops now print "Copied"/"Submitting..." *after* the copy+submit
+  has run rather than between the two (each result line is the same, the submit is a fast HTTP call).
+  Verified with an offline smoke test (all 5 pairing modes incl. the mismatch note, both `queue_*`
+  functions with `submit_workflow` mocked and a temp staging folder, every failure stage, the drain
+  callback sequence) — not run against a live ComfyUI. Nothing imports `comfyui_batch.py` yet except the
+  comfyui-batch desktop app being built in `DJJPS/comfyui-batch-desktop-djjtb` (see its CLAUDE.md); stories-with-DJJ
+  only copied the pattern.
 
 ## Conventions
 
