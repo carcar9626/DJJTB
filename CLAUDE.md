@@ -486,7 +486,7 @@ path.
 `/Users/home/Documents/Scripts/DJJPS/comfyui-batch-desktop-djjtb` is a standalone pywebview + React desktop GUI
 wrapping `djjtb/ai_tools/comfyui/comfyui_batch.py` — **single-input and dual-input modes only** (the icon batch +
 IG carousel mode stays CLI-only). Same pattern as facefusion-desktop-djjtb (pywebview `js_api`, no HTTP, copied
-scaffold/theme). Built 2026-10-17; local git repo only, no GitHub remote yet. See its own CLAUDE.md for the full
+scaffold/theme). Built 2026-10-17; pushed to GitHub, private, `main` branch (`carcar9626/comfyui-batch-desktop-djjtb`). See its own CLAUDE.md for the full
 architecture and what's verified (real window probe + an end-to-end run of `jobs.run_batch()` against a mock
 ComfyUI server; **not yet run against a live ComfyUI**).
 
