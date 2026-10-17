@@ -2,6 +2,7 @@ from datetime import datetime
 import os
 import time
 import csv
+import threading
 import pyperclip
 import djjtb.utils as djj
 
@@ -16,6 +17,7 @@ os.makedirs(txt_path, exist_ok=True)
 
 # Store already captured paths to avoid duplication
 captured_paths = set()
+_capture_lock = threading.Lock()
 
 def get_today_filenames():
     today_str = datetime.now().strftime("%Y%b%d")
@@ -79,22 +81,35 @@ def extract_paths_from_text(text):
             paths.append(line)
     return paths
 
-def log_path(path_str):
-    if path_str in captured_paths:
-        return
-    captured_paths.add(path_str)
+def find_paths(text):
+    """All file paths found in clipboard text (empty list if none)."""
+    return extract_paths_from_text(text) if is_valid_path(text) else []
+
+def record_path(path_str):
+    """Dedupe, then log one path to today's CSV + TXT. Pure (no printing).
+    Returns the entry dict, or None if this path was already captured."""
+    with _capture_lock:
+        if path_str in captured_paths:
+            return None
+        captured_paths.add(path_str)
     now = datetime.now()
     date_str = now.strftime("%Y-%m-%d")
     time_str = now.strftime("%H:%M:%S")
     path_info = get_path_info(path_str)
     csv_file, txt_file = get_today_filenames()
-    status = "✅" if path_info['exists'] else "❌"
-    print(f"🆕 {status} \033[1;93mCaught ({now.strftime('%H:%M')}):\033[0m \033[1;97m{path_info['filename']}\033[0m | {path_info['full_path']}")
     with open(csv_file, "a", newline='', encoding="utf-8") as f_csv:
         writer = csv.writer(f_csv)
         writer.writerow([path_info['full_path'], date_str, time_str])
     with open(txt_file, "a", encoding="utf-8") as f_txt:
         f_txt.write(path_info['full_path'] + "\n")
+    return {"time": now.strftime("%H:%M"), "exists": path_info['exists'],
+            "filename": path_info['filename'], "path": path_info['full_path']}
+
+def log_path(path_str):
+    entry = record_path(path_str)
+    if entry:
+        status = "✅" if entry['exists'] else "❌"
+        print(f"🆕 {status} \033[1;93mCaught ({entry['time']}):\033[0m \033[1;97m{entry['filename']}\033[0m | {entry['path']}")
 
 def main():
     os.system('clear')
@@ -110,10 +125,8 @@ def main():
             
             if clipboard and clipboard != last_clipboard:
                 last_clipboard = clipboard
-                if is_valid_path(clipboard):
-                    paths = extract_paths_from_text(clipboard)
-                    for path in paths:
-                        log_path(path)
+                for path in find_paths(clipboard):
+                    log_path(path)
             time.sleep(1)
         except KeyboardInterrupt:
             print("\n🛑 PathGrabber stopped.")

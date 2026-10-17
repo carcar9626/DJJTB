@@ -821,9 +821,12 @@ class DJJTBLauncher:
         os.system('clear')
 
         # Auto-launch grabbers on first boot only
-        if is_boot_launch():
-            self.launch_grabbers_at_boot()
-            write_grabber_stamp()
+        # DISABLED (2026-10-17): the grabbers now run as tabs 3/4 of media_dashboard.py,
+        # which launches itself at login via ~/Library/LaunchAgents/com.djjtb.media-dashboard.plist.
+        # Re-enabling this alongside the dashboard would double-log every copy into the same files.
+        # if is_boot_launch():
+        #     self.launch_grabbers_at_boot()
+        #     write_grabber_stamp()
         
         while True:
             self.show_main_menu()

@@ -3,6 +3,7 @@ import os
 import re
 import time
 import csv
+import threading
 import pyperclip
 import requests
 from bs4 import BeautifulSoup
@@ -23,6 +24,7 @@ extension_pattern = re.compile(r"\.([a-zA-Z0-9]{1,6})(?:\?|$)")
 
 # Store already captured links to avoid duplication
 captured_links = set()
+_capture_lock = threading.Lock()
 
 def get_today_filenames():
     today_str = datetime.now().strftime("%Y%b%d")
@@ -50,30 +52,47 @@ def get_domain(url):
     except:
         return "unknown"
 
-def log_link(url):
-    if url in captured_links:
-        return
-    
-    captured_links.add(url)
+def find_links(text):
+    """All URLs found in clipboard text."""
+    return [m.group(0) for m in url_pattern.finditer(text)]
+
+def record_link(url, on_caught=None):
+    """Dedupe, then log one URL to today's CSV + TXT. Pure (no printing).
+    Returns the entry dict, or None if this URL was already captured.
+    on_caught(entry) fires right after the dedupe check, before the (slow,
+    up to 5s) page-title fetch, so callers can show the catch immediately."""
+    with _capture_lock:
+        if url in captured_links:
+            return None
+        captured_links.add(url)
+
     now = datetime.now()
     date_str = now.strftime("%Y-%m-%d")
     time_str = now.strftime("%H:%M:%S")
     ext = extract_extension(url)
+    domain = get_domain(url)
+    entry = {"time": now.strftime("%H:%M"), "domain": domain, "url": url}
+    if on_caught:
+        on_caught(entry)
+
     title = get_page_title(url)
     csv_file, txt_file = get_today_filenames()
-    domain = get_domain(url)
-    
-    # Print to Terminal
-    print(f"🆕 \033[1;93mCaught ({now.strftime('%H:%M')}):\033[0m \033[1;97m{domain}\033[0m | {url}")
-    
+
     # Write CSV
     with open(csv_file, "a", newline='', encoding="utf-8") as f_csv:
         writer = csv.writer(f_csv)
         writer.writerow([title, domain, url, date_str, time_str, ext])
-    
+
     # Write TXT
     with open(txt_file, "a", encoding="utf-8") as f_txt:
         f_txt.write(url + "\n")
+    return entry
+
+def print_caught(entry):
+    print(f"🆕 \033[1;93mCaught ({entry['time']}):\033[0m \033[1;97m{entry['domain']}\033[0m | {entry['url']}")
+
+def log_link(url):
+    record_link(url, on_caught=print_caught)
 
 def main():
     # Clear screen before starting
@@ -92,9 +111,8 @@ def main():
             if clipboard and clipboard != last_clipboard:
                 last_clipboard = clipboard
                 # Find all URLs in clipboard text
-                url_matches = url_pattern.finditer(clipboard)
-                for match in url_matches:
-                    log_link(match.group(0))
+                for url in find_links(clipboard):
+                    log_link(url)
             time.sleep(1)
         except KeyboardInterrupt:
             print("\n🛑 LinkGrabber stopped.")

@@ -5,6 +5,9 @@ import base64
 import tempfile
 import mimetypes
 import subprocess
+import threading
+import time
+from collections import deque
 from io import BytesIO
 from pathlib import Path
 from datetime import datetime
@@ -14,10 +17,12 @@ from webview.dom import DOMEventHandler
 from PIL import Image
 
 import djjtb.utils as djj
+from djjtb.quick_tools import link_grabber, path_grabber
 
 os.system('clear')
 print()
 print("Media Dashboard running... (close the window to quit)")
+print("Link + Path grabbers are capturing the clipboard while this is open.")
 
 IMAGE_SEARCH_EXTS = ('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp')
 
@@ -175,6 +180,97 @@ class Api:
         self.active_tab = "info"
         self.include_subfolders = False
         self.pending_search_path = None
+        # Grabber tabs: capped in-memory feeds, polled by the page by sequence number
+        self.grabber_mods = {"link": link_grabber, "path": path_grabber}
+        self.feeds = {k: deque(maxlen=1000) for k in self.grabber_mods}
+        self.feed_seq = {k: 0 for k in self.grabber_mods}
+        self.paused = {k: False for k in self.grabber_mods}
+        self.feed_lock = threading.Lock()
+        self.skip_clipboard = None
+
+    # Grabber tabs
+    def start_grabbers(self):
+        threading.Thread(target=self._grab_loop, daemon=True).start()
+
+    def _push(self, kind, entry):
+        with self.feed_lock:
+            self.feed_seq[kind] += 1
+            self.feeds[kind].append({"seq": self.feed_seq[kind], **entry})
+
+    def _grab_loop(self):
+        # ONE poller for both grabbers, reading via pbpaste. pyperclip's AppKit/NSPasteboard
+        # backend segfaults when called from background threads (two pollers crashed the
+        # app on launch), so the pasteboard is never touched from Python here.
+        finders = {"link": link_grabber.find_links, "path": path_grabber.find_paths}
+        last_clipboard = ""
+        while True:
+            try:
+                result = subprocess.run(["pbpaste"], capture_output=True, timeout=5)
+                clipboard = result.stdout.decode("utf-8", errors="replace").strip()
+                if clipboard and clipboard != last_clipboard:
+                    last_clipboard = clipboard
+                    # our own "Copy all" must not be re-captured as fresh links/paths
+                    for kind, finder in ([] if clipboard == self.skip_clipboard else finders.items()):
+                        # Paused still tracks the clipboard, so a copy made while paused isn't caught on resume
+                        items = [] if self.paused[kind] else finder(clipboard)
+                        if items:
+                            # own thread: a slow page-title fetch must not stall clipboard polling
+                            threading.Thread(target=self._handle, args=(kind, items), daemon=True).start()
+            except Exception as e:
+                print(f"[grabber] {e}")
+            time.sleep(1)
+
+    def _handle(self, kind, items):
+        for item in items:
+            try:
+                if kind == "link":
+                    link_grabber.record_link(item, on_caught=lambda e: self._push("link", e))
+                else:
+                    entry = path_grabber.record_path(item)
+                    if entry:
+                        self._push("path", entry)
+            except Exception as e:
+                print(f"[{kind} grabber] {e}")
+
+    def get_feed(self, kind, since):
+        with self.feed_lock:
+            items = [e for e in self.feeds[kind] if e["seq"] > since]
+        return {"items": items, "paused": self.paused[kind]}
+
+    def set_grabber_paused(self, kind, value):
+        self.paused[kind] = bool(value)
+        return self.paused[kind]
+
+    def _read_txt_lines(self, kind):
+        txt_file = self.grabber_mods[kind].get_today_filenames()[1]
+        try:
+            with open(txt_file, encoding="utf-8") as f:
+                return os.path.basename(txt_file), [ln.rstrip("\n") for ln in f if ln.strip()]
+        except FileNotFoundError:
+            return os.path.basename(txt_file), []
+
+    def get_txt_lines(self, kind, known_name, known_count):
+        """Today's TXT as clean lines; sends the full list only when it changed."""
+        name, lines = self._read_txt_lines(kind)
+        if name == known_name and len(lines) == known_count:
+            return {"changed": False}
+        return {"changed": True, "name": name, "lines": lines}
+
+    def copy_grabber_list(self, kind):
+        _, lines = self._read_txt_lines(kind)
+        if not lines:
+            return {"ok": False, "error": "Nothing to copy yet"}
+        text = "\n".join(lines)
+        self.skip_clipboard = text.strip()
+        subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=False)
+        return {"ok": True, "count": len(lines)}
+
+    def open_grabber_txt(self, kind):
+        _, txt_file = self.grabber_mods[kind].get_today_filenames()
+        if not os.path.exists(txt_file):
+            return {"ok": False, "error": "Nothing captured yet today"}
+        subprocess.run(["open", txt_file])
+        return {"ok": True}
 
     def set_active_tab(self, name):
         self.active_tab = name
@@ -260,7 +356,7 @@ def bind(window, api):
                 return
             result = api.load_search_preview(image_paths[0])
             window.evaluate_js(f'renderSearchPreview({json.dumps(result)})', lambda r: None)
-        else:
+        elif api.active_tab == "info":
             entries = api.get_info(paths)
             window.evaluate_js(f'appendInfoResults({json.dumps(entries)})', lambda r: None)
 
@@ -345,12 +441,48 @@ HTML = """
   #searchPreview img { max-width: 100%; max-height: 260px; border-radius: 8px; }
   #searchFilename { color: #9a9aa2; font-size: 12px; }
   #searchStatus { color: #6fd88a; font-size: 12px; min-height: 16px; }
+
+  .grabber-bar { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .grabber-bar .state { color: #6fd88a; font-size: 12px; margin-right: auto; }
+  .grabber-bar .state.paused { color: #e0a84a; }
+  .grabber-bar .note { color: #e0a84a; font-size: 11px; }
+  .feed {
+    flex: 1; overflow-y: auto; background: #202024; border-radius: 8px; padding: 6px 0;
+    font: 12px ui-monospace, "SF Mono", Menlo, monospace;
+    -webkit-user-select: text; user-select: text;
+  }
+  .split { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .split .feed { flex: 1 1 0; min-height: 60px; }
+  .handle {
+    flex: 0 0 12px; cursor: row-resize; position: relative;
+  }
+  .handle::after {
+    content: ""; position: absolute; left: 50%; top: 50%; width: 44px; height: 4px;
+    margin: -2px 0 0 -22px; border-radius: 2px; background: #45454c;
+  }
+  .handle:hover::after, .handle.dragging::after { background: #5e9eff; }
+  .listwrap { flex: 1 1 0; min-height: 60px; display: flex; flex-direction: column; gap: 6px; }
+  .listhead { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; color: #9a9aa2; font-size: 12px; }
+  .listhead button { padding: 3px 8px; font-size: 11px; }
+  .cleanlist {
+    flex: 1; min-height: 0; overflow-y: auto; background: #202024; border-radius: 8px; padding: 6px 0;
+    font: 12px ui-monospace, "SF Mono", Menlo, monospace;
+    -webkit-user-select: text; user-select: text;
+  }
+  .cleanlist .cl { padding: 2px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #c8c8cc; }
+  .cleanlist .empty { color: #75757e; padding: 10px 12px; font-family: -apple-system, sans-serif; }
+  .feed .empty { color: #75757e; padding: 10px 12px; font-family: -apple-system, sans-serif; }
+  .feed .line { padding: 3px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #9a9aa2; }
+  .feed .line .cn { color: #e0c050; }
+  .feed .line .nm { color: #f5f5f7; font-weight: 700; }
 </style>
 </head>
 <body>
   <div class="tabbar">
     <div class="tab active" id="tabInfoBtn" onclick="switchTab('info')">Media Info</div>
-    <div class="tab" id="tabSearchBtn" onclick="switchTab('search')">Reverse Image Search</div>
+    <div class="tab" id="tabSearchBtn" onclick="switchTab('search')">Reverse Search</div>
+    <div class="tab" id="tabLinkBtn" onclick="switchTab('link')">Link Grabber</div>
+    <div class="tab" id="tabPathBtn" onclick="switchTab('path')">Path Grabber</div>
   </div>
 
   <div class="panel active" id="panelInfo">
@@ -388,16 +520,208 @@ HTML = """
     </div>
   </div>
 
+  <div class="panel" id="panelLink">
+    <div class="grabber-bar">
+      <span class="state" id="stateLink">Watching clipboard for links</span>
+      <span class="note" id="noteLink"></span>
+      <button id="pauseLink" onclick="togglePause('link')">Pause</button>
+      <button onclick="openTxt('link')">Open TXT</button>
+    </div>
+    <div class="split" id="splitLink">
+      <div class="feed" id="feedLink"><div class="empty">Nothing caught yet. Copy a link to see it here.</div></div>
+      <div class="handle" onmousedown="startDrag('link', event)" title="Drag to resize"></div>
+      <div class="listwrap" id="listwrapLink">
+        <div class="listhead"><span id="listLabelLink">Today's links</span><button onclick="copyList('link')">Copy all</button></div>
+        <div class="cleanlist" id="listLink"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" id="panelPath">
+    <div class="grabber-bar">
+      <span class="state" id="statePath">Watching clipboard for paths</span>
+      <span class="note" id="notePath"></span>
+      <button id="pausePath" onclick="togglePause('path')">Pause</button>
+      <button onclick="openTxt('path')">Open TXT</button>
+    </div>
+    <div class="split" id="splitPath">
+      <div class="feed" id="feedPath"><div class="empty">Nothing caught yet. Copy a file path to see it here.</div></div>
+      <div class="handle" onmousedown="startDrag('path', event)" title="Drag to resize"></div>
+      <div class="listwrap" id="listwrapPath">
+        <div class="listhead"><span id="listLabelPath">Today's paths</span><button onclick="copyList('path')">Copy all</button></div>
+        <div class="cleanlist" id="listPath"></div>
+      </div>
+    </div>
+  </div>
+
 <script>
   let infoRows = [];
 
+  const TABS = ['info', 'search', 'link', 'path'];
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+
   function switchTab(name) {
-    document.getElementById('tabInfoBtn').classList.toggle('active', name === 'info');
-    document.getElementById('tabSearchBtn').classList.toggle('active', name === 'search');
-    document.getElementById('panelInfo').classList.toggle('active', name === 'info');
-    document.getElementById('panelSearch').classList.toggle('active', name === 'search');
+    for (const t of TABS) {
+      document.getElementById('tab' + cap(t) + 'Btn').classList.toggle('active', t === name);
+      document.getElementById('panel' + cap(t)).classList.toggle('active', t === name);
+    }
     pywebview.api.set_active_tab(name);
+    if (name === 'link' || name === 'path') scrollFeedToEnd(name);
   }
+
+  // ── Grabber tabs ──
+  // The Python side keeps capturing whichever tab is showing; the page just polls
+  // by sequence number, so a throttled/hidden window catches up when it wakes.
+  const feedSeq = { link: 0, path: 0 };
+  const feedPaused = { link: false, path: false };
+  const FEED_MAX_LINES = 500;
+
+  function feedLineHtml(kind, e) {
+    if (kind === 'link') {
+      return `🆕 <span class="cn">Caught (${escapeHtml(e.time)}):</span> <span class="nm">${escapeHtml(e.domain)}</span> | ${escapeHtml(e.url)}`;
+    }
+    return `🆕 ${e.exists ? '✅' : '❌'} <span class="cn">Caught (${escapeHtml(e.time)}):</span> <span class="nm">${escapeHtml(e.filename)}</span> | ${escapeHtml(e.path)}`;
+  }
+
+  function scrollFeedToEnd(kind) {
+    const feed = document.getElementById('feed' + cap(kind));
+    feed.scrollTop = feed.scrollHeight;
+  }
+
+  function appendFeed(kind, items) {
+    if (!items.length) return;
+    const feed = document.getElementById('feed' + cap(kind));
+    const empty = feed.querySelector('.empty');
+    if (empty) empty.remove();
+    const atEnd = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 40;
+    for (const e of items) {
+      const div = document.createElement('div');
+      div.className = 'line';
+      div.title = kind === 'link' ? e.url : e.path;
+      div.innerHTML = feedLineHtml(kind, e);
+      feed.appendChild(div);
+      feedSeq[kind] = Math.max(feedSeq[kind], e.seq);
+    }
+    while (feed.children.length > FEED_MAX_LINES) feed.removeChild(feed.firstChild);
+    if (atEnd) feed.scrollTop = feed.scrollHeight;
+  }
+
+  function renderPaused(kind, paused) {
+    feedPaused[kind] = paused;
+    const noun = kind === 'link' ? 'links' : 'paths';
+    const state = document.getElementById('state' + cap(kind));
+    state.textContent = paused ? 'Paused' : 'Watching clipboard for ' + noun;
+    state.classList.toggle('paused', paused);
+    document.getElementById('pause' + cap(kind)).textContent = paused ? 'Resume' : 'Pause';
+  }
+
+  // ── Clean list (bottom pane): mirrors today's TXT file, one entry per line ──
+  const listState = { link: { name: null, count: -1 }, path: { name: null, count: -1 } };
+  const LIST_MAX_LINES = 3000;
+
+  function renderList(kind, res) {
+    const list = document.getElementById('list' + cap(kind));
+    const first = listState[kind].count < 0;
+    const prevTop = list.scrollTop;
+    const atEnd = first || list.scrollHeight - list.scrollTop - list.clientHeight < 40;
+    list.innerHTML = '';
+    if (!res.lines.length) {
+      list.innerHTML = '<div class="empty">Nothing in today\\'s file yet.</div>';
+    } else {
+      const frag = document.createDocumentFragment();
+      for (const text of res.lines.slice(-LIST_MAX_LINES)) {
+        const div = document.createElement('div');
+        div.className = 'cl';
+        div.title = text;
+        div.textContent = text;
+        frag.appendChild(div);
+      }
+      list.appendChild(frag);
+    }
+    const noun = kind === 'link' ? 'links' : 'paths';
+    document.getElementById('listLabel' + cap(kind)).textContent =
+      `Today's ${noun} (${res.lines.length}) — ${res.name}`;
+    listState[kind] = { name: res.name, count: res.lines.length };
+    list.scrollTop = atEnd ? list.scrollHeight : prevTop;
+  }
+
+  async function pollList(kind) {
+    const res = await pywebview.api.get_txt_lines(kind, listState[kind].name, listState[kind].count);
+    if (res.changed) renderList(kind, res);
+  }
+
+  async function copyList(kind) {
+    const res = await pywebview.api.copy_grabber_list(kind);
+    const note = document.getElementById('note' + cap(kind));
+    note.textContent = res.ok ? `Copied ${res.count} lines` : res.error;
+    setTimeout(() => { note.textContent = ''; }, 2500);
+  }
+
+  // ── Draggable divider between the feed and the clean list ──
+  const splitFrac = { link: 0.5, path: 0.5 };
+
+  function applySplit(kind) {
+    const f = splitFrac[kind];
+    document.getElementById('feed' + cap(kind)).style.flex = `${f} 1 0px`;
+    document.getElementById('listwrap' + cap(kind)).style.flex = `${1 - f} 1 0px`;
+  }
+
+  function startDrag(kind, ev) {
+    ev.preventDefault();
+    const split = document.getElementById('split' + cap(kind));
+    const handle = ev.currentTarget;
+    handle.classList.add('dragging');
+    const onMove = e => {
+      const rect = split.getBoundingClientRect();
+      const usable = rect.height - handle.offsetHeight;
+      const minPx = 60;
+      let top = e.clientY - rect.top - handle.offsetHeight / 2;
+      top = Math.max(minPx, Math.min(usable - minPx, top));
+      splitFrac[kind] = top / usable;
+      applySplit(kind);
+    };
+    const onUp = () => {
+      handle.classList.remove('dragging');
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      try { localStorage.setItem('split_' + kind, String(splitFrac[kind])); } catch (e) {}
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+
+  for (const kind of ['link', 'path']) {
+    try {
+      const saved = parseFloat(localStorage.getItem('split_' + kind));
+      if (saved > 0.1 && saved < 0.9) splitFrac[kind] = saved;
+    } catch (e) {}
+    applySplit(kind);
+  }
+
+  async function pollFeeds() {
+    for (const kind of ['link', 'path']) {
+      try {
+        const res = await pywebview.api.get_feed(kind, feedSeq[kind]);
+        appendFeed(kind, res.items);
+        if (res.paused !== feedPaused[kind]) renderPaused(kind, res.paused);
+        await pollList(kind);
+      } catch (err) { /* bridge not ready yet or window closing */ }
+    }
+  }
+
+  async function togglePause(kind) {
+    const paused = await pywebview.api.set_grabber_paused(kind, !feedPaused[kind]);
+    renderPaused(kind, paused);
+  }
+
+  async function openTxt(kind) {
+    const res = await pywebview.api.open_grabber_txt(kind);
+    const note = document.getElementById('note' + cap(kind));
+    note.textContent = res.ok ? '' : res.error;
+    if (!res.ok) setTimeout(() => { note.textContent = ''; }, 3000);
+  }
+
+  window.addEventListener('pywebviewready', () => setInterval(pollFeeds, 1000));
 
   for (const id of ['dropzoneInfo', 'dropzoneSearch']) {
     const el = document.getElementById(id);
@@ -530,9 +854,10 @@ HTML = """
 
 def main():
     api = Api()
+    api.start_grabbers()
     window = webview.create_window(
         "Media Dashboard", html=HTML, js_api=api,
-        width=560, height=720, resizable=True
+        width=840, height=720, resizable=True
     )
     webview.start(lambda: bind(window, api), debug=False)
 
