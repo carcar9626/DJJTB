@@ -1,5 +1,6 @@
 from datetime import datetime
 import os
+import re
 import time
 import csv
 import threading
@@ -17,6 +18,7 @@ os.makedirs(txt_path, exist_ok=True)
 
 # Store already captured paths to avoid duplication
 captured_paths = set()
+_MULTI_PATH_SPLIT = re.compile(r"(?<!\\)\s+(?=['\"]?(?:/|~/))")
 _capture_lock = threading.Lock()
 
 def get_today_filenames():
@@ -59,7 +61,9 @@ def extract_paths_from_text(text):
     """Extract potential file paths from clipboard text"""
     text = str(text or "").strip()
     paths = []
-    lines = text.split('\n')
+    # Several paths copied at once can arrive space-separated on ONE line; split before
+    # each unescaped space that is followed by another path start ('\ ' stays inside a path).
+    lines = [seg for ln in text.split('\n') for seg in _MULTI_PATH_SPLIT.split(ln)]
     valid_path_starts = [
         '/Users/', '/Applications/', '/System/', '/Library/', '/Volumes/',
         '~/Documents/', '~/Desktop/', '~/Downloads/', '~/', '/'
