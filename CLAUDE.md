@@ -165,6 +165,24 @@ to, not a completed change. See stories-with-DJJ's `animation/spike/comfyui_clie
 (`free_memory()`) and `CLAUDE.md`'s 2026-08-03 entries for the fuller investigation if useful
 context is needed before implementing.
 
+- **`comfyui_batch.py` single-input now takes individual files, not just a folder (2026-10-17, CLI first
+  for the planned comfyui-batch desktop GUI — single/dual only, icon batch stays CLI-only).** Single
+  input used to ask only "source folder path" + "include subfolders?". It now goes through the same
+  `get_image_list_input()` the dual-input pairing modes already use (1. Folder, with the subfolders
+  prompt / 2. Individual files). Related changes in the same pass: (a) the "Individual files" mode
+  accepts several dragged paths on one line (via `djj.collect_images_from_paths`, handles `\ `-escaped
+  spaces and one-level folders), after first trying the whole line as one path so unescaped
+  paths-with-spaces still work as before; repeats are deduped across lines — this also affects the
+  dual-input modes (additive only); (b) new `confirm_duplicate_filenames()` pre-flight for single input —
+  staged copies go into ComfyUI's input folder under their bare filename, so same-named files from
+  different folders overwrite each other before ComfyUI reads them (a pre-existing hazard that
+  "include subfolders" already allowed, now easier to hit with hand-picked files); it warns and defaults
+  to "go back", and only appears when duplicates exist. **Dual-input has the same hazard and is not
+  guarded yet.** (c) `get_images_from_folder()` now scans via `djj.walk_dirs` (symlink-following, per the
+  folder-scan rule below; it prunes `Output` dirs); (d) the single-input summary says "N files from M
+  folders" instead of the first file's parent when the files come from several folders. Node-ID prompt
+  now comes *after* the images are collected. `py_compile`-checked only — not yet run end-to-end.
+
 ## Conventions
 
 - All scripts `import djjtb.utils as djj` and use `djj.prompt_choice`, `djj.get_path_input`, `djj.get_centralized_media_input`, `djj.get_centralized_output_path`, `djj.apply_skip_list`, `djj.setup_logging`, `djj.what_next`. Match this in any new tool.

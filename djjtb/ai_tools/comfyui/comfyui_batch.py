@@ -170,7 +170,7 @@ def get_images_from_folder(folder_path, include_subfolders=False):
         print(f"❌ \033[93mFolder not found:\033[0m {folder_path}")
         return images
     if include_subfolders:
-        for root, _, files in os.walk(folder):
+        for root, _, files in djj.walk_dirs(folder):
             for f in files:
                 if any(f.lower().endswith(ext) for ext in IMAGE_EXTENSIONS):
                     images.append(Path(root) / f)
@@ -208,19 +208,28 @@ def get_image_list_input(label):
             print(f"❌ \033[93mNo images found in folder.\033[0m")
         return images
     else:
-        print(f"\033[93mEnter file paths for {label}, one per line.\033[0m")
+        print(f"\033[93mEnter file paths for {label}.\033[0m")
+        print("\033[93mDrag & drop several files per line, or one path per line.\033[0m")
         print("\033[93mPress Enter on an empty line when done.\033[0m")
-        paths = []
+        paths = set()
         while True:
-            raw = input(" > ").strip().strip("'\"")
+            raw = input(" > ").strip()
             if not raw:
                 break
-            p = Path(raw)
-            if p.exists() and p.is_file():
-                paths.append(p)
-                print(f"  ✅ \033[92mAdded:\033[0m {p.name}")
+            # A single path may contain spaces (pasted unescaped) — try the whole line first
+            # so that keeps working; otherwise treat it as several dragged paths.
+            whole = Path(raw.strip("'\"").replace("\\ ", " ")).expanduser()
+            if whole.is_file():
+                found = [whole]
             else:
-                print(f"  ⚠️  \033[93mNot found, skipped:\033[0m {raw}")
+                found = [Path(p) for p in djj.collect_images_from_paths(raw, extensions=tuple(IMAGE_EXTENSIONS))]
+            added = [p for p in found if p not in paths]
+            paths.update(added)
+            if added:
+                names = ", ".join(p.name for p in added) if len(added) <= 3 else f"{len(added)} files"
+                print(f"  ✅ \033[92mAdded:\033[0m {names}  \033[93m(total {len(paths)})\033[0m")
+            elif not found:
+                print(f"  ⚠️  \033[93mNothing usable found, skipped:\033[0m {raw}")
         return sorted(paths)
 
 
@@ -234,6 +243,31 @@ def get_single_image_input(label):
         print(f"❌ \033[93mFile not found:\033[0m {raw}")
         return None
     return p
+
+
+def confirm_duplicate_filenames(images):
+    """Staged copies land in ComfyUI's input folder under their bare filename, so two source
+    files with the same name (e.g. from different folders) overwrite each other there before
+    ComfyUI gets to read them. Warns and lets the user back out. Returns True to proceed."""
+    by_name = {}
+    for img in images:
+        by_name.setdefault(img.name, []).append(img)
+    dupes = {name: paths for name, paths in by_name.items() if len(paths) > 1}
+    if not dupes:
+        return True
+
+    print(f"⚠️  \033[93m{len(dupes)} filename(s) appear more than once — their staged copies would "
+          f"overwrite each other in ComfyUI's input folder:\033[0m")
+    for name, paths in list(dupes.items())[:3]:
+        print(f"   • {name}  ({len(paths)} files)")
+    if len(dupes) > 3:
+        print(f"   ... and {len(dupes) - 3} more")
+    print()
+    return djj.prompt_choice(
+        "\033[93mContinue anyway?\033[0m\n1. No, go back\n2. Yes, continue",
+        ['1', '2'],
+        default='1'
+    ) == '2'
 
 
 def prompt_steps_override():
@@ -969,7 +1003,11 @@ class ComfyUIBatchProcessor:
 
         print()
         self._section("Summary")
-        print(f"📁 \033[93mInput folder:\033[0m {images[0].parent if images else '-'}")
+        parents = {img.parent for img in images}
+        if len(parents) == 1:
+            print(f"📁 \033[93mInput folder:\033[0m {next(iter(parents))}")
+        else:
+            print(f"📁 \033[93mInput:\033[0m {len(images)} files from {len(parents)} folders")
         print(f"⚙️  \033[93mWorkflow:\033[0m {Path(self.workflow_path).name}")
         if steps_override is not None:
             print(f"⚡ \033[93mSteps:\033[0m {steps_override} (overridden)")
@@ -1215,29 +1253,25 @@ def main():
         #  SINGLE-INPUT FLOW
         # ══════════════════════════════════════════════════════════════════
         if workflow_type == '1':
-            source_folder = djj.get_path_input("📁 Enter source folder path")
-            print()
-
-            include_subfolders = djj.prompt_choice(
-                "\033[93mInclude subfolders?\033[0m\n1. Yes\n2. No",
-                ['1', '2'],
-                default='2'
-            ) == '1'
-            print()
-
-            load_image_node = djj.get_string_input(
-                "\033[93m🔢 Enter Load Image node ID (default: 232):\033[0m\n > ",
-                default='232'
-            )
-            print()
-
-            images = get_images_from_folder(source_folder, include_subfolders)
+            # Folder (optionally with subfolders) or individual files — same helper the
+            # dual-input pairing modes use.
+            images = get_image_list_input("source images")
             if not images:
                 print("❌ \033[93mNo images found. Skipping.\033[0m")
                 action = djj.what_next()
                 if action == 'exit':
                     break
                 continue
+            print()
+
+            if not confirm_duplicate_filenames(images):
+                continue
+
+            load_image_node = djj.get_string_input(
+                "\033[93m🔢 Enter Load Image node ID (default: 232):\033[0m\n > ",
+                default='232'
+            )
+            print()
 
             log_file = log_job(
                 job_id=job_id,
