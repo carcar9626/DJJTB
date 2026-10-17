@@ -26,6 +26,21 @@ def launch_desktop_app(app_id):
     time.sleep(2)
 
 
+# Admin menu "GUIs" section: same numbers as the main menu's DJJPS (GUI) entries
+GUI_REBUILD_CHOICES = {
+    "11": "djjtb-suite", "12": "smart-crop", "13": "facefusion",
+    "14": "joycaption", "15": "upscaler-ai", "16": "comfyui-batch",
+}
+
+
+def rebuild_desktop_app(app_id):
+    """Admin menu: rebuild an app's frontend in a Terminal window, then launch it (refused if it's open)."""
+    status, message = desktop_apps.rebuild_and_launch(app_id)
+    color = "\033[91m" if status == "error" else "\033[93m"
+    print(f"{color}{message}\033[0m")
+    time.sleep(2)
+
+
 # ── Boot-launch detection ─────────────────────────────────────────────────────
 # Stamp file records the last time djjtb launched the grabbers.
 # If the Mac booted after that stamp, it's a fresh boot → launch grabbers.
@@ -308,6 +323,15 @@ class DJJTBLauncher:
         print(" 💰\033[4;93m8a\033[0m  Unmount Movies 4,8 & SC ⏏️")
         print(" 💰 \033[4;93m9\033[0m  Port Manager (check/restart/stop) 🔌")
         # print(" 💰\033[4;93m10\033[0m  Stop ComfyUI 🛑")
+        print()
+        print("\033[1;93m GUIs (rebuild frontend & launch)\033[0m")
+        print("\033[92m--------------------------------------------------\033[0m")
+        print(" 💰\033[4;93m11\033[0m  DJJTB Suite 🖥️")
+        print(" 💰\033[4;93m12\033[0m  Smart Crop 🖥️")
+        print(" 💰\033[4;93m13\033[0m  FaceFusion 🖥️")
+        print(" 💰\033[4;93m14\033[0m  JoyCaption 🖥️")
+        print(" 💰\033[4;93m15\033[0m  Upscaler AI 🖥️")
+        print(" 💰\033[4;93m16\033[0m  ComfyUI Batch 🖥️")
         print("\033[92m--------------------------------------------------\033[0m")
         print(" 💰 \033[4;93m0\033[0m  ⏪ Back")
         print(" 💰\033[4;93m00\033[0m ⏮️  MAIN MENU")
@@ -743,7 +767,7 @@ class DJJTBLauncher:
 
         while True:
             self.show_admin_tools_menu()
-            choice = djj.prompt_choice("\033[91mChoose an admin tool\033[0m", ['1', '2', '3', '4', '5', '6', '7', '8', '8a', '9', '0', '00'])  # '10' (Stop ComfyUI) commented out below
+            choice = djj.prompt_choice("\033[91mChoose an admin tool\033[0m", ['1', '2', '3', '4', '5', '6', '7', '8', '8a', '9', '11', '12', '13', '14', '15', '16', '0', '00'])  # '10' (Stop ComfyUI) commented out below
 
             if choice == "1":  # djjtb_scan.py
                 djj.run_command_in_tab(
@@ -804,6 +828,8 @@ class DJJTBLauncher:
             #     djj.run_command_in_tab(
             #         f"bash {self.project_path}/djjtb/ai_tools/comfyui_stop.command"
             #     )
+            elif choice in GUI_REBUILD_CHOICES:  # GUIs: rebuild the frontend, then launch (main menu 11-16 launch without rebuilding)
+                rebuild_desktop_app(GUI_REBUILD_CHOICES[choice])
             elif choice == "0":
                 break
             elif choice == "00":

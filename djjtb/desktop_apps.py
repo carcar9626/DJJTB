@@ -102,6 +102,21 @@ def focus(pid: int) -> bool:
         return False
 
 
+def rebuild_and_launch(app_id: str) -> tuple[str, str]:
+    """Open the app's run_*_desktop.command in Terminal (what double-clicking it does): rebuilds the
+    frontend (`npm run build`), then runs the app in that window. Use after changing the app's
+    React/TS source. Refused while the app is already running — it would open a second copy.
+    Returns (status, message); status is "rebuilding" or "error"."""
+    app = APPS[app_id]
+    if find_pids(app):
+        return "error", f"{app.label} is running — close it first, then rebuild & launch."
+    command = app.root / app.command
+    if not command.exists():
+        return "error", f"{app.label}'s rebuild launcher is missing: {command}"
+    subprocess.Popen(["open", str(command)])
+    return "rebuilding", f"{app.label}: rebuilding in a Terminal window, then it opens."
+
+
 def launch(app_id: str) -> tuple[str, str]:
     """Start the app, or raise it if it's already open.
     Returns (status, message); status is "launched", "focused" or "error"."""
