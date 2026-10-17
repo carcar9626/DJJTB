@@ -251,13 +251,25 @@ class Api:
 
     def get_txt_lines(self, kind, known_name, known_count):
         """Today's TXT as clean lines; sends the full list only when it changed."""
-        name, lines = self._read_txt_lines(kind)
-        if name == known_name and len(lines) == known_count:
+        name, raw = self._read_txt_lines(kind)
+        if name == known_name and len(raw) == known_count:
             return {"changed": False}
-        return {"changed": True, "name": name, "lines": lines}
+        # rawCount (not the deduped length) is what the page sends back to detect changes
+        return {"changed": True, "name": name, "rawCount": len(raw), "lines": self._clean_list(raw)}
+
+    @staticmethod
+    def _clean_list(lines):
+        """Unique lines, newest first. A repeat keeps its most recent position."""
+        seen, out = set(), []
+        for ln in reversed(lines):
+            if ln not in seen:
+                seen.add(ln)
+                out.append(ln)
+        return out
 
     def copy_grabber_list(self, kind):
-        _, lines = self._read_txt_lines(kind)
+        _, raw = self._read_txt_lines(kind)
+        lines = self._clean_list(raw)
         if not lines:
             return {"ok": False, "error": "Nothing to copy yet"}
         text = "\n".join(lines)
@@ -623,13 +635,13 @@ HTML = """
     const list = document.getElementById('list' + cap(kind));
     const first = listState[kind].count < 0;
     const prevTop = list.scrollTop;
-    const atEnd = first || list.scrollHeight - list.scrollTop - list.clientHeight < 40;
+    const atTop = first || list.scrollTop < 40;  // newest is on top
     list.innerHTML = '';
     if (!res.lines.length) {
       list.innerHTML = '<div class="empty">Nothing in today\\'s file yet.</div>';
     } else {
       const frag = document.createDocumentFragment();
-      for (const text of res.lines.slice(-LIST_MAX_LINES)) {
+      for (const text of res.lines.slice(0, LIST_MAX_LINES)) {
         const div = document.createElement('div');
         div.className = 'cl';
         div.title = text;
@@ -641,8 +653,8 @@ HTML = """
     const noun = kind === 'link' ? 'links' : 'paths';
     document.getElementById('listLabel' + cap(kind)).textContent =
       `Today's ${noun} (${res.lines.length}) — ${res.name}`;
-    listState[kind] = { name: res.name, count: res.lines.length };
-    list.scrollTop = atEnd ? list.scrollHeight : prevTop;
+    listState[kind] = { name: res.name, count: res.rawCount };
+    list.scrollTop = atTop ? 0 : prevTop;
   }
 
   async function pollList(kind) {
