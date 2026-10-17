@@ -24,7 +24,9 @@ print()
 print("Media Dashboard running... (close the window to quit)")
 print("Link + Path grabbers are capturing the clipboard while this is open.")
 
-IMAGE_SEARCH_EXTS = ('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp')
+ICON_PATH = Path(__file__).resolve().parents[2] / "assets" / "logo" / "DJJ_mono_fixed_v2_media_dashboard.png"
+
+IMAGE_SEARCH_EXTS =('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp')
 
 
 # ─── File info (Info tab) ──────────────────────────────────────────────────
@@ -871,7 +873,11 @@ def main():
         "Media Dashboard", html=HTML, js_api=api,
         width=840, height=720, resizable=True
     )
-    webview.start(lambda: bind(window, api), debug=False)
+    # icon= is applied on macOS too (cocoa.py -> setApplicationIconImage_), giving the Dock/Cmd+Tab
+    # icon instead of the generic Python one. Must go through webview.start(); a manual AppKit call
+    # made before start() silently doesn't stick (see smart-crop-djjtb's CLAUDE.md).
+    webview.start(lambda: bind(window, api), debug=False,
+                  icon=str(ICON_PATH) if ICON_PATH.exists() else None)
 
 
 if __name__ == "__main__":
