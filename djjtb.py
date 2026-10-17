@@ -13,7 +13,18 @@ from pathlib import Path
 # Add the project root to Python path
 sys.path.insert(0, str(Path(__file__).parent))
 import djjtb.utils as djj
+import djjtb.desktop_apps as desktop_apps
 import djjtb.ai_tools.hermes.hermes_core as hh
+
+def launch_desktop_app(app_id):
+    """Start a DJJPS desktop app (or raise it if it's already open) without a Terminal window or a
+    frontend rebuild — see djjtb/desktop_apps.py. After changing an app's React/TS source, run its
+    run_*_desktop.command once instead (that rebuilds)."""
+    status, message = desktop_apps.launch(app_id)
+    color = "\033[91m" if status == "error" else "\033[93m"
+    print(f"{color}{message}\033[0m")
+    time.sleep(2)
+
 
 # ── Boot-launch detection ─────────────────────────────────────────────────────
 # Stamp file records the last time djjtb launched the grabbers.
@@ -697,35 +708,23 @@ class DJJTBLauncher:
                 )
             time.sleep(2)
 
-        elif choice == "11":  # DJJTB Suite (djjtb-suite desktop GUI) — opened like a double-click, own Terminal window/profile
-            print("\033[93mLaunching DJJTB Suite...\033[0m")
-            djj.open_path("/Users/home/Documents/Scripts/DJJPS/djjtb-suite/run_djjtb_suite_desktop.command")
-            time.sleep(2)
+        elif choice == "11":  # DJJTB Suite (djjtb-suite desktop GUI) — direct launch / bring to front, same as the suite's Launch button
+            launch_desktop_app("djjtb-suite")
 
-        elif choice == "12":  # Smart Crop (smart-crop-djjtb desktop GUI) — opened like a double-click, own Terminal window/profile
-            print("\033[93mLaunching Smart Crop...\033[0m")
-            djj.open_path("/Users/home/Documents/Scripts/DJJPS/smart-crop-djjtb/run_smart_crop_desktop.command")
-            time.sleep(2)
+        elif choice == "12":  # Smart Crop (smart-crop-djjtb desktop GUI) — direct launch / bring to front, same as the suite's Launch button
+            launch_desktop_app("smart-crop")
 
-        elif choice == "13":  # FaceFusion (facefusion-desktop-djjtb desktop GUI) — opened like a double-click, own Terminal window/profile
-            print("\033[93mLaunching FaceFusion...\033[0m")
-            djj.open_path("/Users/home/Documents/Scripts/DJJPS/facefusion-desktop-djjtb/run_facefusion_desktop.command")
-            time.sleep(2)
+        elif choice == "13":  # FaceFusion (facefusion-desktop-djjtb desktop GUI) — direct launch / bring to front, same as the suite's Launch button
+            launch_desktop_app("facefusion")
 
-        elif choice == "14":  # JoyCaption (joycaption-desktop-ollama-djjtb desktop GUI) — opened like a double-click, own Terminal window/profile
-            print("\033[93mLaunching JoyCaption...\033[0m")
-            djj.open_path("/Users/home/Documents/Scripts/DJJPS/joycaption-desktop-ollama-djjtb/run_joycaption_desktop.command")
-            time.sleep(2)
+        elif choice == "14":  # JoyCaption (joycaption-desktop-ollama-djjtb desktop GUI) — direct launch / bring to front, same as the suite's Launch button
+            launch_desktop_app("joycaption")
 
-        elif choice == "15":  # Upscaler AI (upscaler-ai-desktop-djjtb desktop GUI) — opened like a double-click, own Terminal window/profile
-            print("\033[93mLaunching Upscaler AI...\033[0m")
-            djj.open_path("/Users/home/Documents/Scripts/DJJPS/upscaler-ai-desktop-djjtb/run_upscaler_ai_desktop.command")
-            time.sleep(2)
+        elif choice == "15":  # Upscaler AI (upscaler-ai-desktop-djjtb desktop GUI) — direct launch / bring to front, same as the suite's Launch button
+            launch_desktop_app("upscaler-ai")
 
-        elif choice == "16":  # ComfyUI Batch (comfyui-batch-desktop-djjtb desktop GUI) — opened like a double-click, own Terminal window/profile
-            print("\033[93mLaunching ComfyUI Batch...\033[0m")
-            djj.open_path("/Users/home/Documents/Scripts/DJJPS/comfyui-batch-desktop-djjtb/run_comfyui_batch_desktop.command")
-            time.sleep(2)
+        elif choice == "16":  # ComfyUI Batch (comfyui-batch-desktop-djjtb desktop GUI) — direct launch / bring to front, same as the suite's Launch button
+            launch_desktop_app("comfyui-batch")
 
 
     def handle_admin_tools(self):

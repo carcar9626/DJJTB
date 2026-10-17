@@ -254,6 +254,21 @@ provisionally CLI-only).
   `DJJPS/djjtb-suite.ai-tools` (own venv/node_modules, ports 8011/5174 reserved in `DJJIF/ai_stack_port_registry.md`).
   See the suite's CLAUDE.md, "AI Tools launcher". Keep the standalone apps and their `djjtb.py` menu entries 11–16 working
   throughout.
+- **Menu entries 11–16 now launch directly (2026-10-17) — supersedes every "opened like a double-click via
+  `djj.open_path()` on the `.command`" note in the DJJPS GUI sections below.** `djjtb.py`'s `launch_desktop_app(app_id)` calls
+  the new `djjtb/desktop_apps.py` (`launch()`, `find_pids()`, `focus()`; stdlib + AppKit only, no new dependency): it starts the
+  app's *own* venv python on its entry script (`backend/main.py`; `backend/desktop_app.py` for the suite) in a new session —
+  **no Terminal window, no `npm run build`** — using the `frontend/dist/` the app already has, and if the app is already running
+  it raises its window instead (match by absolute script path, or relative script + cwd for ones started by their `.command`;
+  the suite's branch worktree copy has a different cwd so it never counts as the daily suite). Output goes to
+  `DJJTB_output/launcher_logs/<id>.log`. This is the same behaviour as the "Launch" button in djjtb-suite's AI Tools page. Still
+  honours the isolation preference behind the old approach: each app runs in its own venv by absolute path, nothing is sourced
+  into DJJTB's venv. Consequences: Python edits to an app apply on every launch, but **a change to an app's React/TS frontend only
+  shows after running that app's `run_*_desktop.command` once** (it rebuilds `dist`); a missing venv/`dist` is reported in the menu
+  instead of failing in a Terminal. The `.command` files are unchanged and still work. **Follow-up not done:** the suite's
+  `backend/app/routers/ai_launcher.py` keeps its own app registry + psutil-based detection; it should eventually import
+  `djjtb.desktop_apps` instead of duplicating it. Verified live: launch → detected → second call focused it → missing-venv
+  error → stopped; `find_pids` against a `.command`-started app. The menu itself (typing 11–16) is `py_compile`-checked only.
 - **Wired into `djjtb.py`'s main menu (2026-07-31)**: QUICK TOOLS → new "DJJPS (GUI)" sub-heading,
   choice `12`. Launched via `djj.open_path()` on `run_djjtb_suite_desktop.command` — deliberately
   *not* `run_command_in_tab`/`run_script_in_tab` (which `source` DJJTB's own venv into the
